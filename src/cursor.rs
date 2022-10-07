@@ -43,8 +43,33 @@ impl<'a> Cursor<'a> {
         self.iter.clone().next().copied()
     }
 
+    pub fn remaining(&self) -> &'a [u8] {
+        &self.buf[self.pos.byte..]
+    }
+
     pub fn starts_with(&self, value: &[u8]) -> bool {
-        self.buf[self.pos.byte..].starts_with(value)
+        self.remaining().starts_with(value)
+    }
+
+    pub fn consume_expecting(&mut self, expected: &[u8]) -> Option<&'a [u8]> {
+        self.starts_with(expected)
+            .then(|| self.consume_n(expected.len()))
+    }
+
+    pub fn consume_n(&mut self, n: usize) -> &'a [u8] {
+        let start = self.pos.byte;
+
+        for _ in 0..n {
+            self.next();
+        }
+
+        let end = self.pos.byte;
+
+        &self.buf[start..end]
+    }
+
+    pub fn consume_while(&mut self, mut predicate: impl FnMut(&u8) -> bool) -> &'a [u8] {
+        self.consume_n(self.iter.clone().take_while(|&c| predicate(c)).count())
     }
 }
 
@@ -110,11 +135,13 @@ impl<'a> Iterator for Cursor<'a> {
 
             ContinuationByte(1) => HeadByte,
 
-            ContinuationByte(remaining) => if (0b1000_0000..=0b1011_1111).contains(&c) {
-                ContinuationByte(remaining - 1)
-            } else {
-                // expected a continuation byte, got something wild
-                HeadByte
+            ContinuationByte(remaining) => {
+                if (0b1000_0000..=0b1011_1111).contains(&c) {
+                    ContinuationByte(remaining - 1)
+                } else {
+                    // expected a continuation byte, got something wild
+                    HeadByte
+                }
             }
         };
 
