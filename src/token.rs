@@ -6,11 +6,13 @@ use phf::phf_map;
 
 use crate::position::Span;
 
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Token<'a> {
     pub span: Span,
     pub value: TokenValue<'a>,
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum TokenType {
     Int,
     Symbol,
@@ -20,6 +22,7 @@ pub enum TokenType {
     Eof,
 }
 
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum TokenValue<'a> {
     Int(i32),
     Symbol(Symbol),
@@ -44,7 +47,7 @@ macro_rules! symbols {
     ($( $lit:literal => $variant:ident ),+,) => { symbols!($( $lit => $variant ),+); };
 
     ($( $lit:literal => $variant:ident ),+) => {
-        #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
+        #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
         pub enum Symbol {
             $( $variant ),+
         }

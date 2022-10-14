@@ -1,6 +1,8 @@
+mod ast;
 mod cursor;
-mod position;
 mod lexer;
+mod parser;
+mod position;
 mod token;
 
 fn main() {
