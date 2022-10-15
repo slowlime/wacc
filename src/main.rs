@@ -1,10 +1,10 @@
-mod ast;
-mod cursor;
-mod lexer;
-mod parser;
-mod position;
+pub mod ast;
+pub mod cursor;
+pub mod lexer;
+pub mod parser;
+pub mod position;
 mod token;
 
-fn main() {
+pub fn main() {
     println!("Hello, world!");
 }

@@ -12,12 +12,17 @@ pub struct Token<'a> {
     pub value: TokenValue<'a>,
 }
 
+impl Token<'_> {
+    pub fn ty(&self) -> TokenType {
+        self.value.ty()
+    }
+}
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum TokenType {
     Int,
-    Symbol,
+    Symbol(Symbol),
     Ident,
-    TypeIdent,
     String,
     Eof,
 }
@@ -35,7 +40,7 @@ impl TokenValue<'_> {
     pub fn ty(&self) -> TokenType {
         match self {
             Self::Int(_) => TokenType::Int,
-            Self::Symbol(_) => TokenType::Symbol,
+            Self::Symbol(sym) => TokenType::Symbol(*sym),
             Self::Ident(_) => TokenType::Ident,
             Self::String(_) => TokenType::String,
             Self::Eof => TokenType::Eof,

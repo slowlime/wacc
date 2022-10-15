@@ -54,7 +54,7 @@ pub struct Method<'a> {
     pub name: Name<'a>,
     pub params: Vec<Formal<'a>>,
     pub return_ty: Name<'a>,
-    pub body: Expr<'a>,
+    pub body: Box<Expr<'a>>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
@@ -67,7 +67,7 @@ pub struct Formal<'a> {
 pub struct Binding<'a> {
     pub name: Name<'a>,
     pub ty: Name<'a>,
-    pub init: Option<Expr<'a>>,
+    pub init: Option<Box<Expr<'a>>>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
@@ -98,7 +98,7 @@ pub struct Assignment<'a> {
 pub struct Call<'a> {
     pub receiver: Receiver<'a>,
     pub method: Name<'a>,
-    pub args: Vec<Expr<'a>>,
+    pub args: Vec<Box<Expr<'a>>>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
@@ -113,7 +113,7 @@ pub enum Receiver<'a> {
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct If<'a> {
-    pub condition: Box<Expr<'a>>,
+    pub antecedent: Box<Expr<'a>>,
     pub consequent: Box<Expr<'a>>,
     pub alternative: Box<Expr<'a>>,
 }
@@ -126,7 +126,7 @@ pub struct While<'a> {
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Block<'a> {
-    pub body: Vec<Expr<'a>>,
+    pub body: Vec<Box<Expr<'a>>>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
