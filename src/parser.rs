@@ -1,5 +1,7 @@
 use std::borrow::Cow;
 use std::collections::HashSet;
+use std::error::Error;
+use std::fmt::Display;
 
 use itertools::PeekNth;
 
@@ -20,6 +22,43 @@ pub enum ParserError<'a> {
 impl From<LexerError> for ParserError<'_> {
     fn from(e: LexerError) -> Self {
         Self::LexerError(e)
+    }
+}
+
+impl Display for ParserError<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnexpectedToken { expected, actual } => {
+                write!(f, "Encountered an unexpected token: {}", actual.ty())?;
+
+                match expected.len() {
+                    0 => Ok(()),
+                    1 => write!(f, " (expected {})", &expected[0]),
+                    2 => write!(f, " (expected {} or {})", &expected[0], &expected[1]),
+
+                    _ => {
+                        write!(f, " (expected ")?;
+
+                        for ty in expected.iter().take(expected.len() - 1) {
+                            write!(f, "{}, ", ty)?;
+                        }
+
+                        write!(f, ", or {})", &expected[expected.len() - 1])
+                    }
+                }
+            }
+
+            Self::LexerError(err) => write!(f, "{}", err),
+        }
+    }
+}
+
+impl Error for ParserError<'_> {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::UnexpectedToken { .. } => None,
+            Self::LexerError(err) => Some(err),
+        }
     }
 }
 
@@ -347,11 +386,19 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_expr_is_void(&mut self) -> Result<Box<ast::Expr<'a>>, ParserError<'a>> {
-        self.parse_un_op(Symbol::IsVoid, Self::parse_expr_is_void, Self::parse_expr_compl)
+        self.parse_un_op(
+            Symbol::IsVoid,
+            Self::parse_expr_is_void,
+            Self::parse_expr_compl,
+        )
     }
 
     fn parse_expr_compl(&mut self) -> Result<Box<ast::Expr<'a>>, ParserError<'a>> {
-        self.parse_un_op(Symbol::Tilde, Self::parse_expr_compl, Self::parse_expr_static_dispatch)
+        self.parse_un_op(
+            Symbol::Tilde,
+            Self::parse_expr_compl,
+            Self::parse_expr_static_dispatch,
+        )
     }
 
     fn parse_expr_static_dispatch(&mut self) -> Result<Box<ast::Expr<'a>>, ParserError<'a>> {

@@ -105,10 +105,7 @@ pub struct Call<'a> {
 pub enum Receiver<'a> {
     SelfType,
     Dynamic(Box<Expr<'a>>),
-    Static {
-        object: Box<Expr<'a>>,
-        ty: Name<'a>,
-    },
+    Static { object: Box<Expr<'a>>, ty: Name<'a> },
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]

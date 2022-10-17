@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::fmt::Display;
 
 use itertools::Itertools;
 use once_cell::sync::OnceCell;
@@ -16,6 +17,10 @@ impl Token<'_> {
     pub fn ty(&self) -> TokenType {
         self.value.ty()
     }
+
+    pub fn span(&self) -> &Span {
+        &self.span
+    }
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
@@ -25,6 +30,18 @@ pub enum TokenType {
     Ident,
     String,
     Eof,
+}
+
+impl Display for TokenType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", match self {
+            Self::Int => "integer",
+            Self::Symbol(sym) => sym.as_str(),
+            Self::Ident => "identifier",
+            Self::String => "string",
+            Self::Eof => "end of file",
+        })
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
@@ -106,10 +123,14 @@ macro_rules! symbols {
                     .copied()
             }
 
-            pub fn as_str(&self) -> &'static [u8] {
+            pub fn as_slice(&self) -> &'static [u8] {
                 match self {
                     $( Self::$variant => $lit, )+
                 }
+            }
+
+            pub fn as_str(&self) -> &'static str {
+                std::str::from_utf8(self.as_slice()).unwrap()
             }
         }
     };

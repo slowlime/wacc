@@ -74,7 +74,7 @@ fn process_escapes(input: &[u8]) -> Vec<u8> {
                 b'n' => b'\n',
                 b'f' => FORM_FEED,
                 _ => c,
-            })
+            }),
         }))
         .collect()
 }
@@ -205,7 +205,7 @@ impl<'a> Lexer<'a> {
             Some(Symbol::True | Symbol::False) if !bytes[0].is_ascii_lowercase() => {}
 
             Some(sym) => {
-                self.cursor.consume_n(sym.as_str().len());
+                self.cursor.consume_n(sym.as_slice().len());
 
                 return Ok(TokenValue::Symbol(sym));
             }
