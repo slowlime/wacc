@@ -10,7 +10,7 @@ const BACKSPACE: u8 = 8;
 const VERTICAL_TAB: u8 = 11;
 const FORM_FEED: u8 = 12;
 
-type ScanResult<'a> = Result<TokenValue<'a>, PosLexerError>;
+type ScanResult<'buf> = Result<TokenValue<'buf>, PosLexerError>;
 
 fn is_whitespace(c: u8) -> bool {
     matches!(c, b' ' | b'\n' | FORM_FEED | b'\r' | b'\t' | VERTICAL_TAB)
@@ -157,13 +157,13 @@ impl Display for LexerError {
 impl Error for LexerError {}
 
 #[derive(Debug, Clone)]
-pub struct Lexer<'a> {
-    cursor: Cursor<'a>,
+pub struct Lexer<'buf> {
+    cursor: Cursor<'buf>,
     eof: bool,
 }
 
-impl<'a> Lexer<'a> {
-    pub fn new(cursor: Cursor<'a>) -> Self {
+impl<'buf> Lexer<'buf> {
+    pub fn new(cursor: Cursor<'buf>) -> Self {
         Self { cursor, eof: false }
     }
 
@@ -181,7 +181,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn scan_int(&mut self) -> ScanResult<'a> {
+    fn scan_int(&mut self) -> ScanResult<'buf> {
         let digits = self.cursor.consume_while(u8::is_ascii_digit);
         let value = std::str::from_utf8(digits)
             .unwrap()
@@ -191,13 +191,13 @@ impl<'a> Lexer<'a> {
         Ok(TokenValue::Int(value))
     }
 
-    fn scan_ident(&mut self) -> ScanResult<'a> {
+    fn scan_ident(&mut self) -> ScanResult<'buf> {
         Ok(TokenValue::Ident(
             self.cursor.consume_while(|&c| is_ident_continuation(c)),
         ))
     }
 
-    fn scan_symbol(&mut self) -> ScanResult<'a> {
+    fn scan_symbol(&mut self) -> ScanResult<'buf> {
         let bytes = self.cursor.remaining();
 
         match Symbol::parse_prefix(bytes) {
@@ -222,7 +222,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn scan_string(&mut self) -> ScanResult<'a> {
+    fn scan_string(&mut self) -> ScanResult<'buf> {
         self.cursor.consume_expecting(b"\"").unwrap();
 
         let mut cursor_at_start = self.cursor.clone();
@@ -305,8 +305,8 @@ impl<'a> Lexer<'a> {
     }
 }
 
-impl<'a> Iterator for Lexer<'a> {
-    type Item = Result<Token<'a>, LexerError>;
+impl<'buf> Iterator for Lexer<'buf> {
+    type Item = Result<Token<'buf>, LexerError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let start = self.cursor.pos();

@@ -3,7 +3,8 @@ pub mod cursor;
 pub mod lexer;
 pub mod parser;
 pub mod position;
-mod token;
+pub mod token;
+pub mod util;
 
 pub fn main() {
     println!("Hello, world!");

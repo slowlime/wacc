@@ -10,10 +10,10 @@ use crate::lexer::{Lexer, LexerError};
 use crate::token::{Symbol, Token, TokenType};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub enum ParserError<'a> {
+pub enum ParserError<'buf> {
     UnexpectedToken {
         expected: Cow<'static, [TokenType]>,
-        actual: Token<'a>,
+        actual: Token<'buf>,
     },
 
     LexerError(LexerError),
@@ -78,7 +78,7 @@ impl<const N: usize> Matcher for &'static [TokenType; N] {
     }
 }
 
-impl<'a, const N: usize> Matcher for &'a [Symbol; N] {
+impl<'buf, const N: usize> Matcher for &'buf [Symbol; N] {
     fn matches<'t>(&self, token: &Token<'t>) -> bool {
         match token.ty() {
             TokenType::Symbol(sym) => self.contains(&sym),
@@ -134,12 +134,12 @@ macro_rules! select {
     });
 }
 
-pub struct Parser<'a> {
-    lexer: PeekNth<Lexer<'a>>,
+pub struct Parser<'buf> {
+    lexer: PeekNth<Lexer<'buf>>,
 }
 
-impl<'a> Parser<'a> {
-    pub fn new(lexer: Lexer<'a>) -> Self {
+impl<'buf> Parser<'buf> {
+    pub fn new(lexer: Lexer<'buf>) -> Self {
         Self {
             lexer: itertools::peek_nth(lexer),
         }
@@ -150,11 +150,11 @@ impl<'a> Parser<'a> {
         matcher: M,
         on_match: F,
         on_fail: G,
-    ) -> Result<R, ParserError<'a>>
+    ) -> Result<R, ParserError<'buf>>
     where
         M: Matcher,
-        F: FnOnce(Token<'a>) -> Result<R, ParserError<'a>>,
-        G: FnOnce(&'_ Token<'a>, M) -> Result<R, ParserError<'a>>,
+        F: FnOnce(Token<'buf>) -> Result<R, ParserError<'buf>>,
+        G: FnOnce(&'_ Token<'buf>, M) -> Result<R, ParserError<'buf>>,
     {
         match self.lexer.peek() {
             Some(Ok(token)) if matcher.matches(token) => {
@@ -166,7 +166,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn expect(&mut self, matcher: impl Matcher) -> Result<Token<'a>, ParserError<'a>> {
+    fn expect(&mut self, matcher: impl Matcher) -> Result<Token<'buf>, ParserError<'buf>> {
         self.expect_generic(matcher, Ok, |token, matcher| {
             Err(ParserError::UnexpectedToken {
                 expected: matcher.expected_tokens(),
@@ -175,7 +175,10 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn try_consume(&mut self, matcher: impl Matcher) -> Result<Option<Token<'a>>, ParserError<'a>> {
+    fn try_consume(
+        &mut self,
+        matcher: impl Matcher,
+    ) -> Result<Option<Token<'buf>>, ParserError<'buf>> {
         self.expect_generic(matcher, |token| Ok(Some(token)), |_, _| Ok(None))
     }
 
@@ -183,7 +186,7 @@ impl<'a> Parser<'a> {
         matches!(self.lexer.peek_nth(n), Some(Ok(token)) if matcher.matches(token))
     }
 
-    pub fn parse(&mut self) -> Result<ast::Program<'a>, ParserError<'a>> {
+    pub fn parse(&mut self) -> Result<ast::Program<'buf>, ParserError<'buf>> {
         let mut classes = Vec::new();
 
         loop {
@@ -196,7 +199,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_class(&mut self) -> Result<ast::Class<'a>, ParserError<'a>> {
+    fn parse_class(&mut self) -> Result<ast::Class<'buf>, ParserError<'buf>> {
         self.expect(Symbol::Class)?;
         let name = self.parse_name()?;
 
@@ -223,12 +226,14 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_name(&mut self) -> Result<ast::Name<'a>, ParserError<'a>> {
+    fn parse_name(&mut self) -> Result<ast::Name<'buf>, ParserError<'buf>> {
         // XXX: capitalization is not checked in the parser (might want to revisit this later)
-        Ok(ast::Name(self.expect(TokenType::Ident)?))
+        Ok(ast::Name(
+            self.expect(TokenType::Ident)?.try_into().unwrap(),
+        ))
     }
 
-    fn parse_feature(&mut self) -> Result<ast::Feature<'a>, ParserError<'a>> {
+    fn parse_feature(&mut self) -> Result<ast::Feature<'buf>, ParserError<'buf>> {
         let name = self.parse_name()?;
 
         Ok(select!(self: {
@@ -238,7 +243,7 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn parse_method(&mut self, name: Name<'a>) -> Result<ast::Method<'a>, ParserError<'a>> {
+    fn parse_method(&mut self, name: Name<'buf>) -> Result<ast::Method<'buf>, ParserError<'buf>> {
         self.expect(Symbol::ParenLeft)?;
         let mut params = Vec::new();
         let mut comma_required = false;
@@ -270,7 +275,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_formal(&mut self) -> Result<ast::Formal<'a>, ParserError<'a>> {
+    fn parse_formal(&mut self) -> Result<ast::Formal<'buf>, ParserError<'buf>> {
         let name = self.parse_name()?;
         self.expect(Symbol::Semicolon)?;
         let ty = self.parse_name()?;
@@ -278,7 +283,7 @@ impl<'a> Parser<'a> {
         Ok(ast::Formal { name, ty })
     }
 
-    fn parse_binding(&mut self, name: Name<'a>) -> Result<ast::Binding<'a>, ParserError<'a>> {
+    fn parse_binding(&mut self, name: Name<'buf>) -> Result<ast::Binding<'buf>, ParserError<'buf>> {
         self.expect(Symbol::Semicolon)?;
         let ty = self.parse_name()?;
 
@@ -291,11 +296,11 @@ impl<'a> Parser<'a> {
         Ok(ast::Binding { name, ty, init })
     }
 
-    fn parse_expr(&mut self) -> Result<Box<ast::Expr<'a>>, ParserError<'a>> {
+    fn parse_expr(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         self.parse_expr_assign()
     }
 
-    fn parse_expr_assign(&mut self) -> Result<Box<ast::Expr<'a>>, ParserError<'a>> {
+    fn parse_expr_assign(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         if self.matches_nth(0, TokenType::Ident) && self.matches_nth(1, Symbol::ArrowLeft) {
             let name = self.parse_name()?;
             self.expect(Symbol::ArrowLeft)?;
@@ -312,10 +317,10 @@ impl<'a> Parser<'a> {
         matcher: impl Matcher,
         mut recurse: R,
         mut descend: D,
-    ) -> Result<Box<ast::Expr<'a>>, ParserError<'a>>
+    ) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>>
     where
-        R: FnMut(&mut Self) -> Result<Box<ast::Expr<'a>>, ParserError<'a>>,
-        D: FnMut(&mut Self) -> Result<Box<ast::Expr<'a>>, ParserError<'a>>,
+        R: FnMut(&mut Self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>>,
+        D: FnMut(&mut Self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>>,
     {
         if let Some(sym) = self.try_consume(matcher)? {
             let op = match sym.ty() {
@@ -331,11 +336,11 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_expr_not(&mut self) -> Result<Box<ast::Expr<'a>>, ParserError<'a>> {
+    fn parse_expr_not(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         self.parse_un_op(Symbol::Not, Self::parse_expr_not, Self::parse_expr_cmp)
     }
 
-    fn parse_expr_cmp(&mut self) -> Result<Box<ast::Expr<'a>>, ParserError<'a>> {
+    fn parse_expr_cmp(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         const CMP_OPS: [Symbol; 3] = [Symbol::LessEquals, Symbol::Less, Symbol::Equals];
 
         let lhs = self.parse_expr_addsub()?;
@@ -358,9 +363,9 @@ impl<'a> Parser<'a> {
         &mut self,
         matcher: impl Matcher + Copy,
         mut descend: D,
-    ) -> Result<Box<ast::Expr<'a>>, ParserError<'a>>
+    ) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>>
     where
-        D: FnMut(&mut Self) -> Result<Box<ast::Expr<'a>>, ParserError<'a>>,
+        D: FnMut(&mut Self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>>,
     {
         let mut lhs = descend(self)?;
 
@@ -377,15 +382,15 @@ impl<'a> Parser<'a> {
         Ok(lhs)
     }
 
-    fn parse_expr_addsub(&mut self) -> Result<Box<ast::Expr<'a>>, ParserError<'a>> {
+    fn parse_expr_addsub(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         self.parse_bin_op_lassoc(&[Symbol::Plus, Symbol::Minus], Self::parse_expr_muldiv)
     }
 
-    fn parse_expr_muldiv(&mut self) -> Result<Box<ast::Expr<'a>>, ParserError<'a>> {
+    fn parse_expr_muldiv(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         self.parse_bin_op_lassoc(&[Symbol::Asterisk, Symbol::Slash], Self::parse_expr_is_void)
     }
 
-    fn parse_expr_is_void(&mut self) -> Result<Box<ast::Expr<'a>>, ParserError<'a>> {
+    fn parse_expr_is_void(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         self.parse_un_op(
             Symbol::IsVoid,
             Self::parse_expr_is_void,
@@ -393,7 +398,7 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn parse_expr_compl(&mut self) -> Result<Box<ast::Expr<'a>>, ParserError<'a>> {
+    fn parse_expr_compl(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         self.parse_un_op(
             Symbol::Tilde,
             Self::parse_expr_compl,
@@ -401,7 +406,7 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn parse_expr_static_dispatch(&mut self) -> Result<Box<ast::Expr<'a>>, ParserError<'a>> {
+    fn parse_expr_static_dispatch(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         let mut object = self.parse_expr_dynamic_dispatch()?;
 
         while self.try_consume(Symbol::At)?.is_some() {
@@ -415,8 +420,8 @@ impl<'a> Parser<'a> {
 
     fn parse_method_call(
         &mut self,
-        receiver: ast::Receiver<'a>,
-    ) -> Result<Box<ast::Expr<'a>>, ParserError<'a>> {
+        receiver: ast::Receiver<'buf>,
+    ) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         let method = self.parse_name()?;
         self.expect(Symbol::ParenLeft)?;
         let mut args = Vec::new();
@@ -436,7 +441,7 @@ impl<'a> Parser<'a> {
         })))
     }
 
-    fn parse_expr_dynamic_dispatch(&mut self) -> Result<Box<ast::Expr<'a>>, ParserError<'a>> {
+    fn parse_expr_dynamic_dispatch(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         let mut object = self.parse_expr_atom()?;
 
         while self.try_consume(Symbol::Dot)?.is_some() {
@@ -446,7 +451,7 @@ impl<'a> Parser<'a> {
         Ok(object)
     }
 
-    fn parse_expr_atom(&mut self) -> Result<Box<ast::Expr<'a>>, ParserError<'a>> {
+    fn parse_expr_atom(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         select!(self: {
             Symbol::If => self.parse_if(),
             Symbol::While => self.parse_while(),
@@ -465,7 +470,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn parse_if(&mut self) -> Result<Box<ast::Expr<'a>>, ParserError<'a>> {
+    fn parse_if(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         self.expect(Symbol::If)?;
         let antecedent = self.parse_expr()?;
         self.expect(Symbol::Then)?;
@@ -481,7 +486,7 @@ impl<'a> Parser<'a> {
         })))
     }
 
-    fn parse_while(&mut self) -> Result<Box<ast::Expr<'a>>, ParserError<'a>> {
+    fn parse_while(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         self.expect(Symbol::While)?;
         let condition = self.parse_expr()?;
         self.expect(Symbol::Loop)?;
@@ -491,7 +496,7 @@ impl<'a> Parser<'a> {
         Ok(Box::new(Expr::While(ast::While { condition, body })))
     }
 
-    fn parse_block(&mut self) -> Result<Box<ast::Expr<'a>>, ParserError<'a>> {
+    fn parse_block(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         self.expect(Symbol::BraceLeft)?;
         let mut body = Vec::new();
 
@@ -507,7 +512,7 @@ impl<'a> Parser<'a> {
         Ok(Box::new(Expr::Block(ast::Block { body })))
     }
 
-    fn parse_let(&mut self) -> Result<Box<ast::Expr<'a>>, ParserError<'a>> {
+    fn parse_let(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         self.expect(Symbol::Let)?;
         let mut bindings = Vec::new();
 
@@ -527,7 +532,7 @@ impl<'a> Parser<'a> {
         Ok(Box::new(Expr::Let(ast::Let { bindings, expr })))
     }
 
-    fn parse_case(&mut self) -> Result<Box<ast::Expr<'a>>, ParserError<'a>> {
+    fn parse_case(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         self.expect(Symbol::Case)?;
         let scrutinee = self.parse_expr()?;
         self.expect(Symbol::Of)?;
@@ -551,13 +556,13 @@ impl<'a> Parser<'a> {
         Ok(Box::new(Expr::Case(ast::Case { scrutinee, arms })))
     }
 
-    fn parse_new(&mut self) -> Result<Box<ast::Expr<'a>>, ParserError<'a>> {
+    fn parse_new(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         self.expect(Symbol::New)?;
 
         Ok(Box::new(Expr::New(ast::New(self.parse_name()?))))
     }
 
-    fn parse_paren(&mut self) -> Result<Box<ast::Expr<'a>>, ParserError<'a>> {
+    fn parse_paren(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         self.expect(Symbol::ParenLeft)?;
         let expr = self.parse_expr()?;
         self.expect(Symbol::ParenRight)?;
@@ -565,7 +570,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn parse_expr_self_call(&mut self) -> Result<Box<ast::Expr<'a>>, ParserError<'a>> {
+    fn parse_expr_self_call(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         if self.matches_nth(1, Symbol::ParenLeft) {
             self.parse_method_call(ast::Receiver::SelfType)
         } else {
@@ -573,20 +578,23 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_int_lit(&mut self) -> Result<Box<ast::Expr<'a>>, ParserError<'a>> {
-        let token = self.expect(TokenType::Int)?;
+    fn parse_int_lit(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
+        let token = self.expect(TokenType::Int)?.try_into().unwrap();
 
         Ok(Box::new(Expr::Int(ast::IntLit(token))))
     }
 
-    fn parse_string_lit(&mut self) -> Result<Box<ast::Expr<'a>>, ParserError<'a>> {
-        let token = self.expect(TokenType::String)?;
+    fn parse_string_lit(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
+        let token = self.expect(TokenType::String)?.try_into().unwrap();
 
         Ok(Box::new(Expr::String(ast::StringLit(token))))
     }
 
-    fn parse_bool_lit(&mut self) -> Result<Box<ast::Expr<'a>>, ParserError<'a>> {
-        let token = self.expect(&[Symbol::True, Symbol::False])?;
+    fn parse_bool_lit(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
+        let token = self
+            .expect(&[Symbol::True, Symbol::False])?
+            .try_into()
+            .unwrap();
 
         Ok(Box::new(Expr::Bool(ast::BoolLit(token))))
     }

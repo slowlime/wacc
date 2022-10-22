@@ -5,12 +5,13 @@ use itertools::Itertools;
 use once_cell::sync::OnceCell;
 use phf::phf_map;
 
-use crate::position::Span;
+use crate::position::{Span, Spanned};
+use crate::try_match;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct Token<'a> {
+pub struct Token<'buf> {
     pub span: Span,
-    pub value: TokenValue<'a>,
+    pub value: TokenValue<'buf>,
 }
 
 impl Token<'_> {
@@ -34,22 +35,26 @@ pub enum TokenType {
 
 impl Display for TokenType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", match self {
-            Self::Int => "integer",
-            Self::Symbol(sym) => sym.as_str(),
-            Self::Ident => "identifier",
-            Self::String => "string",
-            Self::Eof => "end of file",
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Int => "integer",
+                Self::Symbol(sym) => sym.as_str(),
+                Self::Ident => "identifier",
+                Self::String => "string",
+                Self::Eof => "end of file",
+            }
+        )
     }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub enum TokenValue<'a> {
+pub enum TokenValue<'buf> {
     Int(i32),
     Symbol(Symbol),
-    Ident(&'a [u8]),
-    String(Cow<'a, [u8]>),
+    Ident(&'buf [u8]),
+    String(Cow<'buf, [u8]>),
     Eof,
 }
 
@@ -62,6 +67,73 @@ impl TokenValue<'_> {
             Self::String(_) => TokenType::String,
             Self::Eof => TokenType::Eof,
         }
+    }
+}
+
+impl<'buf> TryFrom<Token<'buf>> for Spanned<i32> {
+    type Error = ();
+
+    fn try_from(token: Token<'buf>) -> Result<Self, Self::Error> {
+        Ok(Spanned {
+            span: token.span,
+            value: try_match!(token.value, TokenValue::Int(i) => i).ok_or(())?,
+        })
+    }
+}
+
+impl<'buf> TryFrom<Token<'buf>> for Spanned<Symbol> {
+    type Error = ();
+
+    fn try_from(token: Token<'buf>) -> Result<Self, Self::Error> {
+        Ok(Spanned {
+            span: token.span,
+            value: try_match!(token.value, TokenValue::Symbol(sym) => sym).ok_or(())?,
+        })
+    }
+}
+
+impl<'buf> TryFrom<Token<'buf>> for Spanned<&'buf [u8]> {
+    type Error = ();
+
+    fn try_from(token: Token<'buf>) -> Result<Self, Self::Error> {
+        Ok(Spanned {
+            span: token.span,
+            value: match token.value {
+                TokenValue::Ident(id) => id,
+                TokenValue::String(Cow::Borrowed(s)) => s,
+                _ => return Err(()),
+            },
+        })
+    }
+}
+
+impl<'buf> TryFrom<Token<'buf>> for Spanned<Cow<'buf, [u8]>> {
+    type Error = ();
+
+    fn try_from(token: Token<'buf>) -> Result<Self, Self::Error> {
+        Ok(Spanned {
+            span: token.span,
+            value: match token.value {
+                TokenValue::Ident(id) => id.into(),
+                TokenValue::String(s) => s,
+                _ => return Err(()),
+            },
+        })
+    }
+}
+
+impl<'buf> TryFrom<Token<'buf>> for Spanned<bool> {
+    type Error = ();
+
+    fn try_from(token: Token<'buf>) -> Result<Self, Self::Error> {
+        Ok(Spanned {
+            span: token.span,
+            value: match token.value {
+                TokenValue::Symbol(Symbol::True) => true,
+                TokenValue::Symbol(Symbol::False) => false,
+                _ => return Err(()),
+            },
+        })
     }
 }
 

@@ -1,4 +1,7 @@
-use crate::token::{Symbol, Token};
+use std::borrow::Cow;
+
+use crate::position::Spanned;
+use crate::token::Symbol;
 
 macro_rules! define_op_kind {
     ($name:ident { $( $op:ident => $symbol:ident, )+ }) => {
@@ -29,130 +32,133 @@ macro_rules! define_op_kind {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct Program<'a> {
-    pub classes: Vec<Class<'a>>,
+pub struct Program<'buf> {
+    pub classes: Vec<Class<'buf>>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct Class<'a> {
-    pub name: Name<'a>,
-    pub inherits: Option<Name<'a>>,
-    pub features: Vec<Feature<'a>>,
+pub struct Class<'buf> {
+    pub name: Name<'buf>,
+    pub inherits: Option<Name<'buf>>,
+    pub features: Vec<Feature<'buf>>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct Name<'a>(pub Token<'a>);
+pub struct Name<'buf>(pub Spanned<&'buf [u8]>);
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub enum Feature<'a> {
-    Method(Method<'a>),
-    Field(Binding<'a>),
+pub enum Feature<'buf> {
+    Method(Method<'buf>),
+    Field(Binding<'buf>),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct Method<'a> {
-    pub name: Name<'a>,
-    pub params: Vec<Formal<'a>>,
-    pub return_ty: Name<'a>,
-    pub body: Box<Expr<'a>>,
+pub struct Method<'buf> {
+    pub name: Name<'buf>,
+    pub params: Vec<Formal<'buf>>,
+    pub return_ty: Name<'buf>,
+    pub body: Box<Expr<'buf>>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct Formal<'a> {
-    pub name: Name<'a>,
-    pub ty: Name<'a>,
+pub struct Formal<'buf> {
+    pub name: Name<'buf>,
+    pub ty: Name<'buf>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct Binding<'a> {
-    pub name: Name<'a>,
-    pub ty: Name<'a>,
-    pub init: Option<Box<Expr<'a>>>,
+pub struct Binding<'buf> {
+    pub name: Name<'buf>,
+    pub ty: Name<'buf>,
+    pub init: Option<Box<Expr<'buf>>>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub enum Expr<'a> {
-    Assignment(Assignment<'a>),
-    Call(Call<'a>),
-    If(If<'a>),
-    While(While<'a>),
-    Block(Block<'a>),
-    Let(Let<'a>),
-    Case(Case<'a>),
-    New(New<'a>),
-    BinOp(BinOpExpr<'a>),
-    UnOp(UnOpExpr<'a>),
-    Name(Name<'a>),
-    Int(IntLit<'a>),
-    String(StringLit<'a>),
-    Bool(BoolLit<'a>),
+pub enum Expr<'buf> {
+    Assignment(Assignment<'buf>),
+    Call(Call<'buf>),
+    If(If<'buf>),
+    While(While<'buf>),
+    Block(Block<'buf>),
+    Let(Let<'buf>),
+    Case(Case<'buf>),
+    New(New<'buf>),
+    BinOp(BinOpExpr<'buf>),
+    UnOp(UnOpExpr<'buf>),
+    Name(Name<'buf>),
+    Int(IntLit),
+    String(StringLit<'buf>),
+    Bool(BoolLit),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct Assignment<'a> {
-    pub name: Name<'a>,
-    pub expr: Box<Expr<'a>>,
+pub struct Assignment<'buf> {
+    pub name: Name<'buf>,
+    pub expr: Box<Expr<'buf>>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct Call<'a> {
-    pub receiver: Receiver<'a>,
-    pub method: Name<'a>,
-    pub args: Vec<Box<Expr<'a>>>,
+pub struct Call<'buf> {
+    pub receiver: Receiver<'buf>,
+    pub method: Name<'buf>,
+    pub args: Vec<Box<Expr<'buf>>>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub enum Receiver<'a> {
+pub enum Receiver<'buf> {
     SelfType,
-    Dynamic(Box<Expr<'a>>),
-    Static { object: Box<Expr<'a>>, ty: Name<'a> },
+    Dynamic(Box<Expr<'buf>>),
+    Static {
+        object: Box<Expr<'buf>>,
+        ty: Name<'buf>,
+    },
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct If<'a> {
-    pub antecedent: Box<Expr<'a>>,
-    pub consequent: Box<Expr<'a>>,
-    pub alternative: Box<Expr<'a>>,
+pub struct If<'buf> {
+    pub antecedent: Box<Expr<'buf>>,
+    pub consequent: Box<Expr<'buf>>,
+    pub alternative: Box<Expr<'buf>>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct While<'a> {
-    pub condition: Box<Expr<'a>>,
-    pub body: Box<Expr<'a>>,
+pub struct While<'buf> {
+    pub condition: Box<Expr<'buf>>,
+    pub body: Box<Expr<'buf>>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct Block<'a> {
-    pub body: Vec<Box<Expr<'a>>>,
+pub struct Block<'buf> {
+    pub body: Vec<Box<Expr<'buf>>>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct Let<'a> {
-    pub bindings: Vec<Binding<'a>>,
-    pub expr: Box<Expr<'a>>,
+pub struct Let<'buf> {
+    pub bindings: Vec<Binding<'buf>>,
+    pub expr: Box<Expr<'buf>>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct Case<'a> {
-    pub scrutinee: Box<Expr<'a>>,
-    pub arms: Vec<CaseArm<'a>>,
+pub struct Case<'buf> {
+    pub scrutinee: Box<Expr<'buf>>,
+    pub arms: Vec<CaseArm<'buf>>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct CaseArm<'a> {
-    pub name: Name<'a>,
-    pub ty: Name<'a>,
-    pub expr: Box<Expr<'a>>,
+pub struct CaseArm<'buf> {
+    pub name: Name<'buf>,
+    pub ty: Name<'buf>,
+    pub expr: Box<Expr<'buf>>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct New<'a>(pub Name<'a>);
+pub struct New<'buf>(pub Name<'buf>);
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct BinOpExpr<'a> {
+pub struct BinOpExpr<'buf> {
     pub op: BinOpKind,
-    pub lhs: Box<Expr<'a>>,
-    pub rhs: Box<Expr<'a>>,
+    pub lhs: Box<Expr<'buf>>,
+    pub rhs: Box<Expr<'buf>>,
 }
 
 define_op_kind!(BinOpKind {
@@ -166,9 +172,9 @@ define_op_kind!(BinOpKind {
 });
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct UnOpExpr<'a> {
+pub struct UnOpExpr<'buf> {
     pub op: UnOpKind,
-    pub expr: Box<Expr<'a>>,
+    pub expr: Box<Expr<'buf>>,
 }
 
 define_op_kind!(UnOpKind {
@@ -178,10 +184,10 @@ define_op_kind!(UnOpKind {
 });
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct IntLit<'a>(pub Token<'a>);
+pub struct IntLit(pub Spanned<i32>);
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct StringLit<'a>(pub Token<'a>);
+pub struct StringLit<'buf>(pub Spanned<Cow<'buf, [u8]>>);
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct BoolLit<'a>(pub Token<'a>);
+pub struct BoolLit(pub Spanned<bool>);

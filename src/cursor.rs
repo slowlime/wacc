@@ -10,16 +10,16 @@ enum CursorState {
 }
 
 #[derive(Debug, Clone)]
-pub struct Cursor<'a> {
-    buf: &'a [u8],
-    iter: slice::Iter<'a, u8>,
+pub struct Cursor<'buf> {
+    buf: &'buf [u8],
+    iter: slice::Iter<'buf, u8>,
     pos: Position,
     prev_pos: Option<Position>,
     state: CursorState,
 }
 
-impl<'a> Cursor<'a> {
-    pub fn new(buf: &'a [u8]) -> Self {
+impl<'buf> Cursor<'buf> {
+    pub fn new(buf: &'buf [u8]) -> Self {
         Self {
             buf,
             iter: buf.iter(),
@@ -43,7 +43,7 @@ impl<'a> Cursor<'a> {
         self.iter.clone().next().copied()
     }
 
-    pub fn remaining(&self) -> &'a [u8] {
+    pub fn remaining(&self) -> &'buf [u8] {
         &self.buf[self.pos.byte..]
     }
 
@@ -51,12 +51,12 @@ impl<'a> Cursor<'a> {
         self.remaining().starts_with(value)
     }
 
-    pub fn consume_expecting(&mut self, expected: &[u8]) -> Option<&'a [u8]> {
+    pub fn consume_expecting(&mut self, expected: &[u8]) -> Option<&'buf [u8]> {
         self.starts_with(expected)
             .then(|| self.consume_n(expected.len()))
     }
 
-    pub fn consume_n(&mut self, n: usize) -> &'a [u8] {
+    pub fn consume_n(&mut self, n: usize) -> &'buf [u8] {
         let start = self.pos.byte;
 
         for _ in 0..n {
@@ -68,12 +68,12 @@ impl<'a> Cursor<'a> {
         &self.buf[start..end]
     }
 
-    pub fn consume_while(&mut self, mut predicate: impl FnMut(&u8) -> bool) -> &'a [u8] {
+    pub fn consume_while(&mut self, mut predicate: impl FnMut(&u8) -> bool) -> &'buf [u8] {
         self.consume_n(self.iter.clone().take_while(|&c| predicate(c)).count())
     }
 }
 
-impl<'a> Iterator for Cursor<'a> {
+impl<'buf> Iterator for Cursor<'buf> {
     type Item = u8;
 
     fn next(&mut self) -> Option<Self::Item> {
