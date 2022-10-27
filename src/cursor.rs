@@ -1,8 +1,9 @@
 use std::slice;
 
 use crate::position::Position;
+use crate::source::{SourceFile, SourceId};
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CursorState {
     Eof,
     HeadByte,
@@ -12,6 +13,7 @@ enum CursorState {
 #[derive(Debug, Clone)]
 pub struct Cursor<'buf> {
     buf: &'buf [u8],
+    source_id: SourceId,
     iter: slice::Iter<'buf, u8>,
     pos: Position,
     prev_pos: Option<Position>,
@@ -19,11 +21,14 @@ pub struct Cursor<'buf> {
 }
 
 impl<'buf> Cursor<'buf> {
-    pub fn new(buf: &'buf [u8]) -> Self {
+    pub fn new(src_file: &SourceFile<'buf>) -> Self {
+        let buf = src_file.buf();
+
         Self {
             buf,
+            source_id: src_file.id(),
             iter: buf.iter(),
-            pos: Default::default(),
+            pos: Position::with_source_file(src_file),
             prev_pos: None,
             state: CursorState::HeadByte,
         }
@@ -36,7 +41,7 @@ impl<'buf> Cursor<'buf> {
 
     /// Returns the position of the previously returned character.
     pub fn prev_pos(&self) -> Position {
-        self.prev_pos.unwrap_or_default()
+        self.prev_pos.unwrap_or_else(|| Position::with_source_id(self.source_id))
     }
 
     pub fn peek(&self) -> Option<u8> {
