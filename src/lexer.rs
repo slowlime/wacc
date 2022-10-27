@@ -315,9 +315,11 @@ impl<'buf> Iterator for Lexer<'buf> {
     type Item = Result<Token<'buf>, LexerError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let start = self.cursor.pos();
+        let mut start;
 
         let scan_result = loop {
+            start = self.cursor.pos();
+
             break match self.cursor.peek() {
                 None if self.eof => return None,
 

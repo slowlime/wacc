@@ -119,25 +119,7 @@ impl Span {
 
         impl fmt::Display for SpanFormatter<'_> {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                if self.start_path == self.end_path {
-                    if self.start.line == self.end.line {
-                        write!(
-                            f,
-                            "{}:{}:{}-{}",
-                            self.start_path, self.start.line, self.start.col, self.end.col,
-                        )
-                    } else {
-                        write!(
-                            f,
-                            "{}:{}:{}-{}:{}",
-                            self.start_path,
-                            self.start.line,
-                            self.start.col,
-                            self.end.line,
-                            self.end.col,
-                        )
-                    }
-                } else {
+                if self.start_path != self.end_path {
                     write!(
                         f,
                         "{}:{}:{} - {}:{}:{}",
@@ -147,6 +129,28 @@ impl Span {
                         self.end_path,
                         self.end.line,
                         self.end.col,
+                    )
+                } else if self.start.line != self.end.line {
+                    write!(
+                        f,
+                        "{}:{}:{}-{}:{}",
+                        self.start_path,
+                        self.start.line,
+                        self.start.col,
+                        self.end.line,
+                        self.end.col,
+                    )
+                } else if self.start.col != self.end.col {
+                    write!(
+                        f,
+                        "{}:{}:{}-{}",
+                        self.start_path, self.start.line, self.start.col, self.end.col,
+                    )
+                } else {
+                    write!(
+                        f,
+                        "{}:{}:{}",
+                        self.start_path, self.start.line, self.start.col
                     )
                 }
             }
@@ -163,33 +167,43 @@ impl Span {
 
 impl fmt::Debug for Span {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.start.src == self.end.src {
-            if self.start.line == self.end.line {
-                write!(
-                    f,
-                    "Span({}:{}-{}, {}-{} bytes in {:?})",
-                    self.start.line,
-                    self.start.col,
-                    self.end.col,
-                    self.start.byte,
-                    self.end.byte,
-                    self.start.src,
-                )
-            } else {
-                write!(
-                    f,
-                    "Span({}:{}-{}:{}, {}-{} bytes in {:?})",
-                    self.start.line,
-                    self.start.col,
-                    self.end.line,
-                    self.end.col,
-                    self.start.byte,
-                    self.end.byte,
-                    self.start.src,
-                )
-            }
-        } else {
+        if self.start.src != self.end.src {
             write!(f, "Span({:?} - {:?})", self.start, self.end)
+        } else if self.start.line != self.end.line {
+            write!(
+                f,
+                "Span({}:{}-{}:{}, bytes {}-{} in {:?})",
+                self.start.line,
+                self.start.col,
+                self.end.line,
+                self.end.col,
+                self.start.byte,
+                self.end.byte,
+                self.start.src,
+            )
+        } else if self.start.col != self.end.col {
+            write!(
+                f,
+                "Span({}:{}-{}, bytes {}-{} in {:?})",
+                self.start.line,
+                self.start.col,
+                self.end.col,
+                self.start.byte,
+                self.end.byte,
+                self.start.src,
+            )
+        } else if self.start.byte != self.end.byte {
+            write!(
+                f,
+                "Span({}:{}, bytes {}-{} in {:?})",
+                self.start.line, self.start.col, self.start.byte, self.end.byte, self.start.src,
+            )
+        } else {
+            write!(
+                f,
+                "Span({}:{}, {} bytes into {:?})",
+                self.start.line, self.start.col, self.start.byte, self.start.src,
+            )
         }
     }
 }
