@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::fmt::Display;
+use std::io::{self, Write};
 
 use itertools::Itertools;
 use once_cell::sync::OnceCell;
@@ -8,7 +9,11 @@ use phf::phf_map;
 use crate::position::{Span, Spanned};
 use crate::try_match;
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub const BACKSPACE: u8 = 8;
+pub const VERTICAL_TAB: u8 = 11;
+pub const FORM_FEED: u8 = 12;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Token<'buf> {
     pub span: Span,
     pub value: TokenValue<'buf>,
@@ -24,7 +29,7 @@ impl Token<'_> {
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TokenType {
     Int,
     Symbol(Symbol),
@@ -49,7 +54,7 @@ impl Display for TokenType {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TokenValue<'buf> {
     Int(i32),
     Symbol(Symbol),
@@ -138,12 +143,15 @@ impl<'buf> TryFrom<Token<'buf>> for Spanned<bool> {
 }
 
 macro_rules! symbols {
-    ($( $lit:literal => $variant:ident ),+,) => { symbols!($( $lit => $variant ),+); };
-
-    ($( $lit:literal => $variant:ident ),+) => {
-        #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+    ($( $cat:ident : { $( $lit:literal => $variant:ident ),+ $(,)? } )+) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
         pub enum Symbol {
-            $( $variant ),+
+            $( $( $variant, )+ )+
+        }
+
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        pub enum SymbolCategory {
+            $( $cat, )+
         }
 
         const fn max_arr<const N: usize>(values: [usize; N]) -> usize {
@@ -162,16 +170,16 @@ macro_rules! symbols {
 
         impl Symbol {
             const SYMBOLS: phf::Map<&'static [u8], Symbol> = phf_map! {
-                $( $lit => Self::$variant ),+
+                $( $( $lit => Self::$variant, )+ )+
             };
 
-            const MAX_LENGTH: usize = max_arr([$( $lit.len() ),+]);
+            const MAX_LENGTH: usize = max_arr([$( $( $lit.len(), )+ )+]);
 
             fn get_prefix_lengths() -> &'static [usize] {
                 static PREFIX_LENGTHS: OnceCell<Vec<usize>> = OnceCell::new();
 
                 PREFIX_LENGTHS.get_or_init(|| {
-                    let mut lengths = [$( $lit.len() ),+];
+                    let mut lengths = [$( $( $lit.len(), )+ )+];
                     lengths.sort_unstable();
                     lengths.into_iter().rev().dedup().collect()
                 })
@@ -197,59 +205,89 @@ macro_rules! symbols {
 
             pub fn as_slice(&self) -> &'static [u8] {
                 match self {
-                    $( Self::$variant => $lit, )+
+                    $( $( Self::$variant => $lit, )+ )+
                 }
             }
 
             pub fn as_str(&self) -> &'static str {
                 std::str::from_utf8(self.as_slice()).unwrap()
             }
+
+            pub fn category(&self) -> SymbolCategory {
+                match self {
+                    $( $( Self::$variant => SymbolCategory::$cat, )+ )+
+                }
+            }
         }
     };
 }
 
 symbols! {
-    // keywords
-    b"class" => Class,
-    b"else" => Else,
-    b"false" => False,
-    b"fi" => Fi,
-    b"if" => If,
-    b"in" => In,
-    b"inherits" => Inherits,
-    b"isvoid" => IsVoid,
-    b"let" => Let,
-    b"loop" => Loop,
-    b"pool" => Pool,
-    b"then" => Then,
-    b"while" => While,
-    b"case" => Case,
-    b"esac" => Esac,
-    b"new" => New,
-    b"of" => Of,
-    b"not" => Not,
-    b"true" => True,
+    Keyword: {
+        b"class" => Class,
+        b"else" => Else,
+        b"false" => False,
+        b"fi" => Fi,
+        b"if" => If,
+        b"in" => In,
+        b"inherits" => Inherits,
+        b"isvoid" => IsVoid,
+        b"let" => Let,
+        b"loop" => Loop,
+        b"pool" => Pool,
+        b"then" => Then,
+        b"while" => While,
+        b"case" => Case,
+        b"esac" => Esac,
+        b"new" => New,
+        b"of" => Of,
+        b"not" => Not,
+        b"true" => True,
+    }
 
-    // symbolic operators
-    b"+" => Plus,
-    b"-" => Minus,
-    b"*" => Asterisk,
-    b"/" => Slash,
-    b"~" => Tilde,
-    b"<" => Less,
-    b"<=" => LessEquals,
-    b"=" => Equals,
+    Operator: {
+        b"+" => Plus,
+        b"-" => Minus,
+        b"*" => Asterisk,
+        b"/" => Slash,
+        b"~" => Tilde,
+        b"<" => Less,
+        b"<=" => LessEquals,
+        b"=" => Equals,
+    }
 
-    // punctuation
-    b"{" => BraceLeft,
-    b"}" => BraceRight,
-    b"(" => ParenLeft,
-    b")" => ParenRight,
-    b":" => Colon,
-    b"," => Comma,
-    b";" => Semicolon,
-    b"<-" => ArrowLeft,
-    b"@" => At,
-    b"." => Dot,
-    b"=>" => Implies,
+    Punctuation: {
+        b"{" => BraceLeft,
+        b"}" => BraceRight,
+        b"(" => ParenLeft,
+        b")" => ParenRight,
+        b":" => Colon,
+        b"," => Comma,
+        b";" => Semicolon,
+        b"<-" => ArrowLeft,
+        b"@" => At,
+        b"." => Dot,
+        b"=>" => Implies,
+    }
+}
+
+pub fn write_escaped_string(s: &[u8], mut out: impl Write) -> io::Result<()> {
+    write!(out, "\"")?;
+
+    for c in s {
+        match *c {
+            b'\\' => write!(out, "\\\\")?,
+            b'"' => write!(out, "\\\"")?,
+            b'\n' => write!(out, "\\n")?,
+            b'\t' => write!(out, "\\t")?,
+            BACKSPACE => write!(out, "\\b")?,
+            FORM_FEED => write!(out, "\\f")?,
+            0x20..=0x7e => out.write_all(&[*c])?,
+            _ => write!(out, "\\{:03o}", c)?,
+        }
+    }
+
+    write!(out, "\"")?;
+
+    Ok(())
 }

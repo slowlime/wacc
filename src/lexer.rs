@@ -4,11 +4,7 @@ use std::num::{IntErrorKind, ParseIntError};
 
 use crate::cursor::Cursor;
 use crate::position::{Position, Span};
-use crate::token::{Symbol, Token, TokenValue};
-
-const BACKSPACE: u8 = 8;
-const VERTICAL_TAB: u8 = 11;
-const FORM_FEED: u8 = 12;
+use crate::token::{BACKSPACE, FORM_FEED, VERTICAL_TAB, Symbol, Token, TokenValue};
 
 type ScanResult<'buf> = Result<TokenValue<'buf>, PosLexerError>;
 
@@ -146,6 +142,16 @@ impl PosLexerError {
 pub struct LexerError {
     span: Span,
     kind: LexerErrorKind,
+}
+
+impl LexerError {
+    pub fn span(&self) -> &Span {
+        &self.span
+    }
+
+    pub fn kind(&self) -> LexerErrorKind {
+        self.kind
+    }
 }
 
 impl Display for LexerError {

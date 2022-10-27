@@ -9,6 +9,12 @@ pub struct SourceId(usize);
 
 pub struct SourceBuffer(FrozenVec<Vec<u8>>);
 
+impl SourceBuffer {
+    pub fn new() -> Self {
+        Self(FrozenVec::new())
+    }
+}
+
 pub struct Source<'buf> {
     buf: &'buf SourceBuffer,
     files: Vec<SourceFile<'buf>>,
