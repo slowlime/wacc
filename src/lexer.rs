@@ -1,10 +1,12 @@
 use std::error::Error;
 use std::fmt::Display;
+use std::iter::FusedIterator;
 use std::num::{IntErrorKind, ParseIntError};
 
 use crate::cursor::Cursor;
 use crate::position::{Position, Span};
 use crate::token::{BACKSPACE, FORM_FEED, VERTICAL_TAB, Symbol, Token, TokenValue};
+use crate::try_match;
 
 type ScanResult<'buf> = Result<TokenValue<'buf>, PosLexerError>;
 
@@ -18,6 +20,19 @@ fn is_ident_start(c: u8) -> bool {
 
 fn is_ident_continuation(c: u8) -> bool {
     c.is_ascii_alphanumeric() || c == b'_'
+}
+
+fn scan_symbol<'buf>(s: &'buf [u8], exact: bool) -> Option<TokenValue<'buf>> {
+    let f = if exact { Symbol::parse_exact } else { Symbol::parse_prefix };
+
+    match f(s) {
+        // boolean literals must start with a lowercase letter
+        Some(Symbol::True | Symbol::False) if !s[0].is_ascii_lowercase() => None,
+
+        Some(sym) => Some(TokenValue::Symbol(sym)),
+
+        None => None,
+    }
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
@@ -197,35 +212,10 @@ impl<'buf> Lexer<'buf> {
         Ok(TokenValue::Int(value))
     }
 
-    fn scan_ident(&mut self) -> ScanResult<'buf> {
-        Ok(TokenValue::Ident(
-            self.cursor.consume_while(|&c| is_ident_continuation(c)),
-        ))
-    }
+    fn scan_ident_or_symbol(&mut self) -> ScanResult<'buf> {
+        let ident = self.cursor.consume_while(|&c| is_ident_continuation(c));
 
-    fn scan_symbol(&mut self) -> ScanResult<'buf> {
-        let bytes = self.cursor.remaining();
-
-        match Symbol::parse_prefix(bytes) {
-            // boolean literals must start with a lowercase letter
-            Some(Symbol::True | Symbol::False) if !bytes[0].is_ascii_lowercase() => {}
-
-            Some(sym) => {
-                self.cursor.consume_n(sym.as_slice().len());
-
-                return Ok(TokenValue::Symbol(sym));
-            }
-
-            None => {}
-        }
-
-        let c = self.cursor.peek().unwrap();
-
-        if is_ident_start(c) {
-            self.scan_ident()
-        } else {
-            Err(self.create_error_at_pos(LexerErrorKind::UnrecognizedCharacter(c)))
-        }
+        Ok(scan_symbol(ident, true).unwrap_or_else(|| TokenValue::Ident(ident)))
     }
 
     fn scan_string(&mut self) -> ScanResult<'buf> {
@@ -315,6 +305,10 @@ impl<'buf> Iterator for Lexer<'buf> {
     type Item = Result<Token<'buf>, LexerError>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self.eof {
+            return None;
+        }
+
         let mut start;
 
         let scan_result = loop {
@@ -353,7 +347,18 @@ impl<'buf> Iterator for Lexer<'buf> {
 
                 Some(c) if c.is_ascii_digit() => self.scan_int(),
 
-                Some(_) => self.scan_symbol(),
+                Some(c) if is_ident_start(c) => self.scan_ident_or_symbol(),
+
+                Some(c) => match scan_symbol(self.cursor.remaining(), false) {
+                    Some(value) => {
+                        let n = try_match!(value, TokenValue::Symbol(s) => s.as_slice().len()).unwrap();
+                        self.cursor.consume_n(n);
+
+                        Ok(value)
+                    }
+
+                    None => Err(self.create_error_at_pos(LexerErrorKind::UnrecognizedCharacter(c))),
+                }
             };
         };
 
@@ -366,7 +371,13 @@ impl<'buf> Iterator for Lexer<'buf> {
                 value,
             }),
 
-            Err(err) => Err(err.with_start(start)),
+            Err(err) => {
+                self.eof = true;
+
+                Err(err.with_start(start))
+            }
         })
     }
 }
+
+impl<'buf> FusedIterator for Lexer<'buf> {}

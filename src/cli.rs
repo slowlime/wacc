@@ -167,6 +167,7 @@ impl DumpRunner {
                     // weird edge-cases (since they're multibyte, I guess?)
                     _ if sym == Symbol::ArrowLeft => write!(out, "ASSIGN")?,
                     _ if sym == Symbol::Implies => write!(out, "DARROW")?,
+                    _ if sym == Symbol::LessEquals => write!(out, "LE")?,
 
                     _ => write!(out, "'{}'", sym.as_str())?,
                 },

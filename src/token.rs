@@ -203,6 +203,10 @@ macro_rules! symbols {
                     .copied()
             }
 
+            pub fn parse_exact(input: &[u8]) -> Option<Symbol> {
+                Self::SYMBOLS.get(input).copied()
+            }
+
             pub fn as_slice(&self) -> &'static [u8] {
                 match self {
                     $( $( Self::$variant => $lit, )+ )+
