@@ -186,7 +186,7 @@ impl<'buf> Parser<'buf> {
         matches!(self.lexer.peek_nth(n), Some(Ok(token)) if matcher.matches(token))
     }
 
-    pub fn parse(&mut self) -> Result<ast::Program<'buf>, ParserError<'buf>> {
+    pub fn parse(mut self) -> Result<ast::Program<'buf>, ParserError<'buf>> {
         let mut classes = Vec::new();
 
         loop {
