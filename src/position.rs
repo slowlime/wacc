@@ -1,7 +1,9 @@
+use std::borrow::Cow;
 use std::fmt;
 use std::path::Path;
 
 use crate::source::{Source, SourceFile, SourceId};
+use crate::util::{try_min, try_max};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum PositionPath<'src> {
@@ -90,6 +92,12 @@ impl Position {
     }
 }
 
+impl PartialOrd for Position {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        (self.src == other.src).then(|| self.byte.cmp(&other.byte))
+    }
+}
+
 impl fmt::Debug for Position {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -108,6 +116,13 @@ pub struct Span {
 }
 
 impl Span {
+    pub fn convex_hull(&self, other: &Span) -> Span {
+        Span {
+            start: *try_min(&self.start, &other.start).unwrap_or(&self.start),
+            end: *try_max(&self.end, &other.start).unwrap_or(&self.end),
+        }
+    }
+
     pub fn display<'src>(&self, src: &'src Source<'_>) -> impl fmt::Display + Clone + 'src {
         #[derive(Debug, Clone)]
         struct SpanFormatter<'src> {
@@ -208,8 +223,18 @@ impl fmt::Debug for Span {
     }
 }
 
+pub trait HasSpan {
+    fn span(&self) -> Cow<'_, Span>;
+}
+
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Spanned<T> {
     pub value: T,
     pub span: Span,
+}
+
+impl<T> HasSpan for Spanned<T> {
+    fn span(&self) -> Cow<'_, Span> {
+        Cow::Borrowed(&self.span)
+    }
 }

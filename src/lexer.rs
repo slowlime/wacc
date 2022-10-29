@@ -22,7 +22,7 @@ fn is_ident_continuation(c: u8) -> bool {
     c.is_ascii_alphanumeric() || c == b'_'
 }
 
-fn scan_symbol<'buf>(s: &'buf [u8], exact: bool) -> Option<TokenValue<'buf>> {
+fn scan_symbol(s: &[u8], exact: bool) -> Option<TokenValue<'_>> {
     let f = if exact { Symbol::parse_exact } else { Symbol::parse_prefix };
 
     match f(s) {
@@ -215,7 +215,7 @@ impl<'buf> Lexer<'buf> {
     fn scan_ident_or_symbol(&mut self) -> ScanResult<'buf> {
         let ident = self.cursor.consume_while(|&c| is_ident_continuation(c));
 
-        Ok(scan_symbol(ident, true).unwrap_or_else(|| TokenValue::Ident(ident)))
+        Ok(scan_symbol(ident, true).unwrap_or(TokenValue::Ident(ident)))
     }
 
     fn scan_string(&mut self) -> ScanResult<'buf> {

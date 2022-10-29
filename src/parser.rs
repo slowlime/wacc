@@ -7,6 +7,7 @@ use itertools::PeekNth;
 
 use crate::ast::{self, BinOpKind, Expr, Name, UnOpKind};
 use crate::lexer::{Lexer, LexerError};
+use crate::position::{HasSpan, Span};
 use crate::token::{Symbol, Token, TokenType};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -191,16 +192,18 @@ impl<'buf> Parser<'buf> {
 
         loop {
             classes.push(self.parse_class()?);
-            self.expect(Symbol::Semicolon)?;
+            let semicolon = self.expect(Symbol::Semicolon)?;
 
             if self.try_consume(TokenType::Eof)?.is_some() {
-                return Ok(ast::Program { classes });
+                let span = classes[0].span.convex_hull(&semicolon.span);
+
+                return Ok(ast::Program { classes, span });
             }
         }
     }
 
     fn parse_class(&mut self) -> Result<ast::Class<'buf>, ParserError<'buf>> {
-        self.expect(Symbol::Class)?;
+        let class = self.expect(Symbol::Class)?;
         let name = self.parse_name()?;
 
         let inherits = match self.try_consume(Symbol::Inherits)? {
@@ -211,18 +214,21 @@ impl<'buf> Parser<'buf> {
         self.expect(Symbol::BraceLeft)?;
         let mut features = Vec::new();
 
-        loop {
-            if self.try_consume(Symbol::BraceRight)?.is_some() {
-                break;
+        let brace_right = loop {
+            if let Some(brace_right) = self.try_consume(Symbol::BraceRight)? {
+                break brace_right;
             }
 
             features.push(self.parse_feature()?);
-        }
+        };
+
+        let span = class.span.convex_hull(&brace_right.span);
 
         Ok(ast::Class {
             name,
             inherits,
             features,
+            span,
         })
     }
 
@@ -266,12 +272,14 @@ impl<'buf> Parser<'buf> {
 
         self.expect(Symbol::BraceLeft)?;
         let body = self.parse_expr()?;
+        let span = name.0.span.convex_hull(&body.span());
 
         Ok(ast::Method {
             name,
             params,
             return_ty,
             body,
+            span,
         })
     }
 
@@ -279,21 +287,32 @@ impl<'buf> Parser<'buf> {
         let name = self.parse_name()?;
         self.expect(Symbol::Semicolon)?;
         let ty = self.parse_name()?;
+        let span = name.0.span.convex_hull(&ty.0.span);
 
-        Ok(ast::Formal { name, ty })
+        Ok(ast::Formal { name, ty, span })
     }
 
     fn parse_binding(&mut self, name: Name<'buf>) -> Result<ast::Binding<'buf>, ParserError<'buf>> {
         self.expect(Symbol::Semicolon)?;
         let ty = self.parse_name()?;
 
-        let init = if self.try_consume(Symbol::ArrowLeft)?.is_some() {
-            Some(self.parse_expr()?)
+        let (span, init) = if self.try_consume(Symbol::ArrowLeft)?.is_some() {
+            let expr = self.parse_expr()?;
+            let span = name.0.span.convex_hull(&expr.span());
+
+            (span, Some(self.parse_expr()?))
         } else {
-            None
+            let span = name.0.span.convex_hull(&ty.0.span);
+
+            (span, None)
         };
 
-        Ok(ast::Binding { name, ty, init })
+        Ok(ast::Binding {
+            name,
+            ty,
+            init,
+            span,
+        })
     }
 
     fn parse_expr(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
@@ -305,8 +324,13 @@ impl<'buf> Parser<'buf> {
             let name = self.parse_name()?;
             self.expect(Symbol::ArrowLeft)?;
             let expr = self.parse_expr_assign()?;
+            let span = name.0.span.convex_hull(&expr.span());
 
-            Ok(Box::new(Expr::Assignment(ast::Assignment { name, expr })))
+            Ok(Box::new(Expr::Assignment(ast::Assignment {
+                name,
+                expr,
+                span,
+            })))
         } else {
             self.parse_expr_not()
         }
@@ -329,8 +353,9 @@ impl<'buf> Parser<'buf> {
             };
 
             let expr = recurse(self)?;
+            let span = sym.span.convex_hull(&expr.span());
 
-            Ok(Box::new(Expr::UnOp(ast::UnOpExpr { op, expr })))
+            Ok(Box::new(Expr::UnOp(ast::UnOpExpr { op, expr, span })))
         } else {
             descend(self)
         }
@@ -352,8 +377,9 @@ impl<'buf> Parser<'buf> {
             };
 
             let rhs = self.parse_expr_addsub()?;
+            let span = lhs.span().convex_hull(&rhs.span());
 
-            Ok(Box::new(Expr::BinOp(ast::BinOpExpr { op, lhs, rhs })))
+            Ok(Box::new(Expr::BinOp(ast::BinOpExpr { op, lhs, rhs, span })))
         } else {
             Ok(lhs)
         }
@@ -376,7 +402,9 @@ impl<'buf> Parser<'buf> {
             };
 
             let rhs = descend(self)?;
-            lhs = Box::new(Expr::BinOp(ast::BinOpExpr { op, lhs, rhs }));
+            let span = lhs.span().convex_hull(&rhs.span());
+
+            lhs = Box::new(Expr::BinOp(ast::BinOpExpr { op, lhs, rhs, span }));
         }
 
         Ok(lhs)
@@ -412,7 +440,10 @@ impl<'buf> Parser<'buf> {
         while self.try_consume(Symbol::At)?.is_some() {
             let ty = self.parse_name()?;
             self.expect(Symbol::Dot)?;
-            object = self.parse_method_call(ast::Receiver::Static { object, ty })?;
+            object = self.parse_method_call(
+                Some(object.span().into_owned()),
+                ast::Receiver::Static { object, ty },
+            )?;
         }
 
         Ok(object)
@@ -420,24 +451,35 @@ impl<'buf> Parser<'buf> {
 
     fn parse_method_call(
         &mut self,
+        receiver_span: Option<Span>,
         receiver: ast::Receiver<'buf>,
     ) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         let method = self.parse_name()?;
         self.expect(Symbol::ParenLeft)?;
         let mut args = Vec::new();
 
-        while self.try_consume(Symbol::ParenRight)?.is_none() {
+        let paren = loop {
+            if let Some(paren) = self.try_consume(Symbol::ParenRight)? {
+                break paren;
+            }
+
             if !args.is_empty() {
                 self.expect(Symbol::Comma)?;
             }
 
             args.push(self.parse_expr()?);
-        }
+        };
+
+        let span = receiver_span
+            .as_ref()
+            .unwrap_or(&method.0.span)
+            .convex_hull(&paren.span);
 
         Ok(Box::new(Expr::Call(ast::Call {
             receiver,
             method,
             args,
+            span,
         })))
     }
 
@@ -445,7 +487,10 @@ impl<'buf> Parser<'buf> {
         let mut object = self.parse_expr_atom()?;
 
         while self.try_consume(Symbol::Dot)?.is_some() {
-            object = self.parse_method_call(ast::Receiver::Dynamic(object))?;
+            object = self.parse_method_call(
+                Some(object.span().into_owned()),
+                ast::Receiver::Dynamic(object),
+            )?;
         }
 
         Ok(object)
@@ -471,49 +516,60 @@ impl<'buf> Parser<'buf> {
     }
 
     fn parse_if(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
-        self.expect(Symbol::If)?;
+        let r#if = self.expect(Symbol::If)?;
         let antecedent = self.parse_expr()?;
         self.expect(Symbol::Then)?;
         let consequent = self.parse_expr()?;
         self.expect(Symbol::Else)?;
         let alternative = self.parse_expr()?;
-        self.expect(Symbol::Fi)?;
+        let fi = self.expect(Symbol::Fi)?;
+
+        let span = r#if.span.convex_hull(&fi.span);
 
         Ok(Box::new(Expr::If(ast::If {
             antecedent,
             consequent,
             alternative,
+            span,
         })))
     }
 
     fn parse_while(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
-        self.expect(Symbol::While)?;
+        let r#while = self.expect(Symbol::While)?;
         let condition = self.parse_expr()?;
         self.expect(Symbol::Loop)?;
         let body = self.parse_expr()?;
-        self.expect(Symbol::Pool)?;
+        let pool = self.expect(Symbol::Pool)?;
 
-        Ok(Box::new(Expr::While(ast::While { condition, body })))
+        let span = r#while.span.convex_hull(&pool.span);
+
+        Ok(Box::new(Expr::While(ast::While {
+            condition,
+            body,
+            span,
+        })))
     }
 
     fn parse_block(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
-        self.expect(Symbol::BraceLeft)?;
+        let brace_left = self.expect(Symbol::BraceLeft)?;
         let mut body = Vec::new();
 
-        loop {
+        let brace_right = loop {
             body.push(self.parse_expr()?);
             self.expect(Symbol::Semicolon)?;
 
-            if self.try_consume(Symbol::BraceRight)?.is_none() {
-                break;
+            if let Some(brace_right) = self.try_consume(Symbol::BraceRight)? {
+                break brace_right;
             }
-        }
+        };
 
-        Ok(Box::new(Expr::Block(ast::Block { body })))
+        let span = brace_left.span.convex_hull(&brace_right.span);
+
+        Ok(Box::new(Expr::Block(ast::Block { body, span })))
     }
 
     fn parse_let(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
-        self.expect(Symbol::Let)?;
+        let r#let = self.expect(Symbol::Let)?;
         let mut bindings = Vec::new();
 
         loop {
@@ -528,38 +584,58 @@ impl<'buf> Parser<'buf> {
         }
 
         let expr = self.parse_expr()?;
+        let span = r#let.span.convex_hull(&expr.span());
 
-        Ok(Box::new(Expr::Let(ast::Let { bindings, expr })))
+        Ok(Box::new(Expr::Let(ast::Let {
+            bindings,
+            expr,
+            span,
+        })))
     }
 
     fn parse_case(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
-        self.expect(Symbol::Case)?;
+        let case = self.expect(Symbol::Case)?;
         let scrutinee = self.parse_expr()?;
         self.expect(Symbol::Of)?;
         let mut arms = Vec::new();
 
-        loop {
+        let esac = loop {
             let name = self.parse_name()?;
             self.expect(Symbol::Colon)?;
             let ty = self.parse_name()?;
             self.expect(Symbol::Implies)?;
             let expr = self.parse_expr()?;
-            self.expect(Symbol::Semicolon)?;
+            let semicolon = self.expect(Symbol::Semicolon)?;
 
-            arms.push(ast::CaseArm { name, ty, expr });
+            let span = name.0.span.convex_hull(&semicolon.span);
 
-            if self.try_consume(Symbol::Esac)?.is_none() {
-                break;
+            arms.push(ast::CaseArm {
+                name,
+                ty,
+                expr,
+                span,
+            });
+
+            if let Some(esac) = self.try_consume(Symbol::Esac)? {
+                break esac;
             }
-        }
+        };
 
-        Ok(Box::new(Expr::Case(ast::Case { scrutinee, arms })))
+        let span = case.span.convex_hull(&esac.span);
+
+        Ok(Box::new(Expr::Case(ast::Case {
+            scrutinee,
+            arms,
+            span,
+        })))
     }
 
     fn parse_new(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
-        self.expect(Symbol::New)?;
+        let new = self.expect(Symbol::New)?;
+        let ty = self.parse_name()?;
+        let span = new.span.convex_hull(&ty.0.span);
 
-        Ok(Box::new(Expr::New(ast::New(self.parse_name()?))))
+        Ok(Box::new(Expr::New(ast::New { ty, span })))
     }
 
     fn parse_paren(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
@@ -572,7 +648,7 @@ impl<'buf> Parser<'buf> {
 
     fn parse_expr_self_call(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         if self.matches_nth(1, Symbol::ParenLeft) {
-            self.parse_method_call(ast::Receiver::SelfType)
+            self.parse_method_call(None, ast::Receiver::SelfType)
         } else {
             Ok(Box::new(Expr::Name(self.parse_name()?)))
         }

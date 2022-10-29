@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
-use crate::position::Spanned;
 use crate::token::Symbol;
+use crate::position::{HasSpan, Span, Spanned};
 
 pub trait AstRecurse<'buf> {
     fn recurse<V: Visitor<'buf>>(&self, visitor: &mut V);
@@ -35,6 +35,7 @@ macro_rules! define_visitor {
 
     (@ Terminal { $( $name:ident ( $arg:ident : $ty:ty ) => $recurse:ident; )+ }) => {
         $(
+            #[allow(unused_variables)]
             fn $name(&mut self, $arg: $ty) {}
         )+
     };
@@ -49,6 +50,40 @@ macro_rules! impl_recurse {
 
             fn recurse_mut<V: VisitorMut<'buf>>(&mut $s, $visitor: &mut V) {
                 $body_mut;
+            }
+        }
+    };
+}
+
+macro_rules! impl_has_span {
+    ($type:ty) => {
+        impl HasSpan for $type {
+            fn span(&self) -> Cow<'_, Span> {
+                Cow::Borrowed(&self.span)
+            }
+        }
+    };
+
+    (|&$s:ident: $type:ty| $body:expr) => {
+        impl HasSpan for $type {
+            fn span(&$s) -> Cow<'_, Span> {
+                Cow::Borrowed($body)
+            }
+        }
+    };
+
+    (|$s:ident: $type:ty| $body:expr) => {
+        impl HasSpan for $type {
+            fn span(&$s) -> Cow<'_, Span> {
+                Cow::Owned($body)
+            }
+        }
+    };
+
+    (&$s:ident: $type:ty => $body:expr) => {
+        impl HasSpan for $type {
+            fn span(&$s) -> Cow<'_, Span> {
+                $body
             }
         }
     };
@@ -121,6 +156,7 @@ macro_rules! define_op_kind {
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Program<'buf> {
     pub classes: Vec<Class<'buf>>,
+    pub span: Span,
 }
 
 impl_recurse!(|self: Program<'buf>, visitor| {
@@ -133,11 +169,14 @@ impl_recurse!(|self: Program<'buf>, visitor| {
     },
 });
 
+impl_has_span!(Program<'_>);
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Class<'buf> {
     pub name: Name<'buf>,
     pub inherits: Option<Name<'buf>>,
     pub features: Vec<Feature<'buf>>,
+    pub span: Span,
 }
 
 impl_recurse!(|self: Class<'buf>, visitor| {
@@ -166,8 +205,12 @@ impl_recurse!(|self: Class<'buf>, visitor| {
     },
 });
 
+impl_has_span!(Class<'_>);
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Name<'buf>(pub Spanned<&'buf [u8]>);
+
+impl_has_span!(|&self: Name<'_>| &self.0.span);
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Feature<'buf> {
@@ -187,12 +230,18 @@ impl_recurse!(|self: Feature<'buf>, visitor| {
     },
 });
 
+impl_has_span!(&self: Feature<'_> => match self {
+    Self::Method(method) => method.span(),
+    Self::Field(binding) => binding.span(),
+});
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Method<'buf> {
     pub name: Name<'buf>,
     pub params: Vec<Formal<'buf>>,
     pub return_ty: Name<'buf>,
     pub body: Box<Expr<'buf>>,
+    pub span: Span,
 }
 
 impl_recurse!(|self: Method<'buf>, visitor| {
@@ -219,10 +268,13 @@ impl_recurse!(|self: Method<'buf>, visitor| {
     },
 });
 
+impl_has_span!(Method<'_>);
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Formal<'buf> {
     pub name: Name<'buf>,
     pub ty: Name<'buf>,
+    pub span: Span,
 }
 
 impl_recurse!(|self: Formal<'buf>, visitor| {
@@ -237,11 +289,14 @@ impl_recurse!(|self: Formal<'buf>, visitor| {
     }
 });
 
+impl_has_span!(Formal<'_>);
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Binding<'buf> {
     pub name: Name<'buf>,
     pub ty: Name<'buf>,
     pub init: Option<Box<Expr<'buf>>>,
+    pub span: Span,
 }
 
 impl_recurse!(|self: Binding<'buf>, visitor| {
@@ -263,6 +318,8 @@ impl_recurse!(|self: Binding<'buf>, visitor| {
         }
     },
 });
+
+impl_has_span!(Binding<'_>);
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Expr<'buf> {
@@ -318,10 +375,28 @@ impl_recurse!(|self: Expr<'buf>, visitor| {
     },
 });
 
+impl_has_span!(&self: Expr<'_> => match self {
+    Self::Assignment(expr) => expr.span(),
+    Self::Call(expr) => expr.span(),
+    Self::If(expr) => expr.span(),
+    Self::While(expr) => expr.span(),
+    Self::Block(expr) => expr.span(),
+    Self::Let(expr) => expr.span(),
+    Self::Case(expr) => expr.span(),
+    Self::New(expr) => expr.span(),
+    Self::BinOp(expr) => expr.span(),
+    Self::UnOp(expr) => expr.span(),
+    Self::Name(name) => name.span(),
+    Self::Int(expr) => expr.span(),
+    Self::String(expr) => expr.span(),
+    Self::Bool(expr) => expr.span(),
+});
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Assignment<'buf> {
     pub name: Name<'buf>,
     pub expr: Box<Expr<'buf>>,
+    pub span: Span,
 }
 
 impl_recurse!(|self: Assignment<'buf>, visitor| {
@@ -336,11 +411,14 @@ impl_recurse!(|self: Assignment<'buf>, visitor| {
     },
 });
 
+impl_has_span!(Assignment<'_>);
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Call<'buf> {
     pub receiver: Receiver<'buf>,
     pub method: Name<'buf>,
     pub args: Vec<Box<Expr<'buf>>>,
+    pub span: Span,
 }
 
 impl_recurse!(|self: Call<'buf>, visitor| {
@@ -362,6 +440,8 @@ impl_recurse!(|self: Call<'buf>, visitor| {
         }
     },
 });
+
+impl_has_span!(Call<'_>);
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Receiver<'buf> {
@@ -400,6 +480,7 @@ pub struct If<'buf> {
     pub antecedent: Box<Expr<'buf>>,
     pub consequent: Box<Expr<'buf>>,
     pub alternative: Box<Expr<'buf>>,
+    pub span: Span,
 }
 
 impl_recurse!(|self: If<'buf>, visitor| {
@@ -416,10 +497,13 @@ impl_recurse!(|self: If<'buf>, visitor| {
     },
 });
 
+impl_has_span!(If<'_>);
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct While<'buf> {
     pub condition: Box<Expr<'buf>>,
     pub body: Box<Expr<'buf>>,
+    pub span: Span,
 }
 
 impl_recurse!(|self: While<'buf>, visitor| {
@@ -434,9 +518,12 @@ impl_recurse!(|self: While<'buf>, visitor| {
     },
 });
 
+impl_has_span!(While<'_>);
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Block<'buf> {
     pub body: Vec<Box<Expr<'buf>>>,
+    pub span: Span,
 }
 
 impl_recurse!(|self: Block<'buf>, visitor| {
@@ -449,10 +536,13 @@ impl_recurse!(|self: Block<'buf>, visitor| {
     },
 });
 
+impl_has_span!(Block<'_>);
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Let<'buf> {
     pub bindings: Vec<Binding<'buf>>,
     pub expr: Box<Expr<'buf>>,
+    pub span: Span,
 }
 
 impl_recurse!(|self: Let<'buf>, visitor| {
@@ -473,10 +563,13 @@ impl_recurse!(|self: Let<'buf>, visitor| {
     },
 });
 
+impl_has_span!(Let<'_>);
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Case<'buf> {
     pub scrutinee: Box<Expr<'buf>>,
     pub arms: Vec<CaseArm<'buf>>,
+    pub span: Span,
 }
 
 impl_recurse!(|self: Case<'buf>, visitor| {
@@ -497,11 +590,14 @@ impl_recurse!(|self: Case<'buf>, visitor| {
     },
 });
 
+impl_has_span!(Case<'_>);
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct CaseArm<'buf> {
     pub name: Name<'buf>,
     pub ty: Name<'buf>,
     pub expr: Box<Expr<'buf>>,
+    pub span: Span,
 }
 
 impl_recurse!(|self: CaseArm<'buf>, visitor| {
@@ -518,19 +614,27 @@ impl_recurse!(|self: CaseArm<'buf>, visitor| {
     },
 });
 
+impl_has_span!(CaseArm<'_>);
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct New<'buf>(pub Name<'buf>);
+pub struct New<'buf> {
+    pub ty: Name<'buf>,
+    pub span: Span,
+}
 
 impl_recurse!(|self: New<'buf>, visitor| {
-    const => visitor.visit_name(&self.0),
-    mut => visitor.visit_name(&mut self.0),
+    const => visitor.visit_name(&self.ty),
+    mut => visitor.visit_name(&mut self.ty),
 });
+
+impl_has_span!(New<'_>);
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct BinOpExpr<'buf> {
     pub op: BinOpKind,
     pub lhs: Box<Expr<'buf>>,
     pub rhs: Box<Expr<'buf>>,
+    pub span: Span,
 }
 
 impl_recurse!(|self: BinOpExpr<'buf>, visitor| {
@@ -544,6 +648,8 @@ impl_recurse!(|self: BinOpExpr<'buf>, visitor| {
         visitor.visit_expr(&mut self.rhs);
     },
 });
+
+impl_has_span!(BinOpExpr<'_>);
 
 define_op_kind!(BinOpKind {
     Add => Plus,
@@ -559,12 +665,15 @@ define_op_kind!(BinOpKind {
 pub struct UnOpExpr<'buf> {
     pub op: UnOpKind,
     pub expr: Box<Expr<'buf>>,
+    pub span: Span,
 }
 
 impl_recurse!(|self: UnOpExpr<'buf>, visitor| {
     const => visitor.visit_expr(&self.expr),
     mut => visitor.visit_expr(&mut self.expr),
 });
+
+impl_has_span!(UnOpExpr<'_>);
 
 define_op_kind!(UnOpKind {
     IsVoid => IsVoid,
@@ -575,8 +684,14 @@ define_op_kind!(UnOpKind {
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct IntLit(pub Spanned<i32>);
 
+impl_has_span!(|&self: IntLit| &self.0.span);
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct StringLit<'buf>(pub Spanned<Cow<'buf, [u8]>>);
 
+impl_has_span!(|&self: StringLit<'_>| &self.0.span);
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct BoolLit(pub Spanned<bool>);
+
+impl_has_span!(|&self: BoolLit| &self.0.span);
