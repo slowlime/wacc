@@ -1,10 +1,11 @@
+use std::borrow::Cow;
 use std::error::Error;
 use std::fmt::Display;
 use std::iter::FusedIterator;
 use std::num::{IntErrorKind, ParseIntError};
 
 use crate::cursor::Cursor;
-use crate::position::{Position, Span};
+use crate::position::{Position, Span, HasSpan};
 use crate::token::{BACKSPACE, FORM_FEED, VERTICAL_TAB, Symbol, Token, TokenValue};
 use crate::try_match;
 
@@ -160,10 +161,6 @@ pub struct LexerError {
 }
 
 impl LexerError {
-    pub fn span(&self) -> &Span {
-        &self.span
-    }
-
     pub fn kind(&self) -> LexerErrorKind {
         self.kind
     }
@@ -176,6 +173,12 @@ impl Display for LexerError {
 }
 
 impl Error for LexerError {}
+
+impl HasSpan for LexerError {
+    fn span(&self) -> Cow<'_, Span> {
+        Cow::Borrowed(&self.span)
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Lexer<'buf> {

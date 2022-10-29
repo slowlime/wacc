@@ -7,6 +7,7 @@ use elsa::FrozenVec;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SourceId(usize);
 
+#[derive(Default)]
 pub struct SourceBuffer(FrozenVec<Vec<u8>>);
 
 impl SourceBuffer {

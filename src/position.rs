@@ -6,7 +6,7 @@ use crate::source::{Source, SourceFile, SourceId};
 use crate::util::{try_min, try_max};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum PositionPath<'src> {
+pub enum PositionPath<'src> {
     /// src_id is non-empty, and src has a SourceFile with that id
     Path(&'src Path),
 
@@ -18,7 +18,7 @@ enum PositionPath<'src> {
 }
 
 impl<'src> PositionPath<'src> {
-    fn new(src_id: Option<SourceId>, src: &'src Source) -> Self {
+    pub fn new(src_id: Option<SourceId>, src: &'src Source) -> Self {
         match src_id {
             Some(id) => match src.get(id) {
                 Some(src_file) => PositionPath::Path(src_file.path()),

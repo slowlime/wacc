@@ -4,8 +4,8 @@ use crate::token::Symbol;
 use crate::position::{HasSpan, Span, Spanned};
 
 pub trait AstRecurse<'buf> {
-    fn recurse<V: Visitor<'buf>>(&self, visitor: &mut V);
-    fn recurse_mut<V: VisitorMut<'buf>>(&mut self, visitor: &mut V);
+    fn recurse<V: DefaultVisitor<'buf>>(&self, visitor: &mut V);
+    fn recurse_mut<V: DefaultVisitorMut<'buf>>(&mut self, visitor: &mut V);
 }
 
 macro_rules! define_visitor {
@@ -14,14 +14,70 @@ macro_rules! define_visitor {
         where
             Self: Sized,
         {
-            $( define_visitor!(@ $type { $( $name ( $arg : &$ty ) => recurse; )+ } ); )+
+            type Output;
+
+            $(
+                $(
+                    fn $name(&mut self, $arg: &$ty) -> Self::Output;
+                )+
+            )+
         }
 
         pub trait VisitorMut<'buf>
         where
             Self: Sized,
         {
+            type Output;
+
+            $(
+                $(
+                    fn $name(&mut self, $arg: &mut $ty) -> Self::Output;
+                )+
+            )+
+        }
+
+        pub trait DefaultVisitor<'buf>
+        where
+            Self: Sized,
+        {
+            $( define_visitor!(@ $type { $( $name ( $arg : &$ty ) => recurse; )+ } ); )+
+        }
+
+        impl<'buf, T> Visitor<'buf> for T
+        where
+            T: DefaultVisitor<'buf>,
+        {
+            type Output = ();
+
+            $(
+                $(
+                    fn $name(&mut self, $arg: &$ty) {
+                        <Self as DefaultVisitor<'buf>>::$name(self, $arg);
+                    }
+                )+
+            )+
+        }
+
+        pub trait DefaultVisitorMut<'buf>
+        where
+            Self: Sized,
+        {
             $( define_visitor!(@ $type { $( $name ( $arg : &mut $ty ) => recurse_mut; )+ } ); )+
+        }
+
+        impl<'buf, T> VisitorMut<'buf> for T
+        where
+            T: DefaultVisitorMut<'buf>,
+        {
+            type Output = ();
+
+            $(
+                $(
+                    fn $name(&mut self, $arg: &mut $ty) {
+                        <Self as DefaultVisitorMut<'buf>>::$name(self, $arg);
+                    }
+                )+
+            )+
         }
     };
 
@@ -44,11 +100,11 @@ macro_rules! define_visitor {
 macro_rules! impl_recurse {
     (|$s:ident: $type:ty, $visitor:ident| { const => $body_const:expr, mut => $body_mut:expr $(,)?}) => {
         impl<'buf> AstRecurse<'buf> for $type {
-            fn recurse<V: Visitor<'buf>>(&$s, $visitor: &mut V) {
+            fn recurse<V: DefaultVisitor<'buf>>(&$s, $visitor: &mut V) {
                 $body_const;
             }
 
-            fn recurse_mut<V: VisitorMut<'buf>>(&mut $s, $visitor: &mut V) {
+            fn recurse_mut<V: DefaultVisitorMut<'buf>>(&mut $s, $visitor: &mut V) {
                 $body_mut;
             }
         }
@@ -96,6 +152,7 @@ define_visitor! {
         visit_class(class: Class<'buf>);
         visit_feature(feature: Feature<'buf>);
         visit_method(method: Method<'buf>);
+        visit_field(field: Field<'buf>);
 
         // expr
         visit_expr(expr: Expr<'buf>);
@@ -109,6 +166,7 @@ define_visitor! {
         visit_new(expr: New<'buf>);
         visit_bin_op(expr: BinOpExpr<'buf>);
         visit_un_op(expr: UnOpExpr<'buf>);
+        visit_name_expr(expr: NameExpr<'buf>);
 
         // neither stmt nor expr
         visit_formal(formal: Formal<'buf>);
@@ -215,18 +273,18 @@ impl_has_span!(|&self: Name<'_>| &self.0.span);
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Feature<'buf> {
     Method(Method<'buf>),
-    Field(Binding<'buf>),
+    Field(Field<'buf>),
 }
 
 impl_recurse!(|self: Feature<'buf>, visitor| {
     const => match self {
         Feature::Method(method) => visitor.visit_method(method),
-        Feature::Field(binding) => visitor.visit_binding(binding),
+        Feature::Field(field) => visitor.visit_field(field),
     },
 
     mut => match self {
         Feature::Method(method) => visitor.visit_method(method),
-        Feature::Field(binding) => visitor.visit_binding(binding),
+        Feature::Field(field) => visitor.visit_field(field),
     },
 });
 
@@ -292,6 +350,16 @@ impl_recurse!(|self: Formal<'buf>, visitor| {
 impl_has_span!(Formal<'_>);
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct Field<'buf>(pub Binding<'buf>);
+
+impl_recurse!(|self: Field<'buf>, visitor| {
+    const => visitor.visit_binding(&self.0),
+    mut => visitor.visit_binding(&mut self.0),
+});
+
+impl_has_span!(|&self: Field<'_>| &self.0.span);
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Binding<'buf> {
     pub name: Name<'buf>,
     pub ty: Name<'buf>,
@@ -333,7 +401,7 @@ pub enum Expr<'buf> {
     New(New<'buf>),
     BinOp(BinOpExpr<'buf>),
     UnOp(UnOpExpr<'buf>),
-    Name(Name<'buf>),
+    Name(NameExpr<'buf>),
     Int(IntLit),
     String(StringLit<'buf>),
     Bool(BoolLit),
@@ -351,7 +419,7 @@ impl_recurse!(|self: Expr<'buf>, visitor| {
         Self::New(expr) => visitor.visit_new(expr),
         Self::BinOp(expr) => visitor.visit_bin_op(expr),
         Self::UnOp(expr) => visitor.visit_un_op(expr),
-        Self::Name(name) => visitor.visit_name(name),
+        Self::Name(expr) => visitor.visit_name_expr(expr),
         Self::Int(expr) => visitor.visit_int_lit(expr),
         Self::String(expr) => visitor.visit_string_lit(expr),
         Self::Bool(expr) => visitor.visit_bool_lit(expr),
@@ -368,7 +436,7 @@ impl_recurse!(|self: Expr<'buf>, visitor| {
         Self::New(expr) => visitor.visit_new(expr),
         Self::BinOp(expr) => visitor.visit_bin_op(expr),
         Self::UnOp(expr) => visitor.visit_un_op(expr),
-        Self::Name(name) => visitor.visit_name(name),
+        Self::Name(expr) => visitor.visit_name_expr(expr),
         Self::Int(expr) => visitor.visit_int_lit(expr),
         Self::String(expr) => visitor.visit_string_lit(expr),
         Self::Bool(expr) => visitor.visit_bool_lit(expr),
@@ -386,7 +454,7 @@ impl_has_span!(&self: Expr<'_> => match self {
     Self::New(expr) => expr.span(),
     Self::BinOp(expr) => expr.span(),
     Self::UnOp(expr) => expr.span(),
-    Self::Name(name) => name.span(),
+    Self::Name(expr) => expr.span(),
     Self::Int(expr) => expr.span(),
     Self::String(expr) => expr.span(),
     Self::Bool(expr) => expr.span(),
@@ -540,25 +608,19 @@ impl_has_span!(Block<'_>);
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Let<'buf> {
-    pub bindings: Vec<Binding<'buf>>,
+    pub binding: Binding<'buf>,
     pub expr: Box<Expr<'buf>>,
     pub span: Span,
 }
 
 impl_recurse!(|self: Let<'buf>, visitor| {
     const => {
-        for binding in &self.bindings {
-            visitor.visit_binding(binding);
-        }
-
+        visitor.visit_binding(&self.binding);
         visitor.visit_expr(&self.expr);
     },
 
     mut => {
-        for binding in &mut self.bindings {
-            visitor.visit_binding(binding);
-        }
-
+        visitor.visit_binding(&mut self.binding);
         visitor.visit_expr(&mut self.expr);
     },
 });
@@ -680,6 +742,16 @@ define_op_kind!(UnOpKind {
     Complement => Tilde,
     Not => Not,
 });
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct NameExpr<'buf>(pub Name<'buf>);
+
+impl_recurse!(|self: NameExpr<'buf>, visitor| {
+    const => visitor.visit_name(&self.0),
+    mut => visitor.visit_name(&mut self.0),
+});
+
+impl_has_span!(&self: NameExpr<'_> => self.0.span());
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct IntLit(pub Spanned<i32>);

@@ -63,6 +63,15 @@ impl Error for ParserError<'_> {
     }
 }
 
+impl HasSpan for ParserError<'_> {
+    fn span(&self) -> Cow<'_, Span> {
+        match self {
+            Self::UnexpectedToken { actual, .. } => Cow::Borrowed(&actual.span),
+            Self::LexerError(e) => e.span(),
+        }
+    }
+}
+
 trait Matcher {
     fn matches<'t>(&self, token: &Token<'t>) -> bool;
 
@@ -244,7 +253,7 @@ impl<'buf> Parser<'buf> {
 
         Ok(select!(self: {
             Symbol::ParenLeft => ast::Feature::Method(self.parse_method(name)?),
-            Symbol::Colon => ast::Feature::Field(self.parse_binding(name)?),
+            Symbol::Colon => ast::Feature::Field(ast::Field(self.parse_binding(name)?)),
             _ => @error,
         }))
     }
@@ -586,11 +595,13 @@ impl<'buf> Parser<'buf> {
         let expr = self.parse_expr()?;
         let span = r#let.span.convex_hull(&expr.span());
 
-        Ok(Box::new(Expr::Let(ast::Let {
-            bindings,
-            expr,
-            span,
-        })))
+        Ok(bindings.into_iter().rfold(expr, |expr, binding| {
+            Box::new(Expr::Let(ast::Let {
+                binding,
+                expr,
+                span: span.clone(),
+            }))
+        }))
     }
 
     fn parse_case(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
@@ -650,7 +661,7 @@ impl<'buf> Parser<'buf> {
         if self.matches_nth(1, Symbol::ParenLeft) {
             self.parse_method_call(None, ast::Receiver::SelfType)
         } else {
-            Ok(Box::new(Expr::Name(self.parse_name()?)))
+            Ok(Box::new(Expr::Name(ast::NameExpr(self.parse_name()?))))
         }
     }
 

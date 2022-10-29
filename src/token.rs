@@ -6,7 +6,7 @@ use itertools::Itertools;
 use once_cell::sync::OnceCell;
 use phf::phf_map;
 
-use crate::position::{Span, Spanned};
+use crate::position::{HasSpan, Span, Spanned};
 use crate::try_match;
 
 pub const BACKSPACE: u8 = 8;
@@ -23,9 +23,11 @@ impl Token<'_> {
     pub fn ty(&self) -> TokenType {
         self.value.ty()
     }
+}
 
-    pub fn span(&self) -> &Span {
-        &self.span
+impl HasSpan for Token<'_> {
+    fn span(&self) -> Cow<'_, Span> {
+        Cow::Borrowed(&self.span)
     }
 }
 
