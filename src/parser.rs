@@ -1,9 +1,10 @@
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::error::Error;
-use std::fmt::Display;
+use std::fmt::{self, Display};
 
-use itertools::PeekNth;
+use itertools::{Itertools, PeekNth};
+use tracing::{instrument, trace};
 
 use crate::ast::{self, BinOpKind, Expr, Name, UnOpKind};
 use crate::lexer::{Lexer, LexerError};
@@ -144,6 +145,10 @@ macro_rules! select {
     });
 }
 
+fn format_expected(tokens: Cow<'static, [TokenType]>) -> String {
+    tokens.iter().map(|token| format!("{}", token)).join(", ")
+}
+
 pub struct Parser<'buf> {
     lexer: PeekNth<Lexer<'buf>>,
 }
@@ -165,17 +170,30 @@ impl<'buf> Parser<'buf> {
         M: Matcher,
         F: FnOnce(Token<'buf>) -> Result<R, ParserError<'buf>>,
         G: FnOnce(&'_ Token<'buf>, M) -> Result<R, ParserError<'buf>>,
+        R: fmt::Debug,
     {
-        match self.lexer.peek() {
+        trace!(token = ?self.lexer.peek());
+
+        let result = match self.lexer.peek() {
             Some(Ok(token)) if matcher.matches(token) => {
                 on_match(self.lexer.next().unwrap().unwrap())
             }
             Some(Ok(token)) => on_fail(token, matcher),
             Some(Err(_)) => Err(self.lexer.next().unwrap().err().unwrap().into()),
             None => panic!("peeking after retrieving the Eof token"),
-        }
+        };
+
+        trace!(result = ?result);
+
+        result
     }
 
+    #[instrument(
+        level = "trace",
+        ret,
+        skip(self, matcher),
+        fields(matcher = format_expected(matcher.expected_tokens()))
+    )]
     fn expect(&mut self, matcher: impl Matcher) -> Result<Token<'buf>, ParserError<'buf>> {
         self.expect_generic(matcher, Ok, |token, matcher| {
             Err(ParserError::UnexpectedToken {
@@ -185,6 +203,12 @@ impl<'buf> Parser<'buf> {
         })
     }
 
+    #[instrument(
+        level = "trace",
+        ret,
+        skip(self, matcher),
+        fields(matcher = format_expected(matcher.expected_tokens()))
+    )]
     fn try_consume(
         &mut self,
         matcher: impl Matcher,
@@ -192,10 +216,19 @@ impl<'buf> Parser<'buf> {
         self.expect_generic(matcher, |token| Ok(Some(token)), |_, _| Ok(None))
     }
 
+    #[instrument(
+        level = "trace",
+        ret,
+        skip(self, matcher),
+        fields(matcher = format_expected(matcher.expected_tokens()))
+    )]
     fn matches_nth(&mut self, n: usize, matcher: impl Matcher) -> bool {
+        trace!(token = ?self.lexer.peek_nth(n));
+
         matches!(self.lexer.peek_nth(n), Some(Ok(token)) if matcher.matches(token))
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     pub fn parse(mut self) -> Result<ast::Program<'buf>, ParserError<'buf>> {
         let mut classes = Vec::new();
 
@@ -211,6 +244,7 @@ impl<'buf> Parser<'buf> {
         }
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     fn parse_class(&mut self) -> Result<ast::Class<'buf>, ParserError<'buf>> {
         let class = self.expect(Symbol::Class)?;
         let name = self.parse_name()?;
@@ -229,6 +263,7 @@ impl<'buf> Parser<'buf> {
             }
 
             features.push(self.parse_feature()?);
+            self.expect(Symbol::Semicolon)?;
         };
 
         let span = class.span.convex_hull(&brace_right.span);
@@ -241,6 +276,7 @@ impl<'buf> Parser<'buf> {
         })
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     fn parse_name(&mut self) -> Result<ast::Name<'buf>, ParserError<'buf>> {
         // XXX: capitalization is not checked in the parser (might want to revisit this later)
         Ok(ast::Name(
@@ -248,6 +284,7 @@ impl<'buf> Parser<'buf> {
         ))
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     fn parse_feature(&mut self) -> Result<ast::Feature<'buf>, ParserError<'buf>> {
         let name = self.parse_name()?;
 
@@ -258,6 +295,7 @@ impl<'buf> Parser<'buf> {
         }))
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     fn parse_method(&mut self, name: Name<'buf>) -> Result<ast::Method<'buf>, ParserError<'buf>> {
         self.expect(Symbol::ParenLeft)?;
         let mut params = Vec::new();
@@ -277,11 +315,14 @@ impl<'buf> Parser<'buf> {
             params.push(self.parse_formal()?);
         }
 
+        self.expect(Symbol::Colon)?;
+
         let return_ty = self.parse_name()?;
 
         self.expect(Symbol::BraceLeft)?;
         let body = self.parse_expr()?;
-        let span = name.0.span.convex_hull(&body.span());
+        let brace_right = self.expect(Symbol::BraceRight)?;
+        let span = name.0.span.convex_hull(&brace_right.span);
 
         Ok(ast::Method {
             name,
@@ -292,24 +333,26 @@ impl<'buf> Parser<'buf> {
         })
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     fn parse_formal(&mut self) -> Result<ast::Formal<'buf>, ParserError<'buf>> {
         let name = self.parse_name()?;
-        self.expect(Symbol::Semicolon)?;
+        self.expect(Symbol::Colon)?;
         let ty = self.parse_name()?;
         let span = name.0.span.convex_hull(&ty.0.span);
 
         Ok(ast::Formal { name, ty, span })
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     fn parse_binding(&mut self, name: Name<'buf>) -> Result<ast::Binding<'buf>, ParserError<'buf>> {
-        self.expect(Symbol::Semicolon)?;
+        self.expect(Symbol::Colon)?;
         let ty = self.parse_name()?;
 
         let (span, init) = if self.try_consume(Symbol::ArrowLeft)?.is_some() {
             let expr = self.parse_expr()?;
             let span = name.0.span.convex_hull(&expr.span());
 
-            (span, Some(self.parse_expr()?))
+            (span, Some(expr))
         } else {
             let span = name.0.span.convex_hull(&ty.0.span);
 
@@ -324,10 +367,12 @@ impl<'buf> Parser<'buf> {
         })
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     fn parse_expr(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         self.parse_expr_assign()
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     fn parse_expr_assign(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         if self.matches_nth(0, TokenType::Ident) && self.matches_nth(1, Symbol::ArrowLeft) {
             let name = self.parse_name()?;
@@ -370,10 +415,12 @@ impl<'buf> Parser<'buf> {
         }
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     fn parse_expr_not(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         self.parse_un_op(Symbol::Not, Self::parse_expr_not, Self::parse_expr_cmp)
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     fn parse_expr_cmp(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         const CMP_OPS: [Symbol; 3] = [Symbol::LessEquals, Symbol::Less, Symbol::Equals];
 
@@ -419,14 +466,17 @@ impl<'buf> Parser<'buf> {
         Ok(lhs)
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     fn parse_expr_addsub(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         self.parse_bin_op_lassoc(&[Symbol::Plus, Symbol::Minus], Self::parse_expr_muldiv)
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     fn parse_expr_muldiv(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         self.parse_bin_op_lassoc(&[Symbol::Asterisk, Symbol::Slash], Self::parse_expr_is_void)
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     fn parse_expr_is_void(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         self.parse_un_op(
             Symbol::IsVoid,
@@ -435,6 +485,7 @@ impl<'buf> Parser<'buf> {
         )
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     fn parse_expr_compl(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         self.parse_un_op(
             Symbol::Tilde,
@@ -443,6 +494,7 @@ impl<'buf> Parser<'buf> {
         )
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     fn parse_expr_static_dispatch(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         let mut object = self.parse_expr_dynamic_dispatch()?;
 
@@ -458,6 +510,7 @@ impl<'buf> Parser<'buf> {
         Ok(object)
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     fn parse_method_call(
         &mut self,
         receiver_span: Option<Span>,
@@ -492,6 +545,7 @@ impl<'buf> Parser<'buf> {
         })))
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     fn parse_expr_dynamic_dispatch(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         let mut object = self.parse_expr_atom()?;
 
@@ -505,6 +559,7 @@ impl<'buf> Parser<'buf> {
         Ok(object)
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     fn parse_expr_atom(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         select!(self: {
             Symbol::If => self.parse_if(),
@@ -524,6 +579,7 @@ impl<'buf> Parser<'buf> {
         })
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     fn parse_if(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         let r#if = self.expect(Symbol::If)?;
         let antecedent = self.parse_expr()?;
@@ -543,6 +599,7 @@ impl<'buf> Parser<'buf> {
         })))
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     fn parse_while(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         let r#while = self.expect(Symbol::While)?;
         let condition = self.parse_expr()?;
@@ -559,6 +616,7 @@ impl<'buf> Parser<'buf> {
         })))
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     fn parse_block(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         let brace_left = self.expect(Symbol::BraceLeft)?;
         let mut body = Vec::new();
@@ -577,6 +635,7 @@ impl<'buf> Parser<'buf> {
         Ok(Box::new(Expr::Block(ast::Block { body, span })))
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     fn parse_let(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         let r#let = self.expect(Symbol::Let)?;
         let mut bindings = Vec::new();
@@ -585,7 +644,7 @@ impl<'buf> Parser<'buf> {
             let name = self.parse_name()?;
             bindings.push(self.parse_binding(name)?);
 
-            if self.try_consume(Symbol::In)?.is_none() {
+            if self.try_consume(Symbol::In)?.is_some() {
                 break;
             } else {
                 self.expect(Symbol::Comma)?;
@@ -593,17 +652,20 @@ impl<'buf> Parser<'buf> {
         }
 
         let expr = self.parse_expr()?;
-        let span = r#let.span.convex_hull(&expr.span());
 
-        Ok(bindings.into_iter().rfold(expr, |expr, binding| {
+        Ok(bindings.into_iter().enumerate().rfold(expr, |expr, (i, binding)| {
+            let start = if i == 0 { &r#let.span } else { &binding.span };
+            let span = start.convex_hull(&expr.span());
+
             Box::new(Expr::Let(ast::Let {
                 binding,
                 expr,
-                span: span.clone(),
+                span,
             }))
         }))
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     fn parse_case(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         let case = self.expect(Symbol::Case)?;
         let scrutinee = self.parse_expr()?;
@@ -641,6 +703,7 @@ impl<'buf> Parser<'buf> {
         })))
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     fn parse_new(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         let new = self.expect(Symbol::New)?;
         let ty = self.parse_name()?;
@@ -649,6 +712,7 @@ impl<'buf> Parser<'buf> {
         Ok(Box::new(Expr::New(ast::New { ty, span })))
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     fn parse_paren(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         self.expect(Symbol::ParenLeft)?;
         let expr = self.parse_expr()?;
@@ -657,6 +721,7 @@ impl<'buf> Parser<'buf> {
         Ok(expr)
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     fn parse_expr_self_call(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         if self.matches_nth(1, Symbol::ParenLeft) {
             self.parse_method_call(None, ast::Receiver::SelfType)
@@ -665,18 +730,21 @@ impl<'buf> Parser<'buf> {
         }
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     fn parse_int_lit(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         let token = self.expect(TokenType::Int)?.try_into().unwrap();
 
         Ok(Box::new(Expr::Int(ast::IntLit(token))))
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     fn parse_string_lit(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         let token = self.expect(TokenType::String)?.try_into().unwrap();
 
         Ok(Box::new(Expr::String(ast::StringLit(token))))
     }
 
+    #[instrument(level = "trace", skip(self), ret)]
     fn parse_bool_lit(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         let token = self
             .expect(&[Symbol::True, Symbol::False])?

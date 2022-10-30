@@ -1,4 +1,7 @@
 use std::borrow::Cow;
+use std::fmt;
+
+use byte_string::ByteStr;
 
 use crate::token::Symbol;
 use crate::position::{HasSpan, Span, Spanned};
@@ -265,10 +268,19 @@ impl_recurse!(|self: Class<'buf>, visitor| {
 
 impl_has_span!(Class<'_>);
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash)]
 pub struct Name<'buf>(pub Spanned<&'buf [u8]>);
 
 impl_has_span!(|&self: Name<'_>| &self.0.span);
+
+impl fmt::Debug for Name<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Name")
+            .field("span", &self.0.span)
+            .field("value", &ByteStr::new(self.0.value))
+            .finish()
+    }
+}
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Feature<'buf> {
@@ -758,8 +770,17 @@ pub struct IntLit(pub Spanned<i32>);
 
 impl_has_span!(|&self: IntLit| &self.0.span);
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash)]
 pub struct StringLit<'buf>(pub Spanned<Cow<'buf, [u8]>>);
+
+impl fmt::Debug for StringLit<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Name")
+            .field("span", &self.0.span)
+            .field("value", &ByteStr::new(self.0.value.as_ref()))
+            .finish()
+    }
+}
 
 impl_has_span!(|&self: StringLit<'_>| &self.0.span);
 

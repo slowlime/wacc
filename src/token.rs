@@ -1,7 +1,8 @@
 use std::borrow::Cow;
-use std::fmt::Display;
+use std::fmt::{self, Display};
 use std::io::{self, Write};
 
+use byte_string::ByteStr;
 use itertools::Itertools;
 use once_cell::sync::OnceCell;
 use phf::phf_map;
@@ -56,7 +57,7 @@ impl Display for TokenType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum TokenValue<'buf> {
     Int(i32),
     Symbol(Symbol),
@@ -73,6 +74,18 @@ impl TokenValue<'_> {
             Self::Ident(_) => TokenType::Ident,
             Self::String(_) => TokenType::String,
             Self::Eof => TokenType::Eof,
+        }
+    }
+}
+
+impl fmt::Debug for TokenValue<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Int(value) => f.debug_tuple("Int").field(value).finish(),
+            Self::Symbol(sym) => f.debug_tuple("Symbol").field(sym).finish(),
+            Self::Ident(id) => f.debug_tuple("Ident").field(&ByteStr::new(id)).finish(),
+            Self::String(s) => f.debug_tuple("String").field(&ByteStr::new(s.as_ref())).finish(),
+            Self::Eof => f.debug_struct("Eof").finish(),
         }
     }
 }

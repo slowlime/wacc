@@ -8,7 +8,7 @@ use crate::ast;
 use crate::cursor::Cursor;
 use crate::lexer::{Lexer, LexerError};
 use crate::parser::{Parser, ParserError};
-use crate::position::{PositionPath, Span, Spanned, HasSpan};
+use crate::position::{HasSpan, PositionPath, Span, Spanned};
 use crate::source::{Source, SourceBuffer};
 use crate::token::{self, write_escaped_string, Symbol, SymbolCategory, Token, TokenValue};
 
@@ -129,7 +129,7 @@ impl DumpRunner {
     {
         match format {
             DumpFormat::Coolc => Self::dump_tokens_coolc(path, tokens, out),
-            DumpFormat::Debug => write!(out, "{:#?}", tokens.collect::<Vec<_>>()),
+            DumpFormat::Debug => writeln!(out, "{:#?}", tokens.collect::<Vec<_>>()),
         }
     }
 
@@ -219,7 +219,7 @@ impl DumpRunner {
     ) -> io::Result<()> {
         match format {
             DumpFormat::Coolc => Self::dump_ast_coolc(source, ast, out),
-            DumpFormat::Debug => write!(out, "{:#?}", ast),
+            DumpFormat::Debug => writeln!(out, "{:#?}", ast),
         }
     }
 
@@ -305,10 +305,10 @@ impl DumpRunner {
                     };
 
                     this.indented_line(|this| {
-                        write!(
+                        write_escaped_string(
+                            format!("{}", PositionPath::new(class.span.start.src, this.source))
+                                .as_bytes(),
                             &mut this.out,
-                            "{}",
-                            PositionPath::new(class.span.start.src, this.source)
                         )
                     })?;
 
@@ -562,7 +562,7 @@ impl DumpRunner {
                     Receiver::SelfType => {
                         // synthesize a "self" NameExpr
                         let mock_self = ast::Expr::Name(ast::NameExpr(ast::Name(Spanned {
-                            value: b"name",
+                            value: b"self",
                             span: self.call_span.take().unwrap(),
                         })));
                         self.visit_expr(&mock_self)?;
@@ -610,22 +610,34 @@ impl DumpRunner {
             fn visit_int_lit(&mut self, expr: &ast::IntLit) -> Self::Output {
                 self.write_span(&expr.0.span)?;
                 self.indented_line(|this| write!(&mut this.out, "_int"))?;
-                self.with_nested(|this| write!(&mut this.out, "{}", expr.0.value))
+                self.with_nested(|this| {
+                    this.indented_line(|this| write!(&mut this.out, "{}", expr.0.value))
+                })
             }
 
             fn visit_string_lit(&mut self, expr: &ast::StringLit<'buf>) -> Self::Output {
                 self.write_span(&expr.0.span)?;
                 self.indented_line(|this| write!(&mut this.out, "_string"))?;
-                self.with_nested(|this| write_escaped_string(&expr.0.value, &mut this.out))
+                self.with_nested(|this| {
+                    this.indented_line(|this| write_escaped_string(&expr.0.value, &mut this.out))
+                })
             }
 
             fn visit_bool_lit(&mut self, expr: &ast::BoolLit) -> Self::Output {
                 self.write_span(&expr.0.span)?;
                 self.indented_line(|this| write!(&mut this.out, "_bool"))?;
-                self.with_nested(|this| write!(&mut this.out, "{}", match expr.0.value {
-                    true => 1,
-                    false => 0,
-                }))
+                self.with_nested(|this| {
+                    this.indented_line(|this| {
+                        write!(
+                            &mut this.out,
+                            "{}",
+                            match expr.0.value {
+                                true => 1,
+                                false => 0,
+                            }
+                        )
+                    })
+                })
             }
         }
 
