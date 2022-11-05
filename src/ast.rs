@@ -3,7 +3,7 @@ use std::fmt;
 
 use byte_string::ByteStr;
 
-use crate::token::Symbol;
+use crate::parse::token::Symbol;
 use crate::position::{HasSpan, Span, Spanned};
 
 pub trait AstRecurse<'buf> {

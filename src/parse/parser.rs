@@ -7,9 +7,9 @@ use itertools::{Itertools, PeekNth};
 use tracing::{instrument, trace};
 
 use crate::ast::{self, BinOpKind, Expr, Name, UnOpKind};
-use crate::lexer::{Lexer, LexerError};
+use crate::parse::lexer::{Lexer, LexerError};
 use crate::position::{HasSpan, Span};
-use crate::token::{Symbol, Token, TokenType};
+use crate::parse::token::{Symbol, Token, TokenType};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum ParserError<'buf> {

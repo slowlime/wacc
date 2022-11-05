@@ -4,9 +4,9 @@ use std::fmt::Display;
 use std::iter::FusedIterator;
 use std::num::{IntErrorKind, ParseIntError};
 
-use crate::cursor::Cursor;
+use crate::parse::cursor::Cursor;
 use crate::position::{Position, Span, HasSpan};
-use crate::token::{BACKSPACE, FORM_FEED, VERTICAL_TAB, Symbol, Token, TokenValue};
+use crate::parse::token::{BACKSPACE, FORM_FEED, VERTICAL_TAB, Symbol, Token, TokenValue};
 use crate::try_match;
 
 type ScanResult<'buf> = Result<TokenValue<'buf>, PosLexerError>;

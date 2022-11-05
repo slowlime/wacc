@@ -5,12 +5,10 @@ use clap::{Args, Parser as ClapParser, Subcommand, ValueEnum};
 use color_eyre::eyre::{eyre, Context, Report};
 
 use crate::ast;
-use crate::cursor::Cursor;
-use crate::lexer::{Lexer, LexerError};
-use crate::parser::{Parser, ParserError};
+use crate::parse::token::{self, write_escaped_string, Symbol, SymbolCategory, Token, TokenValue};
+use crate::parse::{Cursor, Lexer, LexerError, Parser, ParserError};
 use crate::position::{HasSpan, PositionPath, Span, Spanned};
 use crate::source::{Source, SourceBuffer};
-use crate::token::{self, write_escaped_string, Symbol, SymbolCategory, Token, TokenValue};
 
 #[derive(ClapParser, Debug, Clone)]
 #[command(version)]

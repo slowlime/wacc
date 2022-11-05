@@ -1,11 +1,8 @@
 pub mod ast;
-mod cli;
-pub mod cursor;
-pub mod lexer;
-pub mod parser;
+pub mod parse;
 pub mod position;
 pub mod source;
-pub mod token;
+mod ui;
 pub mod util;
 
 use clap::Parser as ClapParser;
@@ -25,5 +22,5 @@ pub fn main() -> Result<(), Report> {
         .with(filter)
         .init();
 
-    cli::WaccCli::parse().run()
+    ui::WaccCli::parse().run()
 }
