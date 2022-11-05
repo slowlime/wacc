@@ -295,10 +295,10 @@ impl DumpRunner {
                 self.write_span(&class.span)?;
                 self.indented_line(|this| write!(&mut this.out, "_class"))?;
                 self.with_nested(|this| {
-                    this.visit_name(&class.name)?;
+                    this.visit_ty_name(&class.name)?;
 
                     match &class.inherits {
-                        Some(name) => this.visit_name(name)?,
+                        Some(ty_name) => this.visit_ty_name(ty_name)?,
                         None => this.indented_line(|this| write!(&mut this.out, "Object"))?,
                     };
 
@@ -339,7 +339,7 @@ impl DumpRunner {
                         this.visit_formal(formal)?;
                     }
 
-                    this.visit_name(&method.return_ty)?;
+                    this.visit_ty_name(&method.return_ty)?;
                     this.visit_expr(&method.body)?;
 
                     Ok(())
@@ -485,7 +485,7 @@ impl DumpRunner {
             fn visit_new(&mut self, expr: &ast::New<'buf>) -> Self::Output {
                 self.write_span(&expr.span)?;
                 self.indented_line(|this| write!(&mut this.out, "_new"))?;
-                self.with_nested(|this| this.visit_name(&expr.ty))
+                self.with_nested(|this| this.visit_ty_name(&expr.ty_name))
             }
 
             fn visit_bin_op(&mut self, expr: &ast::BinOpExpr<'buf>) -> Self::Output {
@@ -537,9 +537,9 @@ impl DumpRunner {
             }
 
             fn visit_name_expr(&mut self, expr: &ast::NameExpr<'buf>) -> Self::Output {
-                self.write_span(&expr.0 .0.span)?;
+                self.write_span(&expr.name.0.span)?;
                 self.indented_line(|this| write!(&mut this.out, "_object"))?;
-                self.with_nested(|this| this.visit_name(&expr.0))
+                self.with_nested(|this| this.visit_name(&expr.name))
             }
 
             fn visit_formal(&mut self, formal: &ast::Formal<'buf>) -> Self::Output {
@@ -547,7 +547,7 @@ impl DumpRunner {
                 self.indented_line(|this| write!(&mut this.out, "_formal"))?;
                 self.with_nested(|this| {
                     this.visit_name(&formal.name)?;
-                    this.visit_name(&formal.ty)?;
+                    this.visit_ty_name(&formal.ty_name)?;
 
                     Ok(())
                 })
@@ -559,18 +559,21 @@ impl DumpRunner {
                 match recv {
                     Receiver::SelfType => {
                         // synthesize a "self" NameExpr
-                        let mock_self = ast::Expr::Name(ast::NameExpr(ast::Name(Spanned {
-                            value: b"self",
-                            span: self.call_span.take().unwrap(),
-                        })));
+                        let mock_self = ast::Expr::Name(ast::NameExpr {
+                            name: ast::Name(Spanned {
+                                value: b"self",
+                                span: self.call_span.take().unwrap(),
+                            }),
+                            ty: None,
+                        });
                         self.visit_expr(&mock_self)?;
                     }
 
                     Receiver::Dynamic(object) => self.visit_expr(object)?,
 
-                    Receiver::Static { object, ty } => {
+                    Receiver::Static { object, ty_name } => {
                         self.visit_expr(object)?;
-                        self.visit_name(ty)?;
+                        self.visit_ty_name(ty_name)?;
                     }
                 }
 
@@ -582,11 +585,15 @@ impl DumpRunner {
                 self.indented_line(|this| write!(&mut this.out, "_branch"))?;
                 self.with_nested(|this| {
                     this.visit_name(&arm.name)?;
-                    this.visit_name(&arm.ty)?;
+                    this.visit_ty_name(&arm.binding_ty_name)?;
                     this.visit_expr(&arm.expr)?;
 
                     Ok(())
                 })
+            }
+
+            fn visit_ty_name(&mut self, ty_name: &ast::TyName<'buf>) -> Self::Output {
+                self.visit_name(&ty_name.0)
             }
 
             fn visit_name(&mut self, name: &ast::Name<'buf>) -> Self::Output {
@@ -595,7 +602,7 @@ impl DumpRunner {
 
             fn visit_binding(&mut self, binding: &ast::Binding<'buf>) -> Self::Output {
                 self.visit_name(&binding.name)?;
-                self.visit_name(&binding.ty)?;
+                self.visit_ty_name(&binding.ty_name)?;
 
                 match &binding.init {
                     Some(expr) => self.visit_expr(expr)?,

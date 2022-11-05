@@ -6,9 +6,10 @@ use std::fmt::{self, Display};
 use itertools::{Itertools, PeekNth};
 use tracing::{instrument, trace};
 
-use crate::ast::{self, BinOpKind, Expr, Name, UnOpKind};
+use crate::ast::ty::UnresolvedTy;
+use crate::ast::{self, BinOpKind, Expr, Name, UnOpKind, TyName};
 use crate::parse::lexer::{Lexer, LexerError};
-use crate::position::{HasSpan, Span};
+use crate::position::{HasSpan, Span, Spanned};
 use crate::parse::token::{Symbol, Token, TokenType};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -17,6 +18,9 @@ pub enum ParserError<'buf> {
         expected: Cow<'static, [TokenType]>,
         actual: Token<'buf>,
     },
+
+    UppercasedName(TyName<'buf>),
+    LowercasedTyName(Name<'buf>),
 
     LexerError(LexerError),
 }
@@ -50,6 +54,14 @@ impl Display for ParserError<'_> {
                 }
             }
 
+            Self::UppercasedName(name) => {
+                write!(f, "An object name cannot start with an uppercase letter: `{}`", name)
+            }
+
+            Self::LowercasedTyName(name) => {
+                write!(f, "A type name cannot start with a lowercase letter: `{}`", name)
+            }
+
             Self::LexerError(err) => write!(f, "{}", err),
         }
     }
@@ -58,8 +70,8 @@ impl Display for ParserError<'_> {
 impl Error for ParserError<'_> {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            Self::UnexpectedToken { .. } => None,
             Self::LexerError(err) => Some(err),
+            _ => None,
         }
     }
 }
@@ -67,7 +79,9 @@ impl Error for ParserError<'_> {
 impl HasSpan for ParserError<'_> {
     fn span(&self) -> Cow<'_, Span> {
         match self {
-            Self::UnexpectedToken { actual, .. } => Cow::Borrowed(&actual.span),
+            Self::UnexpectedToken { actual, .. } => actual.span(),
+            Self::UppercasedName(ty_name) => ty_name.span(),
+            Self::LowercasedTyName(name) => name.span(),
             Self::LexerError(e) => e.span(),
         }
     }
@@ -247,10 +261,10 @@ impl<'buf> Parser<'buf> {
     #[instrument(level = "trace", skip(self), ret)]
     fn parse_class(&mut self) -> Result<ast::Class<'buf>, ParserError<'buf>> {
         let class = self.expect(Symbol::Class)?;
-        let name = self.parse_name()?;
+        let name = self.parse_ty_name()?;
 
         let inherits = match self.try_consume(Symbol::Inherits)? {
-            Some(_) => Some(self.parse_name()?),
+            Some(_) => Some(self.parse_ty_name()?),
             _ => None,
         };
 
@@ -267,21 +281,39 @@ impl<'buf> Parser<'buf> {
         };
 
         let span = class.span.convex_hull(&brace_right.span);
+        let ty = UnresolvedTy::Named(name.clone()).into();
 
         Ok(ast::Class {
             name,
             inherits,
             features,
             span,
+            ty,
         })
     }
 
     #[instrument(level = "trace", skip(self), ret)]
     fn parse_name(&mut self) -> Result<ast::Name<'buf>, ParserError<'buf>> {
-        // XXX: capitalization is not checked in the parser (might want to revisit this later)
-        Ok(ast::Name(
-            self.expect(TokenType::Ident)?.try_into().unwrap(),
-        ))
+        let ident = self.expect(TokenType::Ident)?;
+        let spanned: Spanned<&'buf [u8]> = ident.try_into().unwrap();
+
+        if spanned.value[0].is_ascii_uppercase() {
+            Err(ParserError::UppercasedName(TyName(Name(spanned))))
+        } else {
+            Ok(Name(spanned))
+        }
+    }
+
+    #[instrument(level = "trace", skip(self), ret)]
+    fn parse_ty_name(&mut self) -> Result<ast::TyName<'buf>, ParserError<'buf>> {
+        let ident = self.expect(TokenType::Ident)?;
+        let spanned: Spanned<&'buf [u8]> = ident.try_into().unwrap();
+
+        if spanned.value[0].is_ascii_lowercase() {
+            Err(ParserError::LowercasedTyName(Name(spanned)))
+        } else {
+            Ok(TyName(Name(spanned)))
+        }
     }
 
     #[instrument(level = "trace", skip(self), ret)]
@@ -317,12 +349,19 @@ impl<'buf> Parser<'buf> {
 
         self.expect(Symbol::Colon)?;
 
-        let return_ty = self.parse_name()?;
+        let return_ty = self.parse_ty_name()?;
 
         self.expect(Symbol::BraceLeft)?;
         let body = self.parse_expr()?;
         let brace_right = self.expect(Symbol::BraceRight)?;
         let span = name.0.span.convex_hull(&brace_right.span);
+
+        let ty = {
+            let args = params.iter().map(|ast::Formal { ty, .. }| ty.clone()).collect();
+            let ret = Box::new(UnresolvedTy::Named(return_ty.clone()).into());
+
+            UnresolvedTy::Function { args, ret }.into()
+        };
 
         Ok(ast::Method {
             name,
@@ -330,6 +369,7 @@ impl<'buf> Parser<'buf> {
             return_ty,
             body,
             span,
+            ty,
         })
     }
 
@@ -337,16 +377,18 @@ impl<'buf> Parser<'buf> {
     fn parse_formal(&mut self) -> Result<ast::Formal<'buf>, ParserError<'buf>> {
         let name = self.parse_name()?;
         self.expect(Symbol::Colon)?;
-        let ty = self.parse_name()?;
-        let span = name.0.span.convex_hull(&ty.0.span);
+        let ty_name = self.parse_ty_name()?;
+        let span = name.0.span.convex_hull(&ty_name.span());
+        let ty = UnresolvedTy::Named(ty_name.clone()).into();
 
-        Ok(ast::Formal { name, ty, span })
+        Ok(ast::Formal { name, ty_name, span, ty })
     }
 
     #[instrument(level = "trace", skip(self), ret)]
     fn parse_binding(&mut self, name: Name<'buf>) -> Result<ast::Binding<'buf>, ParserError<'buf>> {
         self.expect(Symbol::Colon)?;
-        let ty = self.parse_name()?;
+        let ty_name = self.parse_ty_name()?;
+        let ty = UnresolvedTy::Named(ty_name.clone()).into();
 
         let (span, init) = if self.try_consume(Symbol::ArrowLeft)?.is_some() {
             let expr = self.parse_expr()?;
@@ -354,16 +396,17 @@ impl<'buf> Parser<'buf> {
 
             (span, Some(expr))
         } else {
-            let span = name.0.span.convex_hull(&ty.0.span);
+            let span = name.0.span.convex_hull(&ty_name.span());
 
             (span, None)
         };
 
         Ok(ast::Binding {
             name,
-            ty,
+            ty_name,
             init,
             span,
+            ty,
         })
     }
 
@@ -408,8 +451,9 @@ impl<'buf> Parser<'buf> {
 
             let expr = recurse(self)?;
             let span = sym.span.convex_hull(&expr.span());
+            let ty = None;
 
-            Ok(Box::new(Expr::UnOp(ast::UnOpExpr { op, expr, span })))
+            Ok(Box::new(Expr::UnOp(ast::UnOpExpr { op, expr, span, ty })))
         } else {
             descend(self)
         }
@@ -434,8 +478,9 @@ impl<'buf> Parser<'buf> {
 
             let rhs = self.parse_expr_addsub()?;
             let span = lhs.span().convex_hull(&rhs.span());
+            let ty = None;
 
-            Ok(Box::new(Expr::BinOp(ast::BinOpExpr { op, lhs, rhs, span })))
+            Ok(Box::new(Expr::BinOp(ast::BinOpExpr { op, lhs, rhs, span, ty })))
         } else {
             Ok(lhs)
         }
@@ -459,8 +504,9 @@ impl<'buf> Parser<'buf> {
 
             let rhs = descend(self)?;
             let span = lhs.span().convex_hull(&rhs.span());
+            let ty = None;
 
-            lhs = Box::new(Expr::BinOp(ast::BinOpExpr { op, lhs, rhs, span }));
+            lhs = Box::new(Expr::BinOp(ast::BinOpExpr { op, lhs, rhs, span, ty }));
         }
 
         Ok(lhs)
@@ -499,11 +545,11 @@ impl<'buf> Parser<'buf> {
         let mut object = self.parse_expr_dynamic_dispatch()?;
 
         while self.try_consume(Symbol::At)?.is_some() {
-            let ty = self.parse_name()?;
+            let ty_name = self.parse_ty_name()?;
             self.expect(Symbol::Dot)?;
             object = self.parse_method_call(
                 Some(object.span().into_owned()),
-                ast::Receiver::Static { object, ty },
+                ast::Receiver::Static { object, ty_name },
             )?;
         }
 
@@ -542,6 +588,7 @@ impl<'buf> Parser<'buf> {
             method,
             args,
             span,
+            ty: None,
         })))
     }
 
@@ -596,6 +643,7 @@ impl<'buf> Parser<'buf> {
             consequent,
             alternative,
             span,
+            ty: None,
         })))
     }
 
@@ -675,18 +723,20 @@ impl<'buf> Parser<'buf> {
         let esac = loop {
             let name = self.parse_name()?;
             self.expect(Symbol::Colon)?;
-            let ty = self.parse_name()?;
+            let binding_ty_name = self.parse_ty_name()?;
             self.expect(Symbol::Implies)?;
             let expr = self.parse_expr()?;
             let semicolon = self.expect(Symbol::Semicolon)?;
 
             let span = name.0.span.convex_hull(&semicolon.span);
+            let binding_ty = UnresolvedTy::Named(binding_ty_name.clone()).into();
 
             arms.push(ast::CaseArm {
                 name,
-                ty,
+                binding_ty_name,
                 expr,
                 span,
+                binding_ty,
             });
 
             if let Some(esac) = self.try_consume(Symbol::Esac)? {
@@ -700,16 +750,18 @@ impl<'buf> Parser<'buf> {
             scrutinee,
             arms,
             span,
+            ty: None,
         })))
     }
 
     #[instrument(level = "trace", skip(self), ret)]
     fn parse_new(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         let new = self.expect(Symbol::New)?;
-        let ty = self.parse_name()?;
-        let span = new.span.convex_hull(&ty.0.span);
+        let ty_name = self.parse_ty_name()?;
+        let span = new.span.convex_hull(&ty_name.span());
+        let ty = UnresolvedTy::Named(ty_name.clone()).into();
 
-        Ok(Box::new(Expr::New(ast::New { ty, span })))
+        Ok(Box::new(Expr::New(ast::New { ty_name, span, ty })))
     }
 
     #[instrument(level = "trace", skip(self), ret)]
@@ -726,7 +778,10 @@ impl<'buf> Parser<'buf> {
         if self.matches_nth(1, Symbol::ParenLeft) {
             self.parse_method_call(None, ast::Receiver::SelfType)
         } else {
-            Ok(Box::new(Expr::Name(ast::NameExpr(self.parse_name()?))))
+            let name = self.parse_name()?;
+            let ty = None;
+
+            Ok(Box::new(Expr::Name(ast::NameExpr { name, ty })))
         }
     }
 

@@ -1,3 +1,5 @@
+pub mod ty;
+
 use std::borrow::Cow;
 use std::fmt;
 
@@ -5,6 +7,7 @@ use byte_string::ByteStr;
 
 use crate::parse::token::Symbol;
 use crate::position::{HasSpan, Span, Spanned};
+use self::ty::{HasExplicitTy, HasTy, Ty, UnresolvedTy, BuiltinClass, ResolvedTy};
 
 pub trait AstRecurse<'buf> {
     fn recurse<V: DefaultVisitor<'buf>>(&self, visitor: &mut V);
@@ -148,6 +151,40 @@ macro_rules! impl_has_span {
     };
 }
 
+macro_rules! impl_has_ty {
+    (? $type:ty) => {
+        impl<'buf> HasTy<'buf> for $type {
+            fn ty(&self) -> Option<Cow<'_, Ty<'buf>>> {
+                self.ty.as_ref().map(Cow::Borrowed)
+            }
+        }
+    };
+
+    (? |&$s:ident: $type:ty| $body:expr) => {
+        impl<'buf> HasTy<'buf> for $type {
+            fn ty(&$s) -> Option<Cow<'_, Ty<'buf>>> {
+                $body
+            }
+        }
+    };
+
+    ($type:ty) => {
+        impl<'buf> HasExplicitTy<'buf> for $type {
+            fn explicit_ty(&self) -> Cow<'_, Ty<'buf>> {
+                Cow::Borrowed(&self.ty)
+            }
+        }
+    };
+
+    (|&$s:ident: $type:ty| $body:expr) => {
+        impl<'buf> HasExplicitTy<'buf> for $type {
+            fn explicit_ty(&$s) -> Cow<'_, Ty<'buf>> {
+                $body
+            }
+        }
+    };
+}
+
 define_visitor! {
     NonTerminal {
         // statements
@@ -175,6 +212,7 @@ define_visitor! {
         visit_formal(formal: Formal<'buf>);
         visit_receiver(recv: Receiver<'buf>);
         visit_case_arm(arm: CaseArm<'buf>);
+        visit_ty_name(ty_name: TyName<'buf>);
     }
 
     Terminal {
@@ -234,18 +272,19 @@ impl_has_span!(Program<'_>);
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Class<'buf> {
-    pub name: Name<'buf>,
-    pub inherits: Option<Name<'buf>>,
+    pub name: TyName<'buf>,
+    pub inherits: Option<TyName<'buf>>,
     pub features: Vec<Feature<'buf>>,
     pub span: Span,
+    pub ty: Ty<'buf>,
 }
 
 impl_recurse!(|self: Class<'buf>, visitor| {
     const => {
-        visitor.visit_name(&self.name);
+        visitor.visit_ty_name(&self.name);
 
         if let Some(inherits) = &self.inherits {
-            visitor.visit_name(inherits);
+            visitor.visit_ty_name(inherits);
         }
 
         for feature in &self.features {
@@ -254,10 +293,10 @@ impl_recurse!(|self: Class<'buf>, visitor| {
     },
 
     mut => {
-        visitor.visit_name(&mut self.name);
+        visitor.visit_ty_name(&mut self.name);
 
         if let Some(inherits) = &mut self.inherits {
-            visitor.visit_name(inherits);
+            visitor.visit_ty_name(inherits);
         }
 
         for feature in &mut self.features {
@@ -267,6 +306,7 @@ impl_recurse!(|self: Class<'buf>, visitor| {
 });
 
 impl_has_span!(Class<'_>);
+impl_has_ty!(Class<'buf>);
 
 #[derive(Clone, Eq, PartialEq, Hash)]
 pub struct Name<'buf>(pub Spanned<&'buf [u8]>);
@@ -279,6 +319,38 @@ impl fmt::Debug for Name<'_> {
             .field("span", &self.0.span)
             .field("value", &ByteStr::new(self.0.value))
             .finish()
+    }
+}
+
+impl fmt::Display for Name<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", String::from_utf8_lossy(self.0.value))
+    }
+}
+
+/// A name occuring in a type position.
+#[derive(Clone, Eq, PartialEq, Hash)]
+pub struct TyName<'buf>(pub Name<'buf>);
+
+impl_has_span!(|&self: TyName<'_>| &self.0.0.span);
+
+impl_recurse!(|self: TyName<'buf>, visitor| {
+    const => visitor.visit_name(&self.0),
+    mut => visitor.visit_name(&mut self.0),
+});
+
+impl fmt::Debug for TyName<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TyName")
+            .field("span", &self.0.0.span)
+            .field("value", &ByteStr::new(self.0.0.value))
+            .finish()
+    }
+}
+
+impl fmt::Display for TyName<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", &self.0)
     }
 }
 
@@ -305,13 +377,19 @@ impl_has_span!(&self: Feature<'_> => match self {
     Self::Field(binding) => binding.span(),
 });
 
+impl_has_ty!(|&self: Feature<'buf>| match self {
+    Self::Method(method) => method.explicit_ty(),
+    Self::Field(field) => field.explicit_ty(),
+});
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Method<'buf> {
     pub name: Name<'buf>,
     pub params: Vec<Formal<'buf>>,
-    pub return_ty: Name<'buf>,
+    pub return_ty: TyName<'buf>,
     pub body: Box<Expr<'buf>>,
     pub span: Span,
+    pub ty: Ty<'buf>,
 }
 
 impl_recurse!(|self: Method<'buf>, visitor| {
@@ -322,7 +400,7 @@ impl_recurse!(|self: Method<'buf>, visitor| {
             visitor.visit_formal(param);
         }
 
-        visitor.visit_name(&self.return_ty);
+        visitor.visit_ty_name(&self.return_ty);
         visitor.visit_expr(&self.body);
     },
 
@@ -333,33 +411,36 @@ impl_recurse!(|self: Method<'buf>, visitor| {
             visitor.visit_formal(param);
         }
 
-        visitor.visit_name(&mut self.return_ty);
+        visitor.visit_ty_name(&mut self.return_ty);
         visitor.visit_expr(&mut self.body);
     },
 });
 
 impl_has_span!(Method<'_>);
+impl_has_ty!(Method<'buf>);
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Formal<'buf> {
     pub name: Name<'buf>,
-    pub ty: Name<'buf>,
+    pub ty_name: TyName<'buf>,
     pub span: Span,
+    pub ty: Ty<'buf>,
 }
 
 impl_recurse!(|self: Formal<'buf>, visitor| {
     const => {
         visitor.visit_name(&self.name);
-        visitor.visit_name(&self.ty);
+        visitor.visit_ty_name(&self.ty_name);
     },
 
     mut => {
         visitor.visit_name(&mut self.name);
-        visitor.visit_name(&mut self.ty);
+        visitor.visit_ty_name(&mut self.ty_name);
     }
 });
 
 impl_has_span!(Formal<'_>);
+impl_has_ty!(Formal<'buf>);
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Field<'buf>(pub Binding<'buf>);
@@ -370,19 +451,21 @@ impl_recurse!(|self: Field<'buf>, visitor| {
 });
 
 impl_has_span!(|&self: Field<'_>| &self.0.span);
+impl_has_ty!(|&self: Field<'buf>| self.0.explicit_ty());
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Binding<'buf> {
     pub name: Name<'buf>,
-    pub ty: Name<'buf>,
+    pub ty_name: TyName<'buf>,
     pub init: Option<Box<Expr<'buf>>>,
     pub span: Span,
+    pub ty: Ty<'buf>,
 }
 
 impl_recurse!(|self: Binding<'buf>, visitor| {
     const => {
         visitor.visit_name(&self.name);
-        visitor.visit_name(&self.ty);
+        visitor.visit_ty_name(&self.ty_name);
 
         if let Some(expr) = &self.init {
             visitor.visit_expr(expr);
@@ -391,7 +474,7 @@ impl_recurse!(|self: Binding<'buf>, visitor| {
 
     mut => {
         visitor.visit_name(&mut self.name);
-        visitor.visit_name(&mut self.ty);
+        visitor.visit_ty_name(&mut self.ty_name);
 
         if let Some(expr) = &mut self.init {
             visitor.visit_expr(expr);
@@ -400,6 +483,7 @@ impl_recurse!(|self: Binding<'buf>, visitor| {
 });
 
 impl_has_span!(Binding<'_>);
+impl_has_ty!(Binding<'buf>);
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Expr<'buf> {
@@ -472,6 +556,23 @@ impl_has_span!(&self: Expr<'_> => match self {
     Self::Bool(expr) => expr.span(),
 });
 
+impl_has_ty!(? |&self: Expr<'buf>| match self {
+    Self::Assignment(expr) => expr.ty(),
+    Self::Call(expr) => expr.ty(),
+    Self::If(expr) => expr.ty(),
+    Self::While(expr) => expr.ty(),
+    Self::Block(expr) => expr.ty(),
+    Self::Let(expr) => expr.ty(),
+    Self::Case(expr) => expr.ty(),
+    Self::New(expr) => expr.ty(),
+    Self::BinOp(expr) => expr.ty(),
+    Self::UnOp(expr) => expr.ty(),
+    Self::Name(expr) => expr.ty(),
+    Self::Int(expr) => expr.ty(),
+    Self::String(expr) => expr.ty(),
+    Self::Bool(expr) => expr.ty(),
+});
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Assignment<'buf> {
     pub name: Name<'buf>,
@@ -492,6 +593,7 @@ impl_recurse!(|self: Assignment<'buf>, visitor| {
 });
 
 impl_has_span!(Assignment<'_>);
+impl_has_ty!(? |&self: Assignment<'buf>| self.expr.ty());
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Call<'buf> {
@@ -499,6 +601,7 @@ pub struct Call<'buf> {
     pub method: Name<'buf>,
     pub args: Vec<Box<Expr<'buf>>>,
     pub span: Span,
+    pub ty: Option<Ty<'buf>>,
 }
 
 impl_recurse!(|self: Call<'buf>, visitor| {
@@ -522,6 +625,7 @@ impl_recurse!(|self: Call<'buf>, visitor| {
 });
 
 impl_has_span!(Call<'_>);
+impl_has_ty!(? Call<'buf>);
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Receiver<'buf> {
@@ -529,7 +633,7 @@ pub enum Receiver<'buf> {
     Dynamic(Box<Expr<'buf>>),
     Static {
         object: Box<Expr<'buf>>,
-        ty: Name<'buf>,
+        ty_name: TyName<'buf>,
     },
 }
 
@@ -538,9 +642,9 @@ impl_recurse!(|self: Receiver<'buf>, visitor| {
         Self::SelfType => {},
         Self::Dynamic(expr) => visitor.visit_expr(expr),
 
-        Self::Static { object, ty } => {
+        Self::Static { object, ty_name } => {
             visitor.visit_expr(object);
-            visitor.visit_name(ty);
+            visitor.visit_ty_name(ty_name);
         }
     },
 
@@ -548,11 +652,17 @@ impl_recurse!(|self: Receiver<'buf>, visitor| {
         Self::SelfType => {},
         Self::Dynamic(expr) => visitor.visit_expr(expr),
 
-        Self::Static { object, ty } => {
+        Self::Static { object, ty_name } => {
             visitor.visit_expr(object);
-            visitor.visit_name(ty);
+            visitor.visit_ty_name(ty_name);
         }
     },
+});
+
+impl_has_ty!(? |&self: Receiver<'buf>| match self {
+    Self::SelfType => Some(Cow::Owned(UnresolvedTy::SelfType.into())),
+    Self::Dynamic(expr) => expr.ty(),
+    Self::Static { ty_name, .. } => Some(Cow::Owned(UnresolvedTy::Named(ty_name.clone()).into())),
 });
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
@@ -561,6 +671,7 @@ pub struct If<'buf> {
     pub consequent: Box<Expr<'buf>>,
     pub alternative: Box<Expr<'buf>>,
     pub span: Span,
+    pub ty: Option<Ty<'buf>>,
 }
 
 impl_recurse!(|self: If<'buf>, visitor| {
@@ -578,6 +689,7 @@ impl_recurse!(|self: If<'buf>, visitor| {
 });
 
 impl_has_span!(If<'_>);
+impl_has_ty!(? If<'buf>);
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct While<'buf> {
@@ -599,6 +711,7 @@ impl_recurse!(|self: While<'buf>, visitor| {
 });
 
 impl_has_span!(While<'_>);
+impl_has_ty!(|&self: While<'buf>| Cow::Owned(ResolvedTy::Builtin(BuiltinClass::Object).into()));
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Block<'buf> {
@@ -617,6 +730,7 @@ impl_recurse!(|self: Block<'buf>, visitor| {
 });
 
 impl_has_span!(Block<'_>);
+impl_has_ty!(? |&self: Block<'buf>| self.body.last().unwrap().ty());
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Let<'buf> {
@@ -638,12 +752,14 @@ impl_recurse!(|self: Let<'buf>, visitor| {
 });
 
 impl_has_span!(Let<'_>);
+impl_has_ty!(? |&self: Let<'buf>| self.expr.ty());
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Case<'buf> {
     pub scrutinee: Box<Expr<'buf>>,
     pub arms: Vec<CaseArm<'buf>>,
     pub span: Span,
+    pub ty: Option<Ty<'buf>>,
 }
 
 impl_recurse!(|self: Case<'buf>, visitor| {
@@ -665,43 +781,48 @@ impl_recurse!(|self: Case<'buf>, visitor| {
 });
 
 impl_has_span!(Case<'_>);
+impl_has_ty!(? Case<'buf>);
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct CaseArm<'buf> {
     pub name: Name<'buf>,
-    pub ty: Name<'buf>,
+    pub binding_ty_name: TyName<'buf>,
     pub expr: Box<Expr<'buf>>,
     pub span: Span,
+    pub binding_ty: Ty<'buf>,
 }
 
 impl_recurse!(|self: CaseArm<'buf>, visitor| {
     const => {
         visitor.visit_name(&self.name);
-        visitor.visit_name(&self.ty);
+        visitor.visit_ty_name(&self.binding_ty_name);
         visitor.visit_expr(&self.expr);
     },
 
     mut => {
         visitor.visit_name(&mut self.name);
-        visitor.visit_name(&mut self.ty);
+        visitor.visit_ty_name(&mut self.binding_ty_name);
         visitor.visit_expr(&mut self.expr);
     },
 });
 
 impl_has_span!(CaseArm<'_>);
+impl_has_ty!(? |&self: CaseArm<'buf>| self.expr.ty());
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct New<'buf> {
-    pub ty: Name<'buf>,
+    pub ty_name: TyName<'buf>,
     pub span: Span,
+    pub ty: Ty<'buf>,
 }
 
 impl_recurse!(|self: New<'buf>, visitor| {
-    const => visitor.visit_name(&self.ty),
-    mut => visitor.visit_name(&mut self.ty),
+    const => visitor.visit_ty_name(&self.ty_name),
+    mut => visitor.visit_ty_name(&mut self.ty_name),
 });
 
 impl_has_span!(New<'_>);
+impl_has_ty!(New<'buf>);
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct BinOpExpr<'buf> {
@@ -709,6 +830,7 @@ pub struct BinOpExpr<'buf> {
     pub lhs: Box<Expr<'buf>>,
     pub rhs: Box<Expr<'buf>>,
     pub span: Span,
+    pub ty: Option<Ty<'buf>>,
 }
 
 impl_recurse!(|self: BinOpExpr<'buf>, visitor| {
@@ -724,6 +846,7 @@ impl_recurse!(|self: BinOpExpr<'buf>, visitor| {
 });
 
 impl_has_span!(BinOpExpr<'_>);
+impl_has_ty!(? BinOpExpr<'buf>);
 
 define_op_kind!(BinOpKind {
     Add => Plus,
@@ -740,6 +863,7 @@ pub struct UnOpExpr<'buf> {
     pub op: UnOpKind,
     pub expr: Box<Expr<'buf>>,
     pub span: Span,
+    pub ty: Option<Ty<'buf>>,
 }
 
 impl_recurse!(|self: UnOpExpr<'buf>, visitor| {
@@ -748,6 +872,7 @@ impl_recurse!(|self: UnOpExpr<'buf>, visitor| {
 });
 
 impl_has_span!(UnOpExpr<'_>);
+impl_has_ty!(? UnOpExpr<'buf>);
 
 define_op_kind!(UnOpKind {
     IsVoid => IsVoid,
@@ -756,19 +881,24 @@ define_op_kind!(UnOpKind {
 });
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct NameExpr<'buf>(pub Name<'buf>);
+pub struct NameExpr<'buf> {
+    pub name: Name<'buf>,
+    pub ty: Option<Ty<'buf>>,
+}
 
 impl_recurse!(|self: NameExpr<'buf>, visitor| {
-    const => visitor.visit_name(&self.0),
-    mut => visitor.visit_name(&mut self.0),
+    const => visitor.visit_name(&self.name),
+    mut => visitor.visit_name(&mut self.name),
 });
 
-impl_has_span!(&self: NameExpr<'_> => self.0.span());
+impl_has_span!(&self: NameExpr<'_> => self.name.span());
+impl_has_ty!(? NameExpr<'buf>);
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct IntLit(pub Spanned<i32>);
 
 impl_has_span!(|&self: IntLit| &self.0.span);
+impl_has_ty!(|&self: IntLit| Cow::Owned(ResolvedTy::Builtin(BuiltinClass::Int).into()));
 
 #[derive(Clone, Eq, PartialEq, Hash)]
 pub struct StringLit<'buf>(pub Spanned<Cow<'buf, [u8]>>);
@@ -783,8 +913,10 @@ impl fmt::Debug for StringLit<'_> {
 }
 
 impl_has_span!(|&self: StringLit<'_>| &self.0.span);
+impl_has_ty!(|&self: StringLit<'buf>| Cow::Owned(ResolvedTy::Builtin(BuiltinClass::String).into()));
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct BoolLit(pub Spanned<bool>);
 
 impl_has_span!(|&self: BoolLit| &self.0.span);
+impl_has_ty!(|&self: BoolLit| Cow::Owned(ResolvedTy::Builtin(BuiltinClass::Bool).into()));
