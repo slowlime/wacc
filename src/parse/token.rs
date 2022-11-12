@@ -2,13 +2,13 @@ use std::borrow::Cow;
 use std::fmt::{self, Display};
 use std::io::{self, Write};
 
-use byte_string::ByteStr;
 use itertools::Itertools;
 use once_cell::sync::OnceCell;
 use phf::phf_map;
 
 use crate::position::{HasSpan, Span, Spanned};
 use crate::try_match;
+use crate::util::slice_formatter;
 
 pub const BACKSPACE: u8 = 8;
 pub const VERTICAL_TAB: u8 = 11;
@@ -83,8 +83,8 @@ impl fmt::Debug for TokenValue<'_> {
         match self {
             Self::Int(value) => f.debug_tuple("Int").field(value).finish(),
             Self::Symbol(sym) => f.debug_tuple("Symbol").field(sym).finish(),
-            Self::Ident(id) => f.debug_tuple("Ident").field(&ByteStr::new(id)).finish(),
-            Self::String(s) => f.debug_tuple("String").field(&ByteStr::new(s.as_ref())).finish(),
+            Self::Ident(id) => f.debug_tuple("Ident").field(&slice_formatter(id)).finish(),
+            Self::String(s) => f.debug_tuple("String").field(&slice_formatter(s.as_ref())).finish(),
             Self::Eof => f.debug_struct("Eof").finish(),
         }
     }
@@ -108,21 +108,6 @@ impl<'buf> TryFrom<Token<'buf>> for Spanned<Symbol> {
         Ok(Spanned {
             span: token.span,
             value: try_match!(token.value, TokenValue::Symbol(sym) => sym).ok_or(())?,
-        })
-    }
-}
-
-impl<'buf> TryFrom<Token<'buf>> for Spanned<&'buf [u8]> {
-    type Error = ();
-
-    fn try_from(token: Token<'buf>) -> Result<Self, Self::Error> {
-        Ok(Spanned {
-            span: token.span,
-            value: match token.value {
-                TokenValue::Ident(id) => id,
-                TokenValue::String(Cow::Borrowed(s)) => s,
-                _ => return Err(()),
-            },
         })
     }
 }

@@ -561,7 +561,7 @@ impl DumpRunner {
                         // synthesize a "self" NameExpr
                         let mock_self = ast::Expr::Name(ast::NameExpr {
                             name: ast::Name(Spanned {
-                                value: b"self",
+                                value: b"self".as_slice().into(),
                                 span: self.call_span.take().unwrap(),
                             }),
                             ty: None,
@@ -597,7 +597,7 @@ impl DumpRunner {
             }
 
             fn visit_name(&mut self, name: &ast::Name<'buf>) -> Self::Output {
-                self.indented_line(|this| this.out.write_all(name.0.value))
+                self.indented_line(|this| this.out.write_all(&name.0.value))
             }
 
             fn visit_binding(&mut self, binding: &ast::Binding<'buf>) -> Self::Output {

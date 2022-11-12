@@ -295,7 +295,7 @@ impl<'buf> Parser<'buf> {
     #[instrument(level = "trace", skip(self), ret)]
     fn parse_name(&mut self) -> Result<ast::Name<'buf>, ParserError<'buf>> {
         let ident = self.expect(TokenType::Ident)?;
-        let spanned: Spanned<&'buf [u8]> = ident.try_into().unwrap();
+        let spanned: Spanned<Cow<'buf, [u8]>> = ident.try_into().unwrap();
 
         if spanned.value[0].is_ascii_uppercase() {
             Err(ParserError::UppercasedName(TyName(Name(spanned))))
@@ -307,7 +307,7 @@ impl<'buf> Parser<'buf> {
     #[instrument(level = "trace", skip(self), ret)]
     fn parse_ty_name(&mut self) -> Result<ast::TyName<'buf>, ParserError<'buf>> {
         let ident = self.expect(TokenType::Ident)?;
-        let spanned: Spanned<&'buf [u8]> = ident.try_into().unwrap();
+        let spanned: Spanned<Cow<'buf, [u8]>> = ident.try_into().unwrap();
 
         if spanned.value[0].is_ascii_lowercase() {
             Err(ParserError::LowercasedTyName(Name(spanned)))

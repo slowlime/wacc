@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::fmt::{self, Display};
 
 use crate::try_match;
 
@@ -100,7 +101,7 @@ pub enum ResolvedTy<'buf> {
     /// A user-defined class.
     Class(
         /// The name of the class.
-        &'buf [u8],
+        Cow<'buf, [u8]>,
     ),
 
     Function(FunctionTy<'buf>),
@@ -113,7 +114,7 @@ pub enum ResolvedTy<'buf> {
 }
 
 /// A built-in class type.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BuiltinClass {
     Int,
     String,
@@ -121,13 +122,39 @@ pub enum BuiltinClass {
 
     /// The top type, a superclass of every type.
     Object,
+
+    IO,
+}
+
+impl Display for BuiltinClass {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", match self {
+            Self::Int => "Int",
+            Self::String => "String",
+            Self::Bool => "Bool",
+            Self::Object => "Object",
+            Self::IO => "IO",
+        })
+    }
+}
+
+impl<'buf> From<BuiltinClass> for ResolvedTy<'buf> {
+    fn from(builtin: BuiltinClass) -> ResolvedTy<'buf> {
+        ResolvedTy::Builtin(builtin)
+    }
 }
 
 /// A function type, used to represent method types.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FunctionTy<'buf> {
-    args: Vec<ResolvedTy<'buf>>,
-    ret: Box<ResolvedTy<'buf>>,
+    pub params: Vec<ResolvedTy<'buf>>,
+    pub ret: Box<ResolvedTy<'buf>>,
+}
+
+impl<'buf> From<FunctionTy<'buf>> for ResolvedTy<'buf> {
+    fn from(ty: FunctionTy<'buf>) -> ResolvedTy<'buf> {
+        ResolvedTy::Function(ty)
+    }
 }
 
 pub trait HasTy<'buf> {

@@ -3,10 +3,9 @@ pub mod ty;
 use std::borrow::Cow;
 use std::fmt;
 
-use byte_string::ByteStr;
-
 use crate::parse::token::Symbol;
 use crate::position::{HasSpan, Span, Spanned};
+use crate::util::slice_formatter;
 use self::ty::{HasExplicitTy, HasTy, Ty, UnresolvedTy, BuiltinClass, ResolvedTy};
 
 pub trait AstRecurse<'buf> {
@@ -309,7 +308,16 @@ impl_has_span!(Class<'_>);
 impl_has_ty!(Class<'buf>);
 
 #[derive(Clone, Eq, PartialEq, Hash)]
-pub struct Name<'buf>(pub Spanned<&'buf [u8]>);
+pub struct Name<'buf>(pub Spanned<Cow<'buf, [u8]>>);
+
+impl<'buf> Name<'buf> {
+    pub fn clone_static(&self) -> Name<'static> {
+        Name(Spanned {
+            span: self.0.span.clone(),
+            value: Cow::Owned(self.0.value.to_owned().into_owned()),
+        })
+    }
+}
 
 impl_has_span!(|&self: Name<'_>| &self.0.span);
 
@@ -317,20 +325,26 @@ impl fmt::Debug for Name<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Name")
             .field("span", &self.0.span)
-            .field("value", &ByteStr::new(self.0.value))
+            .field("value", &slice_formatter(&self.0.value))
             .finish()
     }
 }
 
 impl fmt::Display for Name<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", String::from_utf8_lossy(self.0.value))
+        write!(f, "{}", slice_formatter(&self.0.value))
     }
 }
 
 /// A name occuring in a type position.
 #[derive(Clone, Eq, PartialEq, Hash)]
 pub struct TyName<'buf>(pub Name<'buf>);
+
+impl<'buf> TyName<'buf> {
+    pub fn clone_static(&self) -> TyName<'static> {
+        TyName(self.0.clone_static())
+    }
+}
 
 impl_has_span!(|&self: TyName<'_>| &self.0.0.span);
 
@@ -343,7 +357,7 @@ impl fmt::Debug for TyName<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TyName")
             .field("span", &self.0.0.span)
-            .field("value", &ByteStr::new(self.0.0.value))
+            .field("value", &slice_formatter(&self.0.0.value))
             .finish()
     }
 }
@@ -907,7 +921,7 @@ impl fmt::Debug for StringLit<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Name")
             .field("span", &self.0.span)
-            .field("value", &ByteStr::new(self.0.value.as_ref()))
+            .field("value", &slice_formatter(self.0.value.as_ref()))
             .finish()
     }
 }
