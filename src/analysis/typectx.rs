@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::{hash_map, HashMap};
 use std::fmt::{self, Display};
+use std::iter::successors;
 
 use crate::ast::ty::{BuiltinClass, FunctionTy, ResolvedTy, Ty, UnresolvedTy};
 use crate::ast::TyName;
@@ -11,6 +12,16 @@ pub enum ClassName<'buf> {
     Builtin(BuiltinClass),
     Named(Cow<'buf, [u8]>),
     SelfType,
+}
+
+impl ClassName<'_> {
+    pub fn clone_static(&self) -> ClassName<'static> {
+        match self {
+            Self::Builtin(builtin) => ClassName::Builtin(*builtin),
+            Self::Named(name) => ClassName::Named(Cow::Owned(name.clone().into_owned())),
+            Self::SelfType => ClassName::SelfType,
+        }
+    }
 }
 
 impl Display for ClassName<'_> {
@@ -55,15 +66,32 @@ impl<'buf> From<TyName<'buf>> for ClassName<'buf> {
     }
 }
 
+impl<'buf> From<&TyName<'buf>> for ClassName<'buf> {
+    fn from(ty_name: &TyName<'buf>) -> Self {
+        ty_name.0 .0.value.clone().into()
+    }
+}
+
+impl<'buf> TryFrom<ResolvedTy<'buf>> for ClassName<'buf> {
+    type Error = ();
+
+    fn try_from(ty: ResolvedTy<'buf>) -> Result<Self, ()> {
+        match ty {
+            ResolvedTy::Builtin(builtin) => Ok(builtin.into()),
+            ResolvedTy::Class(name) => Ok(Self::Named(name)),
+            ResolvedTy::SelfType { .. } => Ok(Self::SelfType),
+            _ => Err(()),
+        }
+    }
+}
+
 impl<'buf> TryFrom<Ty<'buf>> for ClassName<'buf> {
     type Error = ();
 
     fn try_from(ty: Ty<'buf>) -> Result<Self, ()> {
         match ty {
             Ty::Unresolved(UnresolvedTy::Named(name)) => Ok(name.into()),
-            Ty::Resolved(ResolvedTy::Builtin(builtin)) => Ok(builtin.into()),
-            Ty::Resolved(ResolvedTy::Class(name)) => Ok(Self::Named(name)),
-            Ty::Resolved(ResolvedTy::SelfType { .. }) => Ok(Self::SelfType),
+            Ty::Resolved(resolved_ty) => resolved_ty.try_into(),
             _ => Err(()),
         }
     }
@@ -86,23 +114,25 @@ impl<'buf> TryFrom<ClassName<'buf>> for ResolvedTy<'buf> {
 
 #[derive(Debug, Clone)]
 pub struct ClassIndex<'buf> {
+    parent: Option<ClassName<'buf>>,
     methods: HashMap<Cow<'buf, [u8]>, FunctionTy<'buf>>,
 }
 
 impl<'buf> ClassIndex<'buf> {
-    pub fn new() -> Self {
+    pub fn new(parent: Option<ClassName<'buf>>) -> Self {
         Self {
+            parent,
             methods: HashMap::new(),
         }
     }
 
     pub fn with_methods(
+        mut self,
         iter: impl IntoIterator<Item = (Cow<'buf, [u8]>, FunctionTy<'buf>)>,
     ) -> Self {
-        let mut result = Self::new();
-        result.add_methods(iter);
+        self.add_methods(iter);
 
-        result
+        self
     }
 
     pub fn add_method(&mut self, name: Cow<'buf, [u8]>, ty: FunctionTy<'buf>) {
@@ -132,6 +162,10 @@ impl<'buf> ClassIndex<'buf> {
     pub fn get_method_ty(&self, name: &[u8]) -> Option<&FunctionTy<'buf>> {
         self.methods.get(name)
     }
+
+    pub fn parent(&self) -> Option<&ClassName<'buf>> {
+        self.parent.as_ref()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -146,19 +180,40 @@ impl<'buf> TypeCtx<'buf> {
         }
     }
 
-    pub fn add_class(&mut self, name: Cow<'buf, [u8]>, index: ClassIndex<'buf>) {
-        match self.types.entry(name.into()) {
+    pub fn add_class(&mut self, name: impl Into<ClassName<'buf>>, index: ClassIndex<'buf>) {
+        let class_name = name.into();
+
+        match self.types.entry(class_name) {
             hash_map::Entry::Occupied(entry) => {
                 panic!("the class {} has already been added", entry.key());
             }
 
             hash_map::Entry::Vacant(entry) => {
-                entry.insert(index);
+                let class_name = entry.into_key();
+
+                let parent_added = index
+                    .parent
+                    .as_ref()
+                    .map(|parent| self.types.contains_key(parent))
+                    .unwrap_or(true);
+
+                if parent_added {
+                    self.types.insert(class_name, index);
+                } else {
+                    panic!(
+                        "the parent class {} of the class {} is not available in the type context",
+                        index.parent.unwrap(),
+                        class_name
+                    );
+                }
             }
         }
     }
 
-    pub fn get_class<'a>(&'a self, name: &'a [u8]) -> Option<&'a ClassIndex<'buf>> {
+    pub fn get_class<'a>(
+        &'a self,
+        name: impl Into<&'a ClassName<'buf>>,
+    ) -> Option<&ClassIndex<'buf>> {
         let name = name.into();
 
         self.types.get(&name)
@@ -166,6 +221,29 @@ impl<'buf> TypeCtx<'buf> {
 
     pub fn iter(&self) -> impl Iterator<Item = (&ClassName<'buf>, &ClassIndex<'buf>)> {
         self.types.iter()
+    }
+
+    pub fn inheritance_chain<'a>(
+        &'a self,
+        class_name: impl Into<&'a ClassName<'buf>>,
+    ) -> impl Iterator<Item = (&'a ClassName<'buf>, &'a ClassIndex<'buf>)> {
+        const PRESENT_MESSAGE: &'static str =
+            "the iterator only returns entries present in the typectx";
+
+        let iter = successors(Some(class_name.into()), |name| {
+            self.types.get(name).expect(PRESENT_MESSAGE).parent()
+        });
+
+        iter.map(|name| (name, self.get_class(name).expect(PRESENT_MESSAGE)))
+    }
+
+    pub fn get_method_ty<'a>(
+        &'a self,
+        class_name: impl Into<&'a ClassName<'buf>>,
+        method: &[u8],
+    ) -> Option<(&'a ClassName<'buf>, &'a FunctionTy<'buf>)> {
+        self.inheritance_chain(class_name)
+            .find_map(|(name, index)| index.get_method_ty(method).map(|ty| (name, ty)))
     }
 }
 

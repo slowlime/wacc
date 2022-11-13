@@ -9,8 +9,8 @@ use crate::util::slice_formatter;
 use self::ty::{HasExplicitTy, HasTy, Ty, UnresolvedTy, BuiltinClass, ResolvedTy};
 
 pub trait AstRecurse<'buf> {
-    fn recurse<V: DefaultVisitor<'buf>>(&self, visitor: &mut V);
-    fn recurse_mut<V: DefaultVisitorMut<'buf>>(&mut self, visitor: &mut V);
+    fn recurse<V: Visitor<'buf, Output = ()>>(&self, visitor: &mut V);
+    fn recurse_mut<V: VisitorMut<'buf, Output = ()>>(&mut self, visitor: &mut V);
 }
 
 macro_rules! define_visitor {
@@ -105,11 +105,11 @@ macro_rules! define_visitor {
 macro_rules! impl_recurse {
     (|$s:ident: $type:ty, $visitor:ident| { const => $body_const:expr, mut => $body_mut:expr $(,)?}) => {
         impl<'buf> AstRecurse<'buf> for $type {
-            fn recurse<V: DefaultVisitor<'buf>>(&$s, $visitor: &mut V) {
+            fn recurse<V: Visitor<'buf, Output = ()>>(&$s, $visitor: &mut V) {
                 $body_const;
             }
 
-            fn recurse_mut<V: DefaultVisitorMut<'buf>>(&mut $s, $visitor: &mut V) {
+            fn recurse_mut<V: VisitorMut<'buf, Output = ()>>(&mut $s, $visitor: &mut V) {
                 $body_mut;
             }
         }
@@ -212,11 +212,11 @@ define_visitor! {
         visit_receiver(recv: Receiver<'buf>);
         visit_case_arm(arm: CaseArm<'buf>);
         visit_ty_name(ty_name: TyName<'buf>);
+        visit_binding(binding: Binding<'buf>);
     }
 
     Terminal {
         visit_name(name: Name<'buf>);
-        visit_binding(binding: Binding<'buf>);
         visit_int_lit(expr: IntLit);
         visit_string_lit(expr: StringLit<'buf>);
         visit_bool_lit(expr: BoolLit);
