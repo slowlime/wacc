@@ -398,7 +398,7 @@ impl DumpRunner {
                 self.write_span(&expr.span)?;
 
                 self.indented_line(|this| match &expr.receiver {
-                    Receiver::SelfType | Receiver::Dynamic { .. } => {
+                    Receiver::SelfType { .. } | Receiver::Dynamic { .. } => {
                         write!(&mut this.out, "_dispatch")
                     }
 
@@ -557,7 +557,7 @@ impl DumpRunner {
                 use ast::Receiver;
 
                 match recv {
-                    Receiver::SelfType => {
+                    Receiver::SelfType { .. } => {
                         // synthesize a "self" NameExpr
                         let mock_self = ast::Expr::Name(ast::NameExpr {
                             name: ast::Name(Spanned {
@@ -571,7 +571,7 @@ impl DumpRunner {
 
                     Receiver::Dynamic(object) => self.visit_expr(object)?,
 
-                    Receiver::Static { object, ty_name } => {
+                    Receiver::Static { object, ty_name, .. } => {
                         self.visit_expr(object)?;
                         self.visit_ty_name(ty_name)?;
                     }

@@ -7,10 +7,10 @@ use itertools::{Itertools, PeekNth};
 use tracing::{instrument, trace};
 
 use crate::ast::ty::UnresolvedTy;
-use crate::ast::{self, BinOpKind, Expr, Name, UnOpKind, TyName};
+use crate::ast::{self, BinOpKind, Expr, Name, TyName, UnOpKind};
 use crate::parse::lexer::{Lexer, LexerError};
-use crate::position::{HasSpan, Span, Spanned};
 use crate::parse::token::{Symbol, Token, TokenType};
+use crate::position::{HasSpan, Span, Spanned};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum ParserError<'buf> {
@@ -55,11 +55,19 @@ impl Display for ParserError<'_> {
             }
 
             Self::UppercasedName(name) => {
-                write!(f, "An object name cannot start with an uppercase letter: `{}`", name)
+                write!(
+                    f,
+                    "An object name cannot start with an uppercase letter: `{}`",
+                    name
+                )
             }
 
             Self::LowercasedTyName(name) => {
-                write!(f, "A type name cannot start with a lowercase letter: `{}`", name)
+                write!(
+                    f,
+                    "A type name cannot start with a lowercase letter: `{}`",
+                    name
+                )
             }
 
             Self::LexerError(err) => write!(f, "{}", err),
@@ -357,7 +365,10 @@ impl<'buf> Parser<'buf> {
         let span = name.0.span.convex_hull(&brace_right.span);
 
         let ty = {
-            let args = params.iter().map(|ast::Formal { ty, .. }| ty.clone()).collect();
+            let args = params
+                .iter()
+                .map(|ast::Formal { ty, .. }| ty.clone())
+                .collect();
             let ret = Box::new(UnresolvedTy::Named(return_ty.clone()).into());
 
             UnresolvedTy::Function { args, ret }.into()
@@ -381,7 +392,12 @@ impl<'buf> Parser<'buf> {
         let span = name.0.span.convex_hull(&ty_name.span());
         let ty = UnresolvedTy::Named(ty_name.clone()).into();
 
-        Ok(ast::Formal { name, ty_name, span, ty })
+        Ok(ast::Formal {
+            name,
+            ty_name,
+            span,
+            ty,
+        })
     }
 
     #[instrument(level = "trace", skip(self), ret)]
@@ -480,7 +496,13 @@ impl<'buf> Parser<'buf> {
             let span = lhs.span().convex_hull(&rhs.span());
             let ty = None;
 
-            Ok(Box::new(Expr::BinOp(ast::BinOpExpr { op, lhs, rhs, span, ty })))
+            Ok(Box::new(Expr::BinOp(ast::BinOpExpr {
+                op,
+                lhs,
+                rhs,
+                span,
+                ty,
+            })))
         } else {
             Ok(lhs)
         }
@@ -506,7 +528,13 @@ impl<'buf> Parser<'buf> {
             let span = lhs.span().convex_hull(&rhs.span());
             let ty = None;
 
-            lhs = Box::new(Expr::BinOp(ast::BinOpExpr { op, lhs, rhs, span, ty }));
+            lhs = Box::new(Expr::BinOp(ast::BinOpExpr {
+                op,
+                lhs,
+                rhs,
+                span,
+                ty,
+            }));
         }
 
         Ok(lhs)
@@ -546,10 +574,15 @@ impl<'buf> Parser<'buf> {
 
         while self.try_consume(Symbol::At)?.is_some() {
             let ty_name = self.parse_ty_name()?;
+            let ty = UnresolvedTy::Named(ty_name.clone()).into();
             self.expect(Symbol::Dot)?;
             object = self.parse_method_call(
                 Some(object.span().into_owned()),
-                ast::Receiver::Static { object, ty_name },
+                ast::Receiver::Static {
+                    object,
+                    ty_name,
+                    ty,
+                },
             )?;
         }
 
@@ -701,16 +734,19 @@ impl<'buf> Parser<'buf> {
 
         let expr = self.parse_expr()?;
 
-        Ok(bindings.into_iter().enumerate().rfold(expr, |expr, (i, binding)| {
-            let start = if i == 0 { &r#let.span } else { &binding.span };
-            let span = start.convex_hull(&expr.span());
+        Ok(bindings
+            .into_iter()
+            .enumerate()
+            .rfold(expr, |expr, (i, binding)| {
+                let start = if i == 0 { &r#let.span } else { &binding.span };
+                let span = start.convex_hull(&expr.span());
 
-            Box::new(Expr::Let(ast::Let {
-                binding,
-                expr,
-                span,
+                Box::new(Expr::Let(ast::Let {
+                    binding,
+                    expr,
+                    span,
+                }))
             }))
-        }))
     }
 
     #[instrument(level = "trace", skip(self), ret)]
@@ -776,7 +812,12 @@ impl<'buf> Parser<'buf> {
     #[instrument(level = "trace", skip(self), ret)]
     fn parse_expr_self_call(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         if self.matches_nth(1, Symbol::ParenLeft) {
-            self.parse_method_call(None, ast::Receiver::SelfType)
+            self.parse_method_call(
+                None,
+                ast::Receiver::SelfType {
+                    ty: UnresolvedTy::SelfType.into(),
+                },
+            )
         } else {
             let name = self.parse_name()?;
             let ty = None;

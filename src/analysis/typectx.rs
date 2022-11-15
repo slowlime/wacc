@@ -1,10 +1,15 @@
 use std::borrow::Cow;
+use std::cmp::Ordering;
 use std::collections::{hash_map, HashMap};
 use std::fmt::{self, Display};
 use std::iter::successors;
 
+use indexmap::IndexMap;
+use itertools::Itertools;
+
 use crate::ast::ty::{BuiltinClass, FunctionTy, ResolvedTy, Ty, UnresolvedTy};
 use crate::ast::TyName;
+use crate::position::Span;
 use crate::util::slice_formatter;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -85,6 +90,19 @@ impl<'buf> TryFrom<ResolvedTy<'buf>> for ClassName<'buf> {
     }
 }
 
+impl<'buf> TryFrom<&ResolvedTy<'buf>> for ClassName<'buf> {
+    type Error = ();
+
+    fn try_from(ty: &ResolvedTy<'buf>) -> Result<Self, ()> {
+        match ty {
+            ResolvedTy::Builtin(builtin) => Ok((*builtin).into()),
+            ResolvedTy::Class(name) => Ok(Self::Named(name.clone())),
+            ResolvedTy::SelfType { .. } => Ok(Self::SelfType),
+            _ => Err(()),
+        }
+    }
+}
+
 impl<'buf> TryFrom<Ty<'buf>> for ClassName<'buf> {
     type Error = ();
 
@@ -115,7 +133,8 @@ impl<'buf> TryFrom<ClassName<'buf>> for ResolvedTy<'buf> {
 #[derive(Debug, Clone)]
 pub struct ClassIndex<'buf> {
     parent: Option<ClassName<'buf>>,
-    methods: HashMap<Cow<'buf, [u8]>, FunctionTy<'buf>>,
+    methods: HashMap<Cow<'buf, [u8]>, (DefinitionLocation, FunctionTy<'buf>)>,
+    fields: IndexMap<Cow<'buf, [u8]>, (DefinitionLocation, ResolvedTy<'buf>)>,
 }
 
 impl<'buf> ClassIndex<'buf> {
@@ -123,19 +142,34 @@ impl<'buf> ClassIndex<'buf> {
         Self {
             parent,
             methods: HashMap::new(),
+            fields: IndexMap::new(),
         }
     }
 
     pub fn with_methods(
         mut self,
-        iter: impl IntoIterator<Item = (Cow<'buf, [u8]>, FunctionTy<'buf>)>,
+        iter: impl IntoIterator<Item = (Cow<'buf, [u8]>, DefinitionLocation, FunctionTy<'buf>)>,
     ) -> Self {
         self.add_methods(iter);
 
         self
     }
 
-    pub fn add_method(&mut self, name: Cow<'buf, [u8]>, ty: FunctionTy<'buf>) {
+    pub fn with_fields(
+        mut self,
+        iter: impl IntoIterator<Item = (Cow<'buf, [u8]>, DefinitionLocation, ResolvedTy<'buf>)>,
+    ) -> Self {
+        self.add_fields(iter);
+
+        self
+    }
+
+    pub fn add_method(
+        &mut self,
+        name: Cow<'buf, [u8]>,
+        location: DefinitionLocation,
+        ty: FunctionTy<'buf>,
+    ) {
         match self.methods.entry(name) {
             hash_map::Entry::Occupied(entry) => {
                 panic!(
@@ -145,26 +179,85 @@ impl<'buf> ClassIndex<'buf> {
             }
 
             hash_map::Entry::Vacant(entry) => {
-                entry.insert(ty);
+                entry.insert((location, ty));
             }
         }
     }
 
     pub fn add_methods(
         &mut self,
-        iter: impl IntoIterator<Item = (Cow<'buf, [u8]>, FunctionTy<'buf>)>,
+        iter: impl IntoIterator<Item = (Cow<'buf, [u8]>, DefinitionLocation, FunctionTy<'buf>)>,
     ) {
-        for (name, ty) in iter {
-            self.add_method(name, ty);
+        for (name, location, ty) in iter {
+            self.add_method(name, location, ty);
         }
     }
 
-    pub fn get_method_ty(&self, name: &[u8]) -> Option<&FunctionTy<'buf>> {
-        self.methods.get(name)
+    pub fn add_field(
+        &mut self,
+        name: Cow<'buf, [u8]>,
+        location: DefinitionLocation,
+        ty: ResolvedTy<'buf>,
+    ) {
+        assert_ne!(&*name, &b"self"[..]);
+
+        match self.fields.entry(name) {
+            indexmap::map::Entry::Occupied(entry) => {
+                panic!(
+                    "the field {} has already been added",
+                    slice_formatter(entry.key()),
+                );
+            }
+
+            indexmap::map::Entry::Vacant(entry) => {
+                entry.insert((location, ty));
+            }
+        }
+    }
+
+    pub fn add_fields(
+        &mut self,
+        iter: impl IntoIterator<Item = (Cow<'buf, [u8]>, DefinitionLocation, ResolvedTy<'buf>)>,
+    ) {
+        for (name, location, ty) in iter {
+            self.add_field(name, location, ty);
+        }
+    }
+
+    pub fn get_method_ty(&self, name: &[u8]) -> Option<(&DefinitionLocation, &FunctionTy<'buf>)> {
+        self.methods.get(name).map(|(location, ty)| (location, ty))
+    }
+
+    pub fn get_field_ty(&self, name: &[u8]) -> Option<(&DefinitionLocation, &ResolvedTy<'buf>)> {
+        self.fields.get(name).map(|(location, ty)| (location, ty))
+    }
+
+    /// Returns whether the definition of `lhs` precedes `rhs`.
+    ///
+    /// Panics if either of the names are not present in the index.
+    pub fn field_def_precedes(&self, lhs: &[u8], rhs: &[u8]) -> bool {
+        let (index_lhs, _, _) = self
+            .fields
+            .get_full(lhs)
+            .expect("lhs is present in the index");
+        let (index_rhs, _, _) = self
+            .fields
+            .get_full(rhs)
+            .expect("rhs is present in the index");
+
+        index_lhs < index_rhs
     }
 
     pub fn parent(&self) -> Option<&ClassName<'buf>> {
         self.parent.as_ref()
+    }
+
+    pub fn methods(&self) -> impl Iterator<Item = (&Cow<'buf, [u8]>, &DefinitionLocation, &FunctionTy<'buf>)> {
+        self.methods.iter().map(|(name, (location, ty))| (name, location, ty))
+    }
+
+    pub fn fields(&self) -> impl Iterator<Item = (&Cow<'buf, [u8]>, &DefinitionLocation, &ResolvedTy<'buf>)> {
+        self.fields.iter().map(|(name, (location, ty))| (name, location, ty))
     }
 }
 
@@ -241,9 +334,89 @@ impl<'buf> TypeCtx<'buf> {
         &'a self,
         class_name: impl Into<&'a ClassName<'buf>>,
         method: &[u8],
-    ) -> Option<(&'a ClassName<'buf>, &'a FunctionTy<'buf>)> {
+    ) -> Option<(
+        &'a ClassName<'buf>,
+        &'a DefinitionLocation,
+        &'a FunctionTy<'buf>,
+    )> {
         self.inheritance_chain(class_name)
-            .find_map(|(name, index)| index.get_method_ty(method).map(|ty| (name, ty)))
+            .find_map(|(name, index)| {
+                index
+                    .get_method_ty(method)
+                    .map(|(location, ty)| (name, location, ty))
+            })
+    }
+
+    pub fn get_field_ty<'a>(
+        &'a self,
+        class_name: impl Into<&'a ClassName<'buf>>,
+        field: &[u8],
+    ) -> Option<(
+        &'a ClassName<'buf>,
+        &'a DefinitionLocation,
+        &'a ResolvedTy<'buf>,
+    )> {
+        self.inheritance_chain(class_name)
+            .find_map(|(name, index)| {
+                index
+                    .get_field_ty(field)
+                    .map(|(location, ty)| (name, location, ty))
+            })
+    }
+
+    pub fn is_subtype<'a>(
+        &'a self,
+        lhs: impl Into<&'a ClassName<'buf>>,
+        rhs: impl Into<&'a ClassName<'buf>>,
+    ) -> bool {
+        self.inheritance_chain(lhs)
+            .map(|(name, _)| name)
+            .contains(rhs.into())
+    }
+
+    pub fn subtype_order<'a>(
+        &'a self,
+        lhs: impl Into<&'a ClassName<'buf>>,
+        rhs: impl Into<&'a ClassName<'buf>>,
+    ) -> Option<Ordering> {
+        let lhs = lhs.into();
+        let rhs = rhs.into();
+
+        Some(if lhs == rhs {
+            Ordering::Equal
+        } else if self.is_subtype(lhs, rhs) {
+            Ordering::Less
+        } else if self.is_subtype(rhs, lhs) {
+            Ordering::Greater
+        } else {
+            return None;
+        })
+    }
+
+    pub fn field_def_order(
+        &self,
+        lhs: (&ClassName<'buf>, &[u8]),
+        rhs: (&ClassName<'buf>, &[u8]),
+    ) -> Option<Ordering> {
+        let (lhs_class, lhs_field) = lhs;
+        let (rhs_class, rhs_field) = rhs;
+        let lhs_index = self
+            .get_class(lhs_class)
+            .expect("the class name of lhs is present in the index");
+        self.get_class(rhs_class)
+            .expect("the class name of rhs is present in the index");
+
+        if lhs_class == rhs_class {
+            Some(if lhs_field == rhs_field {
+                Ordering::Equal
+            } else if lhs_index.field_def_precedes(lhs_field, rhs_field) {
+                Ordering::Less
+            } else {
+                Ordering::Greater
+            })
+        } else {
+            self.subtype_order(lhs_class, rhs_class)
+        }
     }
 }
 
@@ -270,7 +443,7 @@ impl<'buf> BindingMap<'buf> {
         result
     }
 
-    pub fn resolve(&self, name: &[u8]) -> Option<&ResolvedTy<'buf>> {
+    pub fn resolve(&self, name: &[u8]) -> Option<&Binding<'buf>> {
         self.scopes
             .iter()
             .rev()
@@ -287,10 +460,73 @@ impl<'buf> BindingMap<'buf> {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BindErrorKind<'a, 'buf> {
+    DoubleDefinition { previous: &'a Binding<'buf> },
+
+    BindingToSelf,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BindError<'a, 'buf> {
+    pub kind: BindErrorKind<'a, 'buf>,
+    pub name: Cow<'buf, [u8]>,
+}
+
+impl Display for BindError<'_, '_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.kind {
+            BindErrorKind::DoubleDefinition { .. } => {
+                write!(
+                    f,
+                    "the name `{}` is already bound",
+                    slice_formatter(&self.name)
+                )
+            }
+
+            BindErrorKind::BindingToSelf => {
+                write!(f, "cannot bind to `self`")
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BindingKind {
+    Field { inherited: bool },
+
+    Parameter,
+    Local,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DefinitionLocation {
+    UserCode(Span),
+    Synthetic(BuiltinClass),
+}
+
+impl From<Span> for DefinitionLocation {
+    fn from(span: Span) -> Self {
+        Self::UserCode(span)
+    }
+}
+
+impl From<BuiltinClass> for DefinitionLocation {
+    fn from(builtin: BuiltinClass) -> Self {
+        Self::Synthetic(builtin)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Binding<'buf> {
+    pub kind: BindingKind,
+    pub ty: ResolvedTy<'buf>,
+    pub location: DefinitionLocation,
+}
+
 #[derive(Debug, Clone)]
 pub struct BindingScope<'buf> {
-    // TODO: track spans
-    local_bindings: HashMap<&'buf [u8], ResolvedTy<'buf>>,
+    local_bindings: HashMap<Cow<'buf, [u8]>, Binding<'buf>>,
 }
 
 impl<'buf> BindingScope<'buf> {
@@ -300,11 +536,39 @@ impl<'buf> BindingScope<'buf> {
         }
     }
 
-    pub fn get(&self, name: &[u8]) -> Option<&ResolvedTy<'buf>> {
+    pub fn get(&self, name: &[u8]) -> Option<&Binding<'buf>> {
         self.local_bindings.get(name)
     }
 
-    pub fn bind(&mut self, name: &'buf [u8], ty: ResolvedTy<'buf>) -> Option<ResolvedTy<'buf>> {
-        self.local_bindings.insert(name, ty)
+    pub fn bind(
+        &mut self,
+        name: Cow<'buf, [u8]>,
+        binding: Binding<'buf>,
+    ) -> Result<Option<Binding<'buf>>, BindError<'_, 'buf>> {
+        if &*name == b"self" {
+            Err(BindError {
+                kind: BindErrorKind::BindingToSelf,
+                name,
+            })
+        } else {
+            Ok(self.local_bindings.insert(name, binding))
+        }
+    }
+
+    pub fn bind_if_empty(
+        &mut self,
+        name: Cow<'buf, [u8]>,
+        binding: Binding<'buf>,
+    ) -> Result<(), BindError<'_, 'buf>> {
+        if self.local_bindings.contains_key(&name) {
+            let previous = self.local_bindings.get(&name).unwrap();
+
+            Err(BindError {
+                kind: BindErrorKind::DoubleDefinition { previous },
+                name,
+            })
+        } else {
+            self.bind(name, binding).map(drop)
+        }
     }
 }

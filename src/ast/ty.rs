@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::fmt::{self, Display};
 
 use crate::try_match;
+use crate::util::{slice_formatter, CloneStatic};
 
 use super::TyName;
 
@@ -10,6 +11,15 @@ use super::TyName;
 pub enum Ty<'buf> {
     Unresolved(UnresolvedTy<'buf>),
     Resolved(ResolvedTy<'buf>),
+}
+
+impl CloneStatic<Ty<'static>> for Ty<'_> {
+    fn clone_static(&self) -> Ty<'static> {
+        match self {
+            Self::Unresolved(ty) => Ty::Unresolved(ty.clone_static()),
+            Self::Resolved(ty) => Ty::Resolved(ty.clone_static()),
+        }
+    }
 }
 
 impl<'buf> From<UnresolvedTy<'buf>> for Ty<'buf> {
@@ -34,6 +44,19 @@ pub enum UnresolvedTy<'buf> {
     },
 
     SelfType,
+}
+
+impl CloneStatic<UnresolvedTy<'static>> for UnresolvedTy<'_> {
+    fn clone_static(&self) -> UnresolvedTy<'static> {
+        match self {
+            Self::Named(name) => UnresolvedTy::Named(name.clone_static()),
+            Self::Function { args, ret } => UnresolvedTy::Function {
+                args: args.clone_static(),
+                ret: Box::new(ret.clone_static()),
+            },
+            Self::SelfType => UnresolvedTy::SelfType,
+        }
+    }
 }
 
 pub trait TyExt<'buf>: private::Sealed {
@@ -111,6 +134,46 @@ pub enum ResolvedTy<'buf> {
     /// A valid Cool program has no expression of this type;
     /// it only occurs as a result of a typing error.
     Bottom,
+
+    /// An expression that cannot have a valid type in Col.
+    ///
+    /// How this is different from...
+    /// - ...the top type: Untyped allows use in any covariant context
+    /// - ...the bottom type: Untyped alllows use in any contravariant context
+    ///
+    /// An untyped expression can also be used in an invariant position.
+    ///
+    /// A valid Cool program has not expression of this type;
+    /// it only occurs as a result of a typing error.
+    Untyped,
+}
+
+impl CloneStatic<ResolvedTy<'static>> for ResolvedTy<'_> {
+    fn clone_static(&self) -> ResolvedTy<'static> {
+        match self {
+            Self::Builtin(builtin) => ResolvedTy::Builtin(*builtin),
+            Self::SelfType { enclosed } => ResolvedTy::SelfType {
+                enclosed: Box::new(enclosed.clone_static()),
+            },
+            Self::Class(name) => ResolvedTy::Class(Cow::Owned(name.clone().into_owned())),
+            Self::Function(ty) => ty.clone_static().into(),
+            Self::Bottom => ResolvedTy::Bottom,
+            Self::Untyped => ResolvedTy::Untyped,
+        }
+    }
+}
+
+impl Display for ResolvedTy<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Builtin(builtin) => builtin.fmt(f),
+            Self::SelfType { enclosed } => write!(f, "SELF_TYPE[{}]", enclosed),
+            Self::Class(name) => write!(f, "{}", slice_formatter(name)),
+            Self::Function(ty) => ty.fmt(f),
+            Self::Bottom => write!(f, "⊥"),
+            Self::Untyped => write!(f, "{}", "{invalid}"),
+        }
+    }
 }
 
 /// A built-in class type.
@@ -128,13 +191,17 @@ pub enum BuiltinClass {
 
 impl Display for BuiltinClass {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", match self {
-            Self::Int => "Int",
-            Self::String => "String",
-            Self::Bool => "Bool",
-            Self::Object => "Object",
-            Self::IO => "IO",
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Int => "Int",
+                Self::String => "String",
+                Self::Bool => "Bool",
+                Self::Object => "Object",
+                Self::IO => "IO",
+            }
+        )
     }
 }
 
@@ -151,9 +218,38 @@ pub struct FunctionTy<'buf> {
     pub ret: Box<ResolvedTy<'buf>>,
 }
 
+impl CloneStatic<FunctionTy<'static>> for FunctionTy<'_> {
+    fn clone_static(&self) -> FunctionTy<'static> {
+        FunctionTy {
+            params: self.params.iter().map(ResolvedTy::clone_static).collect(),
+            ret: Box::new(self.ret.clone_static()),
+        }
+    }
+}
+
+impl Display for FunctionTy<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (i, param_ty) in self.params.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+
+            write!(f, "{}", param_ty)?;
+        }
+
+        write!(f, " → {}", &self.ret)
+    }
+}
+
 impl<'buf> From<FunctionTy<'buf>> for ResolvedTy<'buf> {
     fn from(ty: FunctionTy<'buf>) -> ResolvedTy<'buf> {
         ResolvedTy::Function(ty)
+    }
+}
+
+impl<'buf> From<FunctionTy<'buf>> for Ty<'buf> {
+    fn from(ty: FunctionTy<'buf>) -> Ty<'buf> {
+        ResolvedTy::from(ty).into()
     }
 }
 
@@ -168,6 +264,12 @@ pub trait HasExplicitTy<'buf> {
 impl<'buf, T: HasExplicitTy<'buf>> HasTy<'buf> for T {
     fn ty(&self) -> Option<Cow<'_, Ty<'buf>>> {
         Some(self.explicit_ty())
+    }
+}
+
+impl<'buf> HasExplicitTy<'buf> for Ty<'buf> {
+    fn explicit_ty(&self) -> Cow<'_, Ty<'buf>> {
+        Cow::Borrowed(self)
     }
 }
 

@@ -1,3 +1,4 @@
+use std::borrow::{Cow, Borrow};
 use std::fmt::{self, Debug, Display};
 
 #[macro_export]
@@ -43,4 +44,44 @@ pub fn slice_formatter(slice: &[u8]) -> impl Debug + Display + '_ {
     }
 
     SliceFormatter { slice }
+}
+
+pub trait CloneStatic<T>
+where
+    T: 'static,
+{
+    fn clone_static(&self) -> T;
+}
+
+impl<T: ?Sized + ToOwned> CloneStatic<Cow<'static, T>> for Cow<'_, T>
+where
+    <T as ToOwned>::Owned: Clone,
+    <T as ToOwned>::Owned: 'static,
+{
+    fn clone_static(&self) -> Cow<'static, T> {
+        match self {
+            Cow::Borrowed(borrowed) => Cow::Owned((*borrowed).to_owned()),
+            Cow::Owned(owned) => Cow::Owned(owned.clone()),
+        }
+    }
+}
+
+impl<T, U> CloneStatic<Option<U>> for Option<T>
+where
+    T: CloneStatic<U>,
+    U: 'static,
+{
+    fn clone_static(&self) -> Option<U> {
+        self.as_ref().map(T::clone_static)
+    }
+}
+
+impl<T, U> CloneStatic<Vec<U>> for Vec<T>
+where
+    T: CloneStatic<U>,
+    U: 'static,
+{
+    fn clone_static(&self) -> Vec<U> {
+        self.iter().map(T::clone_static).collect()
+    }
 }

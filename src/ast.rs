@@ -5,8 +5,8 @@ use std::fmt;
 
 use crate::parse::token::Symbol;
 use crate::position::{HasSpan, Span, Spanned};
-use crate::util::slice_formatter;
-use self::ty::{HasExplicitTy, HasTy, Ty, UnresolvedTy, BuiltinClass, ResolvedTy};
+use crate::util::{slice_formatter, CloneStatic};
+use self::ty::{HasExplicitTy, HasTy, Ty, BuiltinClass, ResolvedTy};
 
 pub trait AstRecurse<'buf> {
     fn recurse<V: Visitor<'buf, Output = ()>>(&self, visitor: &mut V);
@@ -184,6 +184,16 @@ macro_rules! impl_has_ty {
     };
 }
 
+macro_rules! impl_clone_static {
+    (|&$s:ident: $type:ident| $body:expr) => {
+        impl CloneStatic<$type<'static>> for $type<'_> {
+            fn clone_static(&$s) -> $type<'static> {
+                $body
+            }
+        }
+    };
+}
+
 define_visitor! {
     NonTerminal {
         // statements
@@ -257,6 +267,11 @@ pub struct Program<'buf> {
     pub span: Span,
 }
 
+impl_clone_static!(|&self: Program| Program {
+    classes: self.classes.iter().map(Class::clone_static).collect(),
+    span: self.span.clone(),
+});
+
 impl_recurse!(|self: Program<'buf>, visitor| {
     const => for class in &self.classes {
         visitor.visit_class(class);
@@ -277,6 +292,14 @@ pub struct Class<'buf> {
     pub span: Span,
     pub ty: Ty<'buf>,
 }
+
+impl_clone_static!(|&self: Class| Class {
+    name: self.name.clone_static(),
+    inherits: self.inherits.clone_static(),
+    features: self.features.clone_static(),
+    span: self.span.clone(),
+    ty: self.ty.clone_static(),
+});
 
 impl_recurse!(|self: Class<'buf>, visitor| {
     const => {
@@ -311,13 +334,15 @@ impl_has_ty!(Class<'buf>);
 pub struct Name<'buf>(pub Spanned<Cow<'buf, [u8]>>);
 
 impl<'buf> Name<'buf> {
-    pub fn clone_static(&self) -> Name<'static> {
-        Name(Spanned {
-            span: self.0.span.clone(),
-            value: Cow::Owned(self.0.value.to_owned().into_owned()),
-        })
+    pub fn as_slice(&self) -> &[u8] {
+        &self.0.value
     }
 }
+
+impl_clone_static!(|&self: Name| Name(Spanned {
+    span: self.0.span.clone(),
+    value: self.0.value.clone_static(),
+}));
 
 impl_has_span!(|&self: Name<'_>| &self.0.span);
 
@@ -340,11 +365,7 @@ impl fmt::Display for Name<'_> {
 #[derive(Clone, Eq, PartialEq, Hash)]
 pub struct TyName<'buf>(pub Name<'buf>);
 
-impl<'buf> TyName<'buf> {
-    pub fn clone_static(&self) -> TyName<'static> {
-        TyName(self.0.clone_static())
-    }
-}
+impl_clone_static!(|&self: TyName| TyName(self.0.clone_static()));
 
 impl_has_span!(|&self: TyName<'_>| &self.0.0.span);
 
@@ -373,6 +394,11 @@ pub enum Feature<'buf> {
     Method(Method<'buf>),
     Field(Field<'buf>),
 }
+
+impl_clone_static!(|&self: Feature| match self {
+    Self::Method(method) => Feature::Method(method.clone_static()),
+    Self::Field(field) => Feature::Field(field.clone_static()),
+});
 
 impl_recurse!(|self: Feature<'buf>, visitor| {
     const => match self {
@@ -405,6 +431,15 @@ pub struct Method<'buf> {
     pub span: Span,
     pub ty: Ty<'buf>,
 }
+
+impl_clone_static!(|&self: Method| Method {
+    name: self.name.clone_static(),
+    params: self.params.clone_static(),
+    return_ty: self.return_ty.clone_static(),
+    body: Box::new(self.body.clone_static()),
+    span: self.span.clone(),
+    ty: self.ty.clone_static(),
+});
 
 impl_recurse!(|self: Method<'buf>, visitor| {
     const => {
@@ -441,6 +476,13 @@ pub struct Formal<'buf> {
     pub ty: Ty<'buf>,
 }
 
+impl_clone_static!(|&self: Formal| Formal {
+    name: self.name.clone_static(),
+    ty_name: self.ty_name.clone_static(),
+    span: self.span.clone(),
+    ty: self.ty.clone_static(),
+});
+
 impl_recurse!(|self: Formal<'buf>, visitor| {
     const => {
         visitor.visit_name(&self.name);
@@ -459,6 +501,8 @@ impl_has_ty!(Formal<'buf>);
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Field<'buf>(pub Binding<'buf>);
 
+impl_clone_static!(|&self: Field| Field(self.0.clone_static()));
+
 impl_recurse!(|self: Field<'buf>, visitor| {
     const => visitor.visit_binding(&self.0),
     mut => visitor.visit_binding(&mut self.0),
@@ -475,6 +519,14 @@ pub struct Binding<'buf> {
     pub span: Span,
     pub ty: Ty<'buf>,
 }
+
+impl_clone_static!(|&self: Binding| Binding {
+    name: self.name.clone_static(),
+    ty_name: self.ty_name.clone_static(),
+    init: self.init.as_ref().map(|expr| Box::new(expr.clone_static())),
+    span: self.span.clone(),
+    ty: self.ty.clone_static(),
+});
 
 impl_recurse!(|self: Binding<'buf>, visitor| {
     const => {
@@ -516,6 +568,23 @@ pub enum Expr<'buf> {
     String(StringLit<'buf>),
     Bool(BoolLit),
 }
+
+impl_clone_static!(|&self: Expr| match self {
+    Self::Assignment(expr) => Expr::Assignment(expr.clone_static()),
+    Self::Call(expr) => Expr::Call(expr.clone_static()),
+    Self::If(expr) => Expr::If(expr.clone_static()),
+    Self::While(expr) => Expr::While(expr.clone_static()),
+    Self::Block(expr) => Expr::Block(expr.clone_static()),
+    Self::Let(expr) => Expr::Let(expr.clone_static()),
+    Self::Case(expr) => Expr::Case(expr.clone_static()),
+    Self::New(expr) => Expr::New(expr.clone_static()),
+    Self::BinOp(expr) => Expr::BinOp(expr.clone_static()),
+    Self::UnOp(expr) => Expr::UnOp(expr.clone_static()),
+    Self::Name(expr) => Expr::Name(expr.clone_static()),
+    Self::Int(expr) => Expr::Int(expr.clone()),
+    Self::String(expr) => Expr::String(expr.clone_static()),
+    Self::Bool(expr) => Expr::Bool(expr.clone()),
+});
 
 impl_recurse!(|self: Expr<'buf>, visitor| {
     const => match self {
@@ -594,6 +663,12 @@ pub struct Assignment<'buf> {
     pub span: Span,
 }
 
+impl_clone_static!(|&self: Assignment| Assignment {
+    name: self.name.clone_static(),
+    expr: Box::new(self.expr.clone_static()),
+    span: self.span.clone(),
+});
+
 impl_recurse!(|self: Assignment<'buf>, visitor| {
     const => {
         visitor.visit_name(&self.name);
@@ -617,6 +692,14 @@ pub struct Call<'buf> {
     pub span: Span,
     pub ty: Option<Ty<'buf>>,
 }
+
+impl_clone_static!(|&self: Call| Call {
+    receiver: self.receiver.clone_static(),
+    method: self.method.clone_static(),
+    args: self.args.iter().map(|arg| Box::new(arg.clone_static())).collect(),
+    span: self.span.clone(),
+    ty: self.ty.clone_static(),
+});
 
 impl_recurse!(|self: Call<'buf>, visitor| {
     const => {
@@ -643,30 +726,48 @@ impl_has_ty!(? Call<'buf>);
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Receiver<'buf> {
-    SelfType,
+    SelfType {
+        ty: Ty<'buf>,
+    },
+
     Dynamic(Box<Expr<'buf>>),
+
     Static {
         object: Box<Expr<'buf>>,
         ty_name: TyName<'buf>,
+        ty: Ty<'buf>,
     },
 }
 
+impl_clone_static!(|&self: Receiver| match self {
+    Self::SelfType { ty } => Receiver::SelfType {
+        ty: ty.clone_static(),
+    },
+
+    Self::Dynamic(expr) => Receiver::Dynamic(Box::new(expr.clone_static())),
+    Self::Static { object, ty_name, ty } => Receiver::Static {
+        object: Box::new(object.clone_static()),
+        ty_name: ty_name.clone_static(),
+        ty: ty.clone_static(),
+    },
+});
+
 impl_recurse!(|self: Receiver<'buf>, visitor| {
     const => match self {
-        Self::SelfType => {},
+        Self::SelfType { .. } => {},
         Self::Dynamic(expr) => visitor.visit_expr(expr),
 
-        Self::Static { object, ty_name } => {
+        Self::Static { object, ty_name, .. } => {
             visitor.visit_expr(object);
             visitor.visit_ty_name(ty_name);
         }
     },
 
     mut => match self {
-        Self::SelfType => {},
+        Self::SelfType { .. } => {},
         Self::Dynamic(expr) => visitor.visit_expr(expr),
 
-        Self::Static { object, ty_name } => {
+        Self::Static { object, ty_name, .. } => {
             visitor.visit_expr(object);
             visitor.visit_ty_name(ty_name);
         }
@@ -674,9 +775,9 @@ impl_recurse!(|self: Receiver<'buf>, visitor| {
 });
 
 impl_has_ty!(? |&self: Receiver<'buf>| match self {
-    Self::SelfType => Some(Cow::Owned(UnresolvedTy::SelfType.into())),
+    Self::SelfType { ty } => Some(Cow::Borrowed(ty)),
     Self::Dynamic(expr) => expr.ty(),
-    Self::Static { ty_name, .. } => Some(Cow::Owned(UnresolvedTy::Named(ty_name.clone()).into())),
+    Self::Static { ty, .. } => Some(Cow::Borrowed(ty)),
 });
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
@@ -687,6 +788,14 @@ pub struct If<'buf> {
     pub span: Span,
     pub ty: Option<Ty<'buf>>,
 }
+
+impl_clone_static!(|&self: If| If {
+    antecedent: Box::new(self.antecedent.clone_static()),
+    consequent: Box::new(self.consequent.clone_static()),
+    alternative: Box::new(self.alternative.clone_static()),
+    span: self.span.clone(),
+    ty: self.ty.clone_static(),
+});
 
 impl_recurse!(|self: If<'buf>, visitor| {
     const => {
@@ -712,6 +821,12 @@ pub struct While<'buf> {
     pub span: Span,
 }
 
+impl_clone_static!(|&self: While| While {
+    condition: Box::new(self.condition.clone_static()),
+    body: Box::new(self.body.clone_static()),
+    span: self.span.clone(),
+});
+
 impl_recurse!(|self: While<'buf>, visitor| {
     const => {
         visitor.visit_expr(&self.condition);
@@ -733,6 +848,11 @@ pub struct Block<'buf> {
     pub span: Span,
 }
 
+impl_clone_static!(|&self: Block| Block {
+    body: self.body.iter().map(|expr| Box::new(expr.clone_static())).collect(),
+    span: self.span.clone(),
+});
+
 impl_recurse!(|self: Block<'buf>, visitor| {
     const => for expr in &self.body {
         visitor.visit_expr(expr);
@@ -752,6 +872,12 @@ pub struct Let<'buf> {
     pub expr: Box<Expr<'buf>>,
     pub span: Span,
 }
+
+impl_clone_static!(|&self: Let| Let {
+    binding: self.binding.clone_static(),
+    expr: Box::new(self.expr.clone_static()),
+    span: self.span.clone(),
+});
 
 impl_recurse!(|self: Let<'buf>, visitor| {
     const => {
@@ -775,6 +901,13 @@ pub struct Case<'buf> {
     pub span: Span,
     pub ty: Option<Ty<'buf>>,
 }
+
+impl_clone_static!(|&self: Case| Case {
+    scrutinee: Box::new(self.scrutinee.clone_static()),
+    arms: self.arms.clone_static(),
+    span: self.span.clone(),
+    ty: self.ty.clone_static(),
+});
 
 impl_recurse!(|self: Case<'buf>, visitor| {
     const => {
@@ -806,6 +939,14 @@ pub struct CaseArm<'buf> {
     pub binding_ty: Ty<'buf>,
 }
 
+impl_clone_static!(|&self: CaseArm| CaseArm {
+    name: self.name.clone_static(),
+    binding_ty_name: self.binding_ty_name.clone_static(),
+    expr: Box::new(self.expr.clone_static()),
+    span: self.span.clone(),
+    binding_ty: self.binding_ty.clone_static(),
+});
+
 impl_recurse!(|self: CaseArm<'buf>, visitor| {
     const => {
         visitor.visit_name(&self.name);
@@ -830,6 +971,12 @@ pub struct New<'buf> {
     pub ty: Ty<'buf>,
 }
 
+impl_clone_static!(|&self: New| New {
+    ty_name: self.ty_name.clone_static(),
+    span: self.span.clone(),
+    ty: self.ty.clone_static(),
+});
+
 impl_recurse!(|self: New<'buf>, visitor| {
     const => visitor.visit_ty_name(&self.ty_name),
     mut => visitor.visit_ty_name(&mut self.ty_name),
@@ -846,6 +993,14 @@ pub struct BinOpExpr<'buf> {
     pub span: Span,
     pub ty: Option<Ty<'buf>>,
 }
+
+impl_clone_static!(|&self: BinOpExpr| BinOpExpr {
+    op: self.op.clone(),
+    lhs: Box::new(self.lhs.clone_static()),
+    rhs: Box::new(self.rhs.clone_static()),
+    span: self.span.clone(),
+    ty: self.ty.clone_static(),
+});
 
 impl_recurse!(|self: BinOpExpr<'buf>, visitor| {
     const => {
@@ -880,6 +1035,13 @@ pub struct UnOpExpr<'buf> {
     pub ty: Option<Ty<'buf>>,
 }
 
+impl_clone_static!(|&self: UnOpExpr| UnOpExpr {
+    op: self.op.clone(),
+    expr: Box::new(self.expr.clone_static()),
+    span: self.span.clone(),
+    ty: self.ty.clone_static(),
+});
+
 impl_recurse!(|self: UnOpExpr<'buf>, visitor| {
     const => visitor.visit_expr(&self.expr),
     mut => visitor.visit_expr(&mut self.expr),
@@ -899,6 +1061,11 @@ pub struct NameExpr<'buf> {
     pub name: Name<'buf>,
     pub ty: Option<Ty<'buf>>,
 }
+
+impl_clone_static!(|&self: NameExpr| NameExpr {
+    name: self.name.clone_static(),
+    ty: self.ty.clone_static(),
+});
 
 impl_recurse!(|self: NameExpr<'buf>, visitor| {
     const => visitor.visit_name(&self.name),
@@ -925,6 +1092,11 @@ impl fmt::Debug for StringLit<'_> {
             .finish()
     }
 }
+
+impl_clone_static!(|&self: StringLit| StringLit(Spanned {
+    span: self.0.span.clone(),
+    value: self.0.value.clone_static(),
+}));
 
 impl_has_span!(|&self: StringLit<'_>| &self.0.span);
 impl_has_ty!(|&self: StringLit<'buf>| Cow::Owned(ResolvedTy::Builtin(BuiltinClass::String).into()));
