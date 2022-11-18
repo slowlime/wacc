@@ -1,17 +1,17 @@
 use std::borrow::{Borrow, Cow};
 use std::cell::RefCell;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+
+use indexmap::IndexSet;
 
 use crate::analysis::class_resolver::{ClassResolver, ClassResolverResult};
 use crate::analysis::error::{
-    IllegalSelfTypePosition, MultipleDefinitionKind, TypeckError, UnrecognizedName,
-    UnrecognizedNamePosition, UnrecognizedTy, UnrecognizedTyPosition,
-    UnrelatedTypesInCase, CaseArmSubsumed,
-    MismatchedTypes,
+    CaseArmSubsumed, IllegalSelfTypePosition, MismatchedTypes, MultipleDefinitionKind, TypeckError,
+    UnrecognizedName, UnrecognizedNamePosition, UnrecognizedTy, UnrecognizedTyPosition,
+    UnrelatedTypesInCase,
 };
 use crate::analysis::typectx::{
-    BindErrorKind, Binding, BindingKind, BindingMap, ClassIndex, ClassName, DefinitionLocation,
-    TypeCtx,
+    BindErrorKind, Binding, BindingKind, BindingMap, ClassName, DefinitionLocation, TypeCtx,
 };
 use crate::ast::ty::{BuiltinClass, FunctionTy, HasTy, ResolvedTy, Ty, TyExt};
 use crate::ast::{self, AstRecurse, Class, Expr, Name, TyName, VisitorMut};
@@ -58,38 +58,37 @@ pub struct TypeckResult<'buf> {
 pub struct TypeChecker<'dia, 'buf> {
     diagnostics: &'dia mut Diagnostics,
     classes: Vec<Class<'buf>>,
-    excluded: HashSet<TyName<'buf>>,
-    ctx: TypeCtx<'buf>,
     unrecognized_tys: Vec<UnrecognizedTy<'buf>>,
     unrecognized_names: Vec<UnrecognizedName<'buf>>,
 }
 
 impl<'dia, 'buf> TypeChecker<'dia, 'buf> {
     pub fn new(diagnostics: &'dia mut Diagnostics, classes: Vec<Class<'buf>>) -> Self {
-        let method_resolver = ClassResolver::new(diagnostics, &classes);
-        let ClassResolverResult {
-            unrecognized_tys,
-            ctx,
-            excluded,
-        } = method_resolver.resolve();
-        let excluded = excluded.into_iter().cloned().collect();
-
         Self {
             diagnostics,
             classes,
-            ctx,
-            excluded,
-            unrecognized_tys,
+            unrecognized_tys: vec![],
             unrecognized_names: vec![],
         }
     }
 
     pub fn resolve(mut self) -> TypeckResult<'buf> {
+        let method_resolver = ClassResolver::new(self.diagnostics, &self.classes);
+        let ClassResolverResult {
+            unrecognized_tys,
+            mut ctx,
+            excluded,
+        } = method_resolver.resolve();
+
+        let excluded: HashSet<_> = excluded.into_iter().cloned().collect();
+
+        self.unrecognized_tys = unrecognized_tys;
+
         for class in &mut self.classes {
-            if !self.excluded.contains(&class.name) {
+            if !excluded.contains(&class.name) {
                 let mut visitor = TypeVisitor {
                     diagnostics: RefCell::new(self.diagnostics),
-                    ctx: &mut self.ctx,
+                    ctx: &mut ctx,
                     bindings: BindingMap::new(),
                     unrecognized_tys: RefCell::new(&mut self.unrecognized_tys),
                     unrecognized_names: RefCell::new(&mut self.unrecognized_names),
@@ -101,7 +100,73 @@ impl<'dia, 'buf> TypeChecker<'dia, 'buf> {
             }
         }
 
-        todo!("dedup unrecognized symbols, emit diagnostics, prepare the result")
+        self.emit_unrecognized_symbol_errors();
+
+        TypeckResult {
+            classes: self.classes,
+            ctx,
+        }
+    }
+
+    fn emit_unrecognized_symbol_errors(&mut self) {
+        #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+        struct Position<'a, 'buf, P>
+        where
+            'buf: 'a,
+            P: 'a,
+        {
+            pub class_name: &'a ClassName<'buf>,
+            pub position: P,
+        }
+
+        let mut tys_by_location = HashMap::<_, IndexSet<Cow<'_, [u8]>>>::new();
+        let mut names_by_location = HashMap::<_, IndexSet<Cow<'_, [u8]>>>::new();
+
+        for err in &self.unrecognized_tys {
+            let UnrecognizedTy {
+                ty_name,
+                class_name,
+                position,
+            } = err;
+
+            if tys_by_location
+                .entry(Position {
+                    class_name,
+                    position,
+                })
+                .or_default()
+                .insert(ty_name.0 .0.value.clone())
+            {
+                self.diagnostics
+                    .error()
+                    .with_span_and_error(TypeckError::UnrecognizedTy(Box::new(err.clone_static())))
+                    .emit();
+            }
+        }
+
+        for err in &self.unrecognized_names {
+            let UnrecognizedName {
+                name,
+                class_name,
+                position,
+            } = err;
+
+            if names_by_location
+                .entry(Position {
+                    class_name,
+                    position,
+                })
+                .or_default()
+                .insert(name.0.value.clone())
+            {
+                self.diagnostics
+                    .error()
+                    .with_span_and_error(TypeckError::UnrecognizedName(Box::new(
+                        err.clone_static(),
+                    )))
+                    .emit();
+            }
+        }
     }
 }
 
@@ -308,12 +373,6 @@ impl TypeVisitor<'_, '_, '_> {
 }
 
 impl<'buf> TypeVisitor<'_, '_, 'buf> {
-    fn class_index(&self) -> &ClassIndex<'buf> {
-        self.ctx
-            .get_class(&self.class_name)
-            .expect("the current class is present in the ctx")
-    }
-
     fn inherits_from(&self, lhs: &ClassName<'buf>, rhs: &ClassName<'buf>) -> bool {
         self.ctx.is_subtype(lhs, rhs)
     }
@@ -592,6 +651,36 @@ impl<'buf> TypeVisitor<'_, '_, 'buf> {
         None
     }
 
+    fn check_method_override(&self, method: &ast::Method<'buf>) {
+        let method_name = method.name.as_slice();
+        let method_ty = method.unwrap_res_ty();
+        let method_ty = method_ty
+            .as_function_ty()
+            .expect("method types belong to the function type family");
+
+        // https://github.com/rust-lang/rust-clippy/issues/8132
+        #[allow(clippy::needless_collect)]
+        let inheritance_chain: Vec<_> = self.ctx.inheritance_chain(&self.class_name).skip(1).collect();
+        let super_method = inheritance_chain
+            .into_iter()
+            .rev()
+            .find_map(|(_, index)| index.get_method_ty(method_name));
+
+        if let Some((location, ty)) = super_method {
+            if ty != method_ty {
+                self.diagnostics
+                    .borrow_mut()
+                    .error()
+                    .with_span_and_error(TypeckError::MultipleDefinition {
+                        kind: MultipleDefinitionKind::Method { inherited: true },
+                        name: Box::new(method.name.clone_static()),
+                        previous: location.clone(),
+                    })
+                    .emit();
+            }
+        }
+    }
+
     fn check_expr_conforms(&self, expr: &Expr<'buf>, expected_ty: &ResolvedTy<'buf>) {
         if !self.is_subtype(&expr.unwrap_res_ty(), expected_ty) {
             self.diagnostics
@@ -619,12 +708,14 @@ impl<'buf> TypeVisitor<'_, '_, 'buf> {
                 self.diagnostics
                     .borrow_mut()
                     .warn()
-                    .with_span_and_error(TypeckError::UnrelatedTypesInCase(Box::new(UnrelatedTypesInCase {
-                        scrutinee_span: expr.scrutinee.span().into_owned(),
-                        scrutinee_ty: scrutinee_ty.clone().into_owned().clone_static(),
-                        arm_span: arm.span.clone(),
-                        arm_ty: arm_ty.clone().into_owned().clone_static(),
-                    })))
+                    .with_span_and_error(TypeckError::UnrelatedTypesInCase(Box::new(
+                        UnrelatedTypesInCase {
+                            scrutinee_span: expr.scrutinee.span().into_owned(),
+                            scrutinee_ty: scrutinee_ty.clone().into_owned().clone_static(),
+                            arm_span: arm.span.clone(),
+                            arm_ty: arm_ty.clone().into_owned().clone_static(),
+                        },
+                    )))
                     .emit();
             }
         }
@@ -657,12 +748,14 @@ impl<'buf> TypeVisitor<'_, '_, 'buf> {
                     self.diagnostics
                         .borrow_mut()
                         .warn()
-                        .with_span_and_error(TypeckError::CaseArmSubsumed(Box::new(CaseArmSubsumed {
-                            subsuming_arm_ty: arm_upper_ty.into_owned().clone_static(),
-                            subsuming_arm_span: arm_upper.span.clone(),
-                            subsumed_arm_ty: arm_lower_ty.into_owned().clone_static(),
-                            subsumed_arm_span: arm_lower.span.clone(),
-                        })))
+                        .with_span_and_error(TypeckError::CaseArmSubsumed(Box::new(
+                            CaseArmSubsumed {
+                                subsuming_arm_ty: arm_upper_ty.into_owned().clone_static(),
+                                subsuming_arm_span: arm_upper.span.clone(),
+                                subsumed_arm_ty: arm_lower_ty.into_owned().clone_static(),
+                                subsumed_arm_span: arm_lower.span.clone(),
+                            },
+                        )))
                         .emit();
 
                     // report only the first error for each lower-precedence arm
@@ -771,23 +864,36 @@ impl<'buf> ast::VisitorMut<'buf> for TypeVisitor<'_, '_, 'buf> {
             this.location
                 .replace(Location::Method(method.name.0.value.clone()));
 
-            let (_, ty) = this
-                .class_index()
-                .get_method_ty(method.name.as_slice())
-                .expect("the current method is present in the class index");
-            method.ty = ty.clone().into();
-
             for param in &mut method.params {
                 this.visit_formal(param);
             }
 
+            // don't use the class index for resolving the types because this could be a duplicate definition
+            let ret = Box::new(this.resolve_ty_name(
+                &method.return_ty,
+                TyNameCtx {
+                    variance: Variance::Covariant,
+                    allow_self_ty: SelfTypeAllowed::Yes,
+                },
+            ));
+
             this.with_scope(|this| {
                 this.visit_expr(&mut method.body);
-                this.check_expr_conforms(
-                    &method.body,
-                    &method.ty.unwrap_res_ty().as_function_ty().unwrap().ret,
-                );
+                this.check_expr_conforms(&method.body, &ret);
             });
+
+            method.ty = ResolvedTy::Function(FunctionTy {
+                params: method
+                    .params
+                    .iter()
+                    .map(UnwrapResolvedTy::unwrap_res_ty)
+                    .map(Cow::into_owned)
+                    .collect(),
+                ret,
+            })
+            .into();
+
+            this.check_method_override(method);
 
             this.location.take();
         });
@@ -797,7 +903,7 @@ impl<'buf> ast::VisitorMut<'buf> for TypeVisitor<'_, '_, 'buf> {
         self.location
             .replace(Location::Field(field.0.name.0.value.clone()));
 
-        field.recurse_mut(self);
+        self.visit_binding(&mut field.0, BindingKind::Field { inherited: false });
 
         self.location.take();
     }

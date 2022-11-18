@@ -205,10 +205,6 @@ impl<'a, 'buf> TyNameCtx<'a, 'buf> {
         }
     }
 
-    pub fn contravariant() -> TyNameCtxBuilder<'a, 'buf> {
-        Self::builder().with_variance(Variance::Contravariant)
-    }
-
     pub fn covariant() -> TyNameCtxBuilder<'a, 'buf> {
         Self::builder().with_variance(Variance::Covariant)
     }

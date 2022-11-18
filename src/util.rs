@@ -1,4 +1,4 @@
-use std::borrow::{Cow, Borrow};
+use std::borrow::Cow;
 use std::fmt::{self, Debug, Display};
 
 #[macro_export]

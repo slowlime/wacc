@@ -45,28 +45,7 @@ impl Display for IllegalSelfTypePosition {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum IllegalSelfName {
-    Field,
-    Param,
-    Local,
-}
-
-impl Display for IllegalSelfName {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::Field => "field",
-                Self::Param => "parameter",
-                Self::Local => "local",
-            }
-        )
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum UnrecognizedNamePosition<'buf> {
     Method(Cow<'buf, [u8]>),
     Field(Cow<'buf, [u8]>),
@@ -98,11 +77,21 @@ impl CloneStatic<UnrecognizedName<'static>> for UnrecognizedName<'_> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum UnrecognizedTyPosition<'buf> {
     Inherits,
     Method(Cow<'buf, [u8]>),
     Field(Cow<'buf, [u8]>),
+}
+
+impl CloneStatic<UnrecognizedTyPosition<'static>> for UnrecognizedTyPosition<'_> {
+    fn clone_static(&self) -> UnrecognizedTyPosition<'static> {
+        match self {
+            Self::Inherits => UnrecognizedTyPosition::Inherits,
+            Self::Method(name) => UnrecognizedTyPosition::Method(name.clone_static()),
+            Self::Field(name) => UnrecognizedTyPosition::Field(name.clone_static()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -110,6 +99,16 @@ pub struct UnrecognizedTy<'buf> {
     pub ty_name: TyName<'buf>,
     pub class_name: ClassName<'buf>,
     pub position: UnrecognizedTyPosition<'buf>,
+}
+
+impl CloneStatic<UnrecognizedTy<'static>> for UnrecognizedTy<'_> {
+    fn clone_static(&self) -> UnrecognizedTy<'static> {
+        UnrecognizedTy {
+            ty_name: self.ty_name.clone_static(),
+            class_name: self.class_name.clone_static(),
+            position: self.position.clone_static(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -457,10 +457,6 @@ impl<'buf> BindingMap<'buf> {
             .next()
     }
 
-    pub fn innermost(&self) -> &BindingScope<'buf> {
-        self.scopes.last().unwrap()
-    }
-
     pub fn innermost_mut(&mut self) -> &mut BindingScope<'buf> {
         self.scopes.last_mut().unwrap()
     }
