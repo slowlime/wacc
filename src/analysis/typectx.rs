@@ -48,7 +48,7 @@ impl<'buf> From<Cow<'buf, [u8]>> for ClassName<'buf> {
             b"Object" => BuiltinClass::Object.into(),
             b"IO" => BuiltinClass::IO.into(),
             b"SELF_TYPE" => Self::SelfType,
-            _ => Self::Named(name.into()),
+            _ => Self::Named(name),
         }
     }
 }
@@ -315,7 +315,7 @@ impl<'buf> TypeCtx<'buf> {
     ) -> Option<&ClassIndex<'buf>> {
         let name = name.into();
 
-        self.types.get(&name)
+        self.types.get(name)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (&ClassName<'buf>, &ClassIndex<'buf>)> {
@@ -326,7 +326,7 @@ impl<'buf> TypeCtx<'buf> {
         &'a self,
         class_name: impl Into<&'a ClassName<'buf>>,
     ) -> impl Iterator<Item = (&'a ClassName<'buf>, &'a ClassIndex<'buf>)> {
-        const PRESENT_MESSAGE: &'static str =
+        const PRESENT_MESSAGE: &str =
             "the iterator only returns entries present in the typectx";
 
         let iter = successors(Some(class_name.into()), |name| {

@@ -253,7 +253,7 @@ impl<'dia, 'buf, 'cls> ClassResolver<'dia, 'buf, 'cls> {
     pub fn resolve(mut self) -> ClassResolverResult<'buf, 'cls> {
         let (indexes, mut excluded): (Vec<_>, HashSet<_>) = self
             .classes
-            .into_iter()
+            .iter()
             .map(|class| self.resolve_class(class).ok_or(&class.name))
             .partition_result();
 
@@ -429,7 +429,7 @@ impl<'dia, 'buf, 'cls> ClassResolver<'dia, 'buf, 'cls> {
                     Unvisited => {
                         let mut stack = vec![];
 
-                        fn discover<'a, 'buf>(
+                        fn discover<'buf>(
                             stack: &mut Vec<ClassName<'buf>>,
                             visited: &mut HashMap<ClassName<'buf>, State>,
                             name: ClassName<'buf>,
@@ -612,7 +612,7 @@ impl<'dia, 'buf, 'cls> ClassResolver<'dia, 'buf, 'cls> {
         (
             name,
             name.span().into_owned().into(),
-            FunctionTy { params, ret }.into(),
+            FunctionTy { params, ret },
         )
     }
 

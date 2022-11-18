@@ -12,7 +12,7 @@ use color_eyre::eyre::Report;
 use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 use tracing_subscriber::prelude::*;
 
-const LOG_ENV_NAME: &'static str = "WACC_LOG";
+const LOG_ENV_NAME: &str = "WACC_LOG";
 
 pub fn main() -> Result<(), Report> {
     let filter = EnvFilter::builder()

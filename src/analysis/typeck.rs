@@ -1,9 +1,6 @@
 use std::borrow::{Borrow, Cow};
 use std::cell::RefCell;
-use std::cmp::Ordering;
 use std::collections::HashSet;
-
-use itertools::Itertools;
 
 use crate::analysis::class_resolver::{ClassResolver, ClassResolverResult};
 use crate::analysis::error::{
@@ -16,10 +13,10 @@ use crate::analysis::typectx::{
     BindErrorKind, Binding, BindingKind, BindingMap, ClassIndex, ClassName, DefinitionLocation,
     TypeCtx,
 };
-use crate::ast::ty::{BuiltinClass, FunctionTy, HasExplicitTy, HasTy, ResolvedTy, Ty, TyExt};
+use crate::ast::ty::{BuiltinClass, FunctionTy, HasTy, ResolvedTy, Ty, TyExt};
 use crate::ast::{self, AstRecurse, Class, Expr, Name, TyName, VisitorMut};
-use crate::errors::{DiagnosticMessage, Diagnostics};
-use crate::position::{HasSpan, Span};
+use crate::errors::Diagnostics;
+use crate::position::HasSpan;
 use crate::try_match;
 use crate::util::CloneStatic;
 
@@ -166,7 +163,7 @@ impl<'buf> ResolvedTyExt<'buf> for ResolvedTy<'buf> {
 
     fn reify_self_ty(&self) -> &ResolvedTy<'buf> {
         match self {
-            Self::SelfType { enclosed } => &enclosed,
+            Self::SelfType { enclosed } => enclosed,
             _ => self,
         }
     }
@@ -285,6 +282,8 @@ impl TypeVisitor<'_, '_, '_> {
     }
 
     fn add_inherited_fields(&mut self) {
+        // https://github.com/rust-lang/rust-clippy/issues/8132
+        #[allow(clippy::needless_collect)]
         let supertys = self
             .ctx
             .inheritance_chain(&self.class_name)
@@ -335,7 +334,7 @@ impl<'buf> TypeVisitor<'_, '_, 'buf> {
             // the lhs == bottom case is already handled
             (_, ResolvedTy::Bottom) => false,
 
-            (ResolvedTy::SelfType { enclosed }, _) => self.is_subtype(&enclosed, rhs),
+            (ResolvedTy::SelfType { enclosed }, _) => self.is_subtype(enclosed, rhs),
             // T <: SELF_TYPE[C] iff T = ⊥, but that's already handled
             (_, ResolvedTy::SelfType { .. }) => false,
 
@@ -351,11 +350,14 @@ impl<'buf> TypeVisitor<'_, '_, 'buf> {
         lhs_class: ClassName<'buf>,
         rhs_class: ClassName<'buf>,
     ) -> ResolvedTy<'buf> {
+        // https://github.com/rust-lang/rust-clippy/issues/8132
+        #[allow(clippy::needless_collect)]
         let lhs_chain: Vec<_> = self
             .ctx
             .inheritance_chain(&lhs_class)
             .map(|(name, _)| name)
             .collect();
+        #[allow(clippy::needless_collect)]
         let rhs_chain: Vec<_> = self
             .ctx
             .inheritance_chain(&rhs_class)
@@ -696,7 +698,7 @@ impl<'buf> TypeVisitor<'_, '_, 'buf> {
 
         // at least one of the operands has a primitive type: ensure types match
         if lhs_ty != rhs_ty {
-            let err = if is_primitive_ty(&*lhs_ty) {
+            let err = if is_primitive_ty(&lhs_ty) {
                 TypeckError::MismatchedTypes(Box::new(MismatchedTypes {
                     span: rhs.span().into_owned(),
                     expected_ty: lhs_ty.into_owned().clone_static(),
@@ -1024,7 +1026,7 @@ impl<'buf> ast::VisitorMut<'buf> for TypeVisitor<'_, '_, 'buf> {
                     },
                 );
 
-                self.check_expr_conforms(&object, &ty);
+                self.check_expr_conforms(object, &ty);
                 *recv_ty = ty.into();
             }
         }
@@ -1055,11 +1057,11 @@ impl<'buf> ast::VisitorMut<'buf> for TypeVisitor<'_, '_, 'buf> {
         self.visit_binding(binding, BindingKind::Local);
     }
 
-    fn visit_name(&mut self, name: &mut Name<'buf>) {}
+    fn visit_name(&mut self, _name: &mut Name<'buf>) {}
 
-    fn visit_int_lit(&mut self, expr: &mut ast::IntLit) {}
+    fn visit_int_lit(&mut self, _expr: &mut ast::IntLit) {}
 
-    fn visit_string_lit(&mut self, expr: &mut ast::StringLit<'buf>) {}
+    fn visit_string_lit(&mut self, _expr: &mut ast::StringLit<'buf>) {}
 
-    fn visit_bool_lit(&mut self, expr: &mut ast::BoolLit) {}
+    fn visit_bool_lit(&mut self, _expr: &mut ast::BoolLit) {}
 }

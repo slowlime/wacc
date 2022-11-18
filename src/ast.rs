@@ -995,7 +995,7 @@ pub struct BinOpExpr<'buf> {
 }
 
 impl_clone_static!(|&self: BinOpExpr| BinOpExpr {
-    op: self.op.clone(),
+    op: self.op,
     lhs: Box::new(self.lhs.clone_static()),
     rhs: Box::new(self.rhs.clone_static()),
     span: self.span.clone(),
