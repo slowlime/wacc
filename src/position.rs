@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::fmt;
+use std::num::NonZeroU32;
 use std::path::Path;
 
 use crate::source::{Source, SourceFile, SourceId};
@@ -45,8 +46,8 @@ impl fmt::Display for PositionPath<'_> {
 pub struct Position {
     pub src: Option<SourceId>,
     pub byte: usize,
-    pub line: usize,
-    pub col: usize,
+    pub line: NonZeroU32,
+    pub col: NonZeroU32,
 }
 
 impl Position {
@@ -58,8 +59,8 @@ impl Position {
         Self {
             src: Some(src),
             byte: 0,
-            line: 1,
-            col: 1,
+            line: 1.try_into().unwrap(),
+            col: 1.try_into().unwrap(),
         }
     }
 
@@ -67,8 +68,8 @@ impl Position {
         Self {
             src: None,
             byte: 0,
-            line: 1,
-            col: 1,
+            line: 1.try_into().unwrap(),
+            col: 1.try_into().unwrap(),
         }
     }
 

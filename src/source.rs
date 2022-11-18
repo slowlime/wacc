@@ -1,11 +1,12 @@
 use std::fs;
 use std::io;
+use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 
 use elsa::FrozenVec;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct SourceId(usize);
+pub struct SourceId(NonZeroUsize);
 
 #[derive(Default)]
 pub struct SourceBuffer(FrozenVec<Vec<u8>>);
@@ -41,7 +42,7 @@ impl<'buf> Source<'buf> {
     pub fn load(&mut self, path: PathBuf) -> io::Result<SourceId> {
         let idx = self.files.len();
         assert_eq!(self.buf.0.len(), idx);
-        let id = SourceId(idx);
+        let id = SourceId((idx + 1).try_into().unwrap());
 
         self.buf.0.push(fs::read(&path)?);
         let buf: &'buf [u8] = &self.buf.0[idx];
@@ -52,7 +53,7 @@ impl<'buf> Source<'buf> {
     }
 
     pub fn get(&self, id: SourceId) -> Option<&SourceFile<'buf>> {
-        self.files.get(id.0)
+        self.files.get(usize::from(id.0) - 1)
     }
 }
 

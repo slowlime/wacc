@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::error::Error;
 use std::fmt::{self, Display};
+use std::ops::Deref;
 
 use crate::analysis::typectx::{ClassName, DefinitionLocation};
 use crate::ast::ty::{BuiltinClass, ResolvedTy};
@@ -82,7 +83,7 @@ impl CloneStatic<UnrecognizedNamePosition<'static>> for UnrecognizedNamePosition
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnrecognizedName<'buf> {
-    pub name: Name<'buf>,
+    pub name: Box<Name<'buf>>,
     pub class_name: ClassName<'buf>,
     pub position: UnrecognizedNamePosition<'buf>,
 }
@@ -90,7 +91,7 @@ pub struct UnrecognizedName<'buf> {
 impl CloneStatic<UnrecognizedName<'static>> for UnrecognizedName<'_> {
     fn clone_static(&self) -> UnrecognizedName<'static> {
         UnrecognizedName {
-            name: self.name.clone_static(),
+            name: Box::new(self.name.clone_static()),
             class_name: self.class_name.clone_static(),
             position: self.position.clone_static(),
         }
@@ -135,31 +136,50 @@ impl Display for MultipleDefinitionKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnrelatedTypesInCase<'buf> {
+    pub scrutinee_span: Span,
+    pub scrutinee_ty: ResolvedTy<'buf>,
+    pub arm_span: Span,
+    pub arm_ty: ResolvedTy<'buf>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CaseArmSubsumed<'buf> {
+    pub subsuming_arm_span: Span,
+    pub subsuming_arm_ty: ResolvedTy<'buf>,
+    pub subsumed_arm_span: Span,
+    pub subsumed_arm_ty: ResolvedTy<'buf>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MismatchedTypes<'buf> {
+    pub span: Span,
+    pub expected_ty: ResolvedTy<'buf>,
+    pub actual_ty: ResolvedTy<'buf>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypeckError {
-    UnrecognizedTy(UnrecognizedTy<'static>),
+    UnrecognizedTy(Box<UnrecognizedTy<'static>>),
 
     IllegalSelfType {
-        ty_name: TyName<'static>,
+        ty_name: Box<TyName<'static>>,
         position: IllegalSelfTypePosition,
     },
 
     BuiltinRedefined {
-        ty_name: TyName<'static>,
+        ty_name: Box<TyName<'static>>,
         builtin: BuiltinClass,
     },
 
     InheritanceCycle {
-        ty_name: TyName<'static>,
+        ty_name: Box<TyName<'static>>,
         cycle: Vec<ClassName<'static>>,
     },
 
-    MismatchedTypes {
-        span: Span,
-        expected_ty: ResolvedTy<'static>,
-        actual_ty: ResolvedTy<'static>,
-    },
+    MismatchedTypes(Box<MismatchedTypes<'static>>),
 
-    UnrecognizedName(UnrecognizedName<'static>),
+    UnrecognizedName(Box<UnrecognizedName<'static>>),
 
     InvalidNumberOfArguments {
         call_span: Span,
@@ -167,33 +187,30 @@ pub enum TypeckError {
         supplied_count: usize,
     },
 
-    UnrelatedTypesInCase {
-        scrutinee_span: Span,
-        scrutinee_ty: ResolvedTy<'static>,
-        arm_span: Span,
-        arm_ty: ResolvedTy<'static>,
-    },
+    UnrelatedTypesInCase(Box<UnrelatedTypesInCase<'static>>),
 
-    CaseArmSubsumed {
-        subsuming_arm_span: Span,
-        subsuming_arm_ty: ResolvedTy<'static>,
-        subsumed_arm_span: Span,
-        subsumed_arm_ty: ResolvedTy<'static>,
-    },
+    CaseArmSubsumed(Box<CaseArmSubsumed<'static>>),
 
     MultipleDefinition {
         kind: MultipleDefinitionKind,
-        name: Name<'static>,
+        name: Box<Name<'static>>,
         previous: DefinitionLocation,
     },
 
-    IllegalSelf(Name<'static>),
+    MultipleClassDefinition {
+        ty_name: Box<TyName<'static>>,
+        previous: DefinitionLocation,
+    },
+
+    IllegalSelf(Box<Name<'static>>),
 }
 
 impl Display for TypeckError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::UnrecognizedTy(UnrecognizedTy { ty_name, .. }) => {
+            Self::UnrecognizedTy(err) => {
+                let UnrecognizedTy { ty_name, .. } = err.deref();
+
                 write!(f, "the type name `{}` is not recognized", ty_name)
             }
 
@@ -213,11 +230,13 @@ impl Display for TypeckError {
                 )
             }
 
-            Self::MismatchedTypes {
-                expected_ty,
-                actual_ty,
-                ..
-            } => {
+            Self::MismatchedTypes(err) => {
+                let MismatchedTypes {
+                    expected_ty,
+                    actual_ty,
+                    ..
+                } = err.deref();
+
                 write!(
                     f,
                     "mismatched types: expected `{}`, found `{}`",
@@ -225,7 +244,9 @@ impl Display for TypeckError {
                 )
             }
 
-            Self::UnrecognizedName(UnrecognizedName { name, .. }) => {
+            Self::UnrecognizedName(err) => {
+                let UnrecognizedName { name, .. } = err.deref();
+
                 write!(f, "unrecognized name `{}`", name)
             }
 
@@ -249,11 +270,13 @@ impl Display for TypeckError {
                 )
             }
 
-            Self::UnrelatedTypesInCase {
-                scrutinee_ty,
-                arm_ty,
-                ..
-            } => {
+            Self::UnrelatedTypesInCase(err) => {
+                let UnrelatedTypesInCase {
+                    scrutinee_ty,
+                    arm_ty,
+                    ..
+                } = err.deref();
+
                 write!(
                     f,
                     "unrelated types in a case expression: `{}` and `{}`",
@@ -261,11 +284,13 @@ impl Display for TypeckError {
                 )
             }
 
-            Self::CaseArmSubsumed {
-                subsuming_arm_ty,
-                subsumed_arm_ty,
-                ..
-            } => {
+            Self::CaseArmSubsumed(err) => {
+                let CaseArmSubsumed {
+                    subsuming_arm_ty,
+                    subsumed_arm_ty,
+                    ..
+                } = err.deref();
+
                 write!(
                     f,
                     "the case arm (matching type `{}`) is subsumed by a more general arm above matching `{}`",
@@ -289,6 +314,14 @@ impl Display for TypeckError {
                 )
             }
 
+            Self::MultipleClassDefinition { ty_name, .. } => {
+                write!(
+                    f,
+                    "detected multiple definition: class `{}` is already defined",
+                    ty_name,
+                )
+            }
+
             Self::IllegalSelf(_) => write!(f, "`self` cannot be used here"),
         }
     }
@@ -299,18 +332,17 @@ impl Error for TypeckError {}
 impl HasSpan for TypeckError {
     fn span(&self) -> Cow<'_, crate::position::Span> {
         match self {
-            Self::UnrecognizedTy(UnrecognizedTy { ty_name, .. }) => ty_name.span(),
+            Self::UnrecognizedTy(err) => err.ty_name.span(),
             Self::IllegalSelfType { ty_name, .. } => ty_name.span(),
             Self::BuiltinRedefined { ty_name, .. } => ty_name.span(),
             Self::InheritanceCycle { ty_name, .. } => ty_name.span(),
-            Self::MismatchedTypes { span, .. } => Cow::Borrowed(span),
-            Self::UnrecognizedName(UnrecognizedName { name, .. }) => name.span(),
+            Self::MismatchedTypes(err) => Cow::Borrowed(&err.span),
+            Self::UnrecognizedName(err) => err.name.span(),
             Self::InvalidNumberOfArguments { call_span, .. } => Cow::Borrowed(call_span),
-            Self::UnrelatedTypesInCase { arm_span, .. } => Cow::Borrowed(arm_span),
-            Self::CaseArmSubsumed {
-                subsumed_arm_span, ..
-            } => Cow::Borrowed(subsumed_arm_span),
+            Self::UnrelatedTypesInCase(err) => Cow::Borrowed(&err.arm_span),
+            Self::CaseArmSubsumed(err) => Cow::Borrowed(&err.subsumed_arm_span),
             Self::MultipleDefinition { name, .. } => name.span(),
+            Self::MultipleClassDefinition { ty_name, .. } => ty_name.span(),
             Self::IllegalSelf(name) => name.span(),
         }
     }

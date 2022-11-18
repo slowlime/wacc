@@ -9,6 +9,8 @@ use crate::analysis::class_resolver::{ClassResolver, ClassResolverResult};
 use crate::analysis::error::{
     IllegalSelfTypePosition, MultipleDefinitionKind, TypeckError, UnrecognizedName,
     UnrecognizedNamePosition, UnrecognizedTy, UnrecognizedTyPosition,
+    UnrelatedTypesInCase, CaseArmSubsumed,
+    MismatchedTypes,
 };
 use crate::analysis::typectx::{
     BindErrorKind, Binding, BindingKind, BindingMap, ClassIndex, ClassName, DefinitionLocation,
@@ -59,7 +61,7 @@ pub struct TypeckResult<'buf> {
 pub struct TypeChecker<'dia, 'buf> {
     diagnostics: &'dia mut Diagnostics,
     classes: Vec<Class<'buf>>,
-    excluded: HashSet<ClassName<'buf>>,
+    excluded: HashSet<TyName<'buf>>,
     ctx: TypeCtx<'buf>,
     unrecognized_tys: Vec<UnrecognizedTy<'buf>>,
     unrecognized_names: Vec<UnrecognizedName<'buf>>,
@@ -73,6 +75,7 @@ impl<'dia, 'buf> TypeChecker<'dia, 'buf> {
             ctx,
             excluded,
         } = method_resolver.resolve();
+        let excluded = excluded.into_iter().cloned().collect();
 
         Self {
             diagnostics,
@@ -86,7 +89,7 @@ impl<'dia, 'buf> TypeChecker<'dia, 'buf> {
 
     pub fn resolve(mut self) -> TypeckResult<'buf> {
         for class in &mut self.classes {
-            if !self.excluded.contains(&class.name.borrow().into()) {
+            if !self.excluded.contains(&class.name) {
                 let mut visitor = TypeVisitor {
                     diagnostics: RefCell::new(self.diagnostics),
                     ctx: &mut self.ctx,
@@ -439,7 +442,7 @@ impl<'buf> TypeVisitor<'_, '_, 'buf> {
                             BindingKind::Parameter => MultipleDefinitionKind::Parameter,
                         },
 
-                        name: name.clone_static(),
+                        name: Box::new(name.clone_static()),
                         previous: previous.location.clone(),
                     })
                     .emit(),
@@ -448,7 +451,7 @@ impl<'buf> TypeVisitor<'_, '_, 'buf> {
                     .diagnostics
                     .borrow_mut()
                     .error()
-                    .with_span_and_error(TypeckError::IllegalSelf(name.clone_static()))
+                    .with_span_and_error(TypeckError::IllegalSelf(Box::new(name.clone_static())))
                     .emit(),
             }
         }
@@ -456,7 +459,7 @@ impl<'buf> TypeVisitor<'_, '_, 'buf> {
 
     fn push_unrecognized_name(&self, name: Name<'buf>) {
         self.unrecognized_names.borrow_mut().push(UnrecognizedName {
-            name,
+            name: Box::new(name),
             class_name: self.class_name.clone(),
             position: self.location.clone().expect("location must be set").into(),
         });
@@ -491,7 +494,7 @@ impl<'buf> TypeVisitor<'_, '_, 'buf> {
                 self.diagnostics
                     .borrow_mut()
                     .error()
-                    .with_span_and_error(TypeckError::IllegalSelf(name.clone_static()))
+                    .with_span_and_error(TypeckError::IllegalSelf(Box::new(name.clone_static())))
                     .emit();
             }
 
@@ -538,7 +541,7 @@ impl<'buf> TypeVisitor<'_, '_, 'buf> {
                         .borrow_mut()
                         .error()
                         .with_span_and_error(TypeckError::IllegalSelfType {
-                            ty_name: ty_name.clone_static(),
+                            ty_name: Box::new(ty_name.clone_static()),
                             position,
                         })
                         .emit();
@@ -569,12 +572,12 @@ impl<'buf> TypeVisitor<'_, '_, 'buf> {
 
             ClassName::SelfType => TypeckError::IllegalSelfType {
                 position: IllegalSelfTypePosition::ClassName,
-                ty_name: ty_name.clone_static(),
+                ty_name: Box::new(ty_name.clone_static()),
             },
 
             ClassName::Builtin(builtin) => TypeckError::BuiltinRedefined {
                 builtin,
-                ty_name: ty_name.clone_static(),
+                ty_name: Box::new(ty_name.clone_static()),
             },
         };
 
@@ -592,11 +595,11 @@ impl<'buf> TypeVisitor<'_, '_, 'buf> {
             self.diagnostics
                 .borrow_mut()
                 .error()
-                .with_span_and_error(TypeckError::MismatchedTypes {
+                .with_span_and_error(TypeckError::MismatchedTypes(Box::new(MismatchedTypes {
                     span: expr.span().into_owned(),
                     expected_ty: expected_ty.clone_static(),
                     actual_ty: expr.unwrap_res_ty().into_owned().clone_static(),
-                })
+                })))
                 .emit();
         }
     }
@@ -614,12 +617,12 @@ impl<'buf> TypeVisitor<'_, '_, 'buf> {
                 self.diagnostics
                     .borrow_mut()
                     .warn()
-                    .with_span_and_error(TypeckError::UnrelatedTypesInCase {
+                    .with_span_and_error(TypeckError::UnrelatedTypesInCase(Box::new(UnrelatedTypesInCase {
                         scrutinee_span: expr.scrutinee.span().into_owned(),
                         scrutinee_ty: scrutinee_ty.clone().into_owned().clone_static(),
                         arm_span: arm.span.clone(),
                         arm_ty: arm_ty.clone().into_owned().clone_static(),
-                    })
+                    })))
                     .emit();
             }
         }
@@ -652,12 +655,12 @@ impl<'buf> TypeVisitor<'_, '_, 'buf> {
                     self.diagnostics
                         .borrow_mut()
                         .warn()
-                        .with_span_and_error(TypeckError::CaseArmSubsumed {
+                        .with_span_and_error(TypeckError::CaseArmSubsumed(Box::new(CaseArmSubsumed {
                             subsuming_arm_ty: arm_upper_ty.into_owned().clone_static(),
                             subsuming_arm_span: arm_upper.span.clone(),
                             subsumed_arm_ty: arm_lower_ty.into_owned().clone_static(),
                             subsumed_arm_span: arm_lower.span.clone(),
-                        })
+                        })))
                         .emit();
 
                     // report only the first error for each lower-precedence arm
@@ -694,17 +697,17 @@ impl<'buf> TypeVisitor<'_, '_, 'buf> {
         // at least one of the operands has a primitive type: ensure types match
         if lhs_ty != rhs_ty {
             let err = if is_primitive_ty(&*lhs_ty) {
-                TypeckError::MismatchedTypes {
+                TypeckError::MismatchedTypes(Box::new(MismatchedTypes {
                     span: rhs.span().into_owned(),
                     expected_ty: lhs_ty.into_owned().clone_static(),
                     actual_ty: rhs_ty.into_owned().clone_static(),
-                }
+                }))
             } else {
-                TypeckError::MismatchedTypes {
+                TypeckError::MismatchedTypes(Box::new(MismatchedTypes {
                     span: lhs.span().into_owned(),
                     expected_ty: rhs_ty.into_owned().clone_static(),
                     actual_ty: lhs_ty.into_owned().clone_static(),
-                }
+                }))
             };
 
             self.diagnostics

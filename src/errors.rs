@@ -153,3 +153,9 @@ impl Diagnostics {
         self.diagnostics.push(diagnostic);
     }
 }
+
+impl Default for Diagnostics {
+    fn default() -> Self {
+        Self::new()
+    }
+}

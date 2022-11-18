@@ -171,7 +171,7 @@ impl Display for ResolvedTy<'_> {
             Self::Class(name) => write!(f, "{}", slice_formatter(name)),
             Self::Function(ty) => ty.fmt(f),
             Self::Bottom => write!(f, "⊥"),
-            Self::Untyped => write!(f, "{}", "{invalid}"),
+            Self::Untyped => write!(f, "{{invalid}}"),
         }
     }
 }

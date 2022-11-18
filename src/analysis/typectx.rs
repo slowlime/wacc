@@ -133,14 +133,16 @@ impl<'buf> TryFrom<ClassName<'buf>> for ResolvedTy<'buf> {
 #[derive(Debug, Clone)]
 pub struct ClassIndex<'buf> {
     parent: Option<ClassName<'buf>>,
+    location: DefinitionLocation,
     methods: HashMap<Cow<'buf, [u8]>, (DefinitionLocation, FunctionTy<'buf>)>,
     fields: IndexMap<Cow<'buf, [u8]>, (DefinitionLocation, ResolvedTy<'buf>)>,
 }
 
 impl<'buf> ClassIndex<'buf> {
-    pub fn new(parent: Option<ClassName<'buf>>) -> Self {
+    pub fn new(location: DefinitionLocation, parent: Option<ClassName<'buf>>) -> Self {
         Self {
             parent,
+            location,
             methods: HashMap::new(),
             fields: IndexMap::new(),
         }
@@ -246,6 +248,10 @@ impl<'buf> ClassIndex<'buf> {
             .expect("rhs is present in the index");
 
         index_lhs < index_rhs
+    }
+
+    pub fn location(&self) -> &DefinitionLocation {
+        &self.location
     }
 
     pub fn parent(&self) -> Option<&ClassName<'buf>> {

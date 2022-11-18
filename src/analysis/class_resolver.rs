@@ -1,14 +1,17 @@
-use std::borrow::{Borrow, Cow};
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::iter::successors;
 
 use itertools::{Either, Itertools};
 
-use crate::analysis::error::{IllegalSelfTypePosition, TypeckError, UnrecognizedTy, UnrecognizedTyPosition};
+use crate::analysis::error::{
+    IllegalSelfTypePosition, MultipleDefinitionKind, TypeckError, UnrecognizedTy,
+    UnrecognizedTyPosition,
+};
 use crate::analysis::typeck::{SelfTypeAllowed, Variance};
 use crate::analysis::typectx::{ClassIndex, ClassName, DefinitionLocation, TypeCtx};
 use crate::ast::ty::{BuiltinClass, FunctionTy, ResolvedTy};
-use crate::ast::{self, Class, TyName};
+use crate::ast::{self, Class, Name, TyName};
 use crate::errors::Diagnostics;
 use crate::position::HasSpan;
 use crate::util::CloneStatic;
@@ -18,7 +21,7 @@ fn builtin_ctx() -> TypeCtx<'static> {
 
     ctx.add_class(
         &b"Object"[..],
-        ClassIndex::new(None).with_methods([
+        ClassIndex::new(BuiltinClass::Object.into(), None).with_methods([
             (
                 b"abort"[..].into(),
                 BuiltinClass::Object.into(),
@@ -50,7 +53,7 @@ fn builtin_ctx() -> TypeCtx<'static> {
 
     ctx.add_class(
         &b"IO"[..],
-        ClassIndex::new(Some(BuiltinClass::Object.into())).with_methods([
+        ClassIndex::new(BuiltinClass::IO.into(), Some(BuiltinClass::Object.into())).with_methods([
             (
                 b"out_string"[..].into(),
                 BuiltinClass::IO.into(),
@@ -92,12 +95,16 @@ fn builtin_ctx() -> TypeCtx<'static> {
 
     ctx.add_class(
         &b"Int"[..],
-        ClassIndex::new(Some(BuiltinClass::Object.into())),
+        ClassIndex::new(BuiltinClass::Int.into(), Some(BuiltinClass::Object.into())),
     );
 
     ctx.add_class(
         &b"String"[..],
-        ClassIndex::new(Some(BuiltinClass::Object.into())).with_methods([
+        ClassIndex::new(
+            BuiltinClass::String.into(),
+            Some(BuiltinClass::Object.into()),
+        )
+        .with_methods([
             (
                 b"length"[..].into(),
                 BuiltinClass::String.into(),
@@ -127,7 +134,7 @@ fn builtin_ctx() -> TypeCtx<'static> {
 
     ctx.add_class(
         &b"Bool"[..],
-        ClassIndex::new(Some(BuiltinClass::Object.into())),
+        ClassIndex::new(BuiltinClass::Bool.into(), Some(BuiltinClass::Object.into())),
     );
 
     ctx
@@ -211,10 +218,10 @@ impl<'a, 'buf> TyNameCtx<'a, 'buf> {
     }
 }
 
-pub(super) struct ClassResolverResult<'buf> {
+pub(super) struct ClassResolverResult<'buf, 'cls> {
     pub unrecognized_tys: Vec<UnrecognizedTy<'buf>>,
     pub ctx: TypeCtx<'buf>,
-    pub excluded: HashSet<ClassName<'buf>>,
+    pub excluded: HashSet<&'cls TyName<'buf>>,
 }
 
 pub(super) struct ClassResolver<'dia, 'buf, 'cls> {
@@ -243,13 +250,17 @@ impl<'dia, 'buf, 'cls> ClassResolver<'dia, 'buf, 'cls> {
         }
     }
 
-    pub fn resolve(mut self) -> ClassResolverResult<'buf> {
-        let (indexes, mut excluded): (HashMap<_, _>, HashSet<_>) = self
+    pub fn resolve(mut self) -> ClassResolverResult<'buf, 'cls> {
+        let (indexes, mut excluded): (Vec<_>, HashSet<_>) = self
             .classes
             .into_iter()
-            .map(|class| self.resolve_class(class).ok_or(class.name.borrow().into()))
+            .map(|class| self.resolve_class(class).ok_or(&class.name))
             .partition_result();
 
+        // excluded must include span info
+        let indexes = self
+            .check_duplicate_classes(indexes, &mut excluded)
+            .collect();
         excluded.extend(self.add_to_ctx(indexes));
 
         ClassResolverResult {
@@ -259,13 +270,59 @@ impl<'dia, 'buf, 'cls> ClassResolver<'dia, 'buf, 'cls> {
         }
     }
 
-    /// Returns names of clases excluded from the context due to inheritance cycles.
+    fn check_duplicate_classes(
+        &mut self,
+        indexes: impl IntoIterator<Item = (&'cls TyName<'buf>, ClassIndex<'buf>)>,
+        excluded: &mut HashSet<&'cls TyName<'buf>>,
+    ) -> impl Iterator<Item = (&'cls TyName<'buf>, ClassIndex<'buf>)> {
+        use std::collections::hash_map::Entry;
+
+        let mut map = HashMap::new();
+
+        for (ty_name, index) in indexes {
+            match map.entry(ty_name.0.as_slice()) {
+                Entry::Vacant(entry) => {
+                    entry.insert((ty_name, index));
+                }
+
+                Entry::Occupied(entry) => {
+                    self.diagnostics
+                        .error()
+                        .with_span_and_error(TypeckError::MultipleClassDefinition {
+                            ty_name: Box::new(ty_name.clone_static()),
+                            previous: entry.get().1.location().clone(),
+                        })
+                        .emit();
+
+                    excluded.insert(ty_name);
+                }
+            }
+        }
+
+        map.into_values()
+    }
+
+    /// Returns names of classes excluded from the context due to inheritance cycles.
     fn add_to_ctx(
         &mut self,
-        mut indexes: HashMap<ClassName<'buf>, ClassIndex<'buf>>,
-    ) -> HashSet<ClassName<'buf>> {
+        ty_indexes: HashMap<&'cls TyName<'buf>, ClassIndex<'buf>>,
+    ) -> HashSet<&'cls TyName<'buf>> {
         // perform a toposort on the indexes;
         // if a cycle is detected, remove the offending nodes and repeat
+
+        struct Indexes<'cls, 'buf> {
+            ty_indexes: HashMap<&'cls TyName<'buf>, ClassIndex<'buf>>,
+            name_map: HashMap<ClassName<'buf>, &'cls TyName<'buf>>,
+        }
+
+        let name_map = ty_indexes
+            .iter()
+            .map(|(&ty_name, _)| (ty_name.into(), ty_name))
+            .collect::<HashMap<_, _>>();
+        let mut indexes = Indexes {
+            ty_indexes,
+            name_map,
+        };
 
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         enum State {
@@ -278,23 +335,29 @@ impl<'dia, 'buf, 'cls> ClassResolver<'dia, 'buf, 'cls> {
         use State::*;
 
         fn get_parent<'a, 'buf>(
-            indexes: &'a HashMap<ClassName<'buf>, ClassIndex<'buf>>,
+            indexes: &'a Indexes<'_, 'buf>,
             name: &ClassName<'buf>,
         ) -> Option<&'a ClassName<'buf>> {
-            indexes
+            let ty_name = indexes
+                .name_map
                 .get(name)
+                .expect("all names have been resolvde");
+
+            indexes
+                .ty_indexes
+                .get(ty_name)
                 .expect("all names have been resolved")
                 .parent()
         }
 
-        fn handle_cycle<'a, 'buf>(
-            this: &mut ClassResolver<'_, 'buf, '_>,
+        fn handle_cycle<'a, 'buf, 'cls>(
+            this: &mut ClassResolver<'_, 'buf, 'cls>,
             offending: &'a ClassName<'buf>,
-            ignored: &mut HashSet<ClassName<'buf>>,
-            indexes: &'a HashMap<ClassName<'buf>, ClassIndex<'buf>>,
+            ignored: &mut HashSet<&'cls TyName<'buf>>,
+            indexes: &'a Indexes<'cls, 'buf>,
         ) {
             let cycle = successors(Some(offending), |node| {
-                let parent = get_parent(&indexes, node)
+                let parent = get_parent(indexes, node)
                     .expect("a class participating in the cycle must have a parent");
 
                 Some(parent).filter(|&parent| parent != offending)
@@ -310,7 +373,11 @@ impl<'dia, 'buf, 'cls> ClassResolver<'dia, 'buf, 'cls> {
                 .expect("built-in class do not participate in the inheritance cycle");
 
             for &name in &cycle {
-                ignored.insert(name.clone());
+                let ty_name = indexes
+                    .name_map
+                    .get(name)
+                    .expect("all known type names are registered in the name map");
+                ignored.insert(ty_name);
             }
 
             let cycle = cycle.into_iter().map(ClassName::clone_static).collect();
@@ -318,22 +385,27 @@ impl<'dia, 'buf, 'cls> ClassResolver<'dia, 'buf, 'cls> {
             this.diagnostics
                 .error()
                 .with_span_and_error(TypeckError::InheritanceCycle {
-                    ty_name: ty_name.clone_static(),
+                    ty_name: Box::new(ty_name.clone_static()),
                     cycle,
                 })
                 .emit();
         }
 
-        let mut ignored: HashSet<ClassName> = HashSet::new();
+        let mut ignored: HashSet<&'cls TyName<'buf>> = HashSet::new();
 
-        let sorted: Vec<ClassName> = 'outer: loop {
+        let sorted: Vec<ClassName<'buf>> = 'outer: loop {
             let mut visited = self
                 .class_names
                 .iter()
                 .map(|name| {
+                    let ty_name = indexes
+                        .name_map
+                        .get(name)
+                        .expect("all known type names are registered in the name map");
+
                     (
-                        name,
-                        if ignored.contains(name) {
+                        name.clone(),
+                        if ignored.contains(ty_name) {
                             Ignored
                         } else {
                             Unvisited
@@ -344,8 +416,10 @@ impl<'dia, 'buf, 'cls> ClassResolver<'dia, 'buf, 'cls> {
 
             let mut sorted = vec![];
 
-            for name in indexes.keys() {
-                match visited[name] {
+            for &ty_name in indexes.ty_indexes.keys() {
+                let name = ty_name.into();
+
+                match visited[&name] {
                     Ignored | Visited => continue,
 
                     Discovered => {
@@ -356,22 +430,23 @@ impl<'dia, 'buf, 'cls> ClassResolver<'dia, 'buf, 'cls> {
                         let mut stack = vec![];
 
                         fn discover<'a, 'buf>(
-                            stack: &mut Vec<&'a ClassName<'buf>>,
-                            visited: &mut HashMap<&'a ClassName<'buf>, State>,
-                            name: &'a ClassName<'buf>,
+                            stack: &mut Vec<ClassName<'buf>>,
+                            visited: &mut HashMap<ClassName<'buf>, State>,
+                            name: ClassName<'buf>,
                         ) {
-                            stack.push(name);
+                            stack.push(name.clone());
                             visited.insert(name, Discovered);
                         }
 
                         discover(&mut stack, &mut visited, name);
 
                         while let Some(name) = stack.pop() {
-                            match get_parent(&indexes, name).map(|parent| (parent, visited[parent]))
+                            match get_parent(&indexes, &name)
+                                .map(|parent| (parent, visited[parent]))
                             {
                                 None | Some((_, Ignored | Visited)) => {}
                                 Some((parent, Unvisited)) => {
-                                    discover(&mut stack, &mut visited, parent)
+                                    discover(&mut stack, &mut visited, parent.clone())
                                 }
 
                                 Some((parent, Discovered)) => {
@@ -381,32 +456,29 @@ impl<'dia, 'buf, 'cls> ClassResolver<'dia, 'buf, 'cls> {
                                 }
                             }
 
-                            sorted.push(name);
-                            visited.insert(name, Visited);
+                            *visited.get_mut(&name).unwrap() = Visited;
+                            sorted.push(name.clone());
                         }
                     }
                 }
             }
 
-            break sorted.into_iter().cloned().collect();
+            break sorted;
         };
 
         for name in sorted {
+            let ty_name = indexes
+                .name_map
+                .get(&name)
+                .expect("toposort does not add new items");
             let (name, index) = indexes
-                .remove_entry(&name)
+                .ty_indexes
+                .remove_entry(ty_name)
                 .expect("toposort does not add new names");
             self.ctx.add_class(name, index);
         }
 
         ignored
-            .into_iter()
-            .map(|name| {
-                indexes
-                    .remove_entry(&name)
-                    .expect("ignored contains only known names")
-                    .0
-            })
-            .collect()
     }
 
     /// Resolves a type name using the list of available classes.
@@ -436,7 +508,7 @@ impl<'dia, 'buf, 'cls> ClassResolver<'dia, 'buf, 'cls> {
                     self.diagnostics
                         .error()
                         .with_span_and_error(TypeckError::IllegalSelfType {
-                            ty_name: ty_name.clone_static(),
+                            ty_name: Box::new(ty_name.clone_static()),
                             position,
                         })
                         .emit();
@@ -450,7 +522,10 @@ impl<'dia, 'buf, 'cls> ClassResolver<'dia, 'buf, 'cls> {
             ClassName::Named(_) => {
                 self.unrecognized_tys.push(UnrecognizedTy {
                     ty_name: ty_name.clone_static(),
-                    class_name: ty_name_ctx.class_ty.try_into().expect("class_ty is a class type"),
+                    class_name: ty_name_ctx
+                        .class_ty
+                        .try_into()
+                        .expect("class_ty is a class type"),
                     position: ty_name_ctx.position,
                 });
             }
@@ -464,7 +539,43 @@ impl<'dia, 'buf, 'cls> ClassResolver<'dia, 'buf, 'cls> {
         }
     }
 
-    fn resolve_method(
+    fn check_duplicate_definitions<'a, T>(
+        &mut self,
+        items: impl IntoIterator<Item = (&'a Name<'buf>, DefinitionLocation, T)>,
+        kind: MultipleDefinitionKind,
+    ) -> impl Iterator<Item = (Cow<'buf, [u8]>, DefinitionLocation, T)> + 'a
+    where
+        'buf: 'a,
+        T: 'a,
+    {
+        use std::collections::hash_map::Entry;
+
+        let mut map = HashMap::new();
+
+        for (name, location, ty) in items {
+            match map.entry(name) {
+                Entry::Vacant(entry) => {
+                    entry.insert((location, ty));
+                }
+
+                Entry::Occupied(entry) => {
+                    self.diagnostics
+                        .error()
+                        .with_span_and_error(TypeckError::MultipleDefinition {
+                            kind,
+                            name: Box::new(name.clone_static()),
+                            previous: entry.get().0.clone(),
+                        })
+                        .emit();
+                }
+            }
+        }
+
+        map.into_iter()
+            .map(|(name, (location, ty))| (name.0.value.clone(), location, ty))
+    }
+
+    fn resolve_method<'a>(
         &mut self,
         class_ty: &ResolvedTy<'buf>,
         ast::Method {
@@ -472,8 +583,8 @@ impl<'dia, 'buf, 'cls> ClassResolver<'dia, 'buf, 'cls> {
             params,
             return_ty,
             ..
-        }: &ast::Method<'buf>,
-    ) -> (Cow<'buf, [u8]>, DefinitionLocation, FunctionTy<'buf>) {
+        }: &'a ast::Method<'buf>,
+    ) -> (&'a Name<'buf>, DefinitionLocation, FunctionTy<'buf>) {
         let params = params
             .iter()
             .map(|ast::Formal { ty_name, .. }| {
@@ -498,14 +609,18 @@ impl<'dia, 'buf, 'cls> ClassResolver<'dia, 'buf, 'cls> {
             ),
         );
 
-        (name.0.value.clone(), name.span().into_owned().into(), FunctionTy { params, ret }.into())
+        (
+            name,
+            name.span().into_owned().into(),
+            FunctionTy { params, ret }.into(),
+        )
     }
 
-    fn resolve_field(
+    fn resolve_field<'a>(
         &mut self,
         class_ty: &ResolvedTy<'buf>,
-        ast::Field(ast::Binding { name, ty_name, .. }): &ast::Field<'buf>,
-    ) -> (Cow<'buf, [u8]>, DefinitionLocation, ResolvedTy<'buf>) {
+        ast::Field(ast::Binding { name, ty_name, .. }): &'a ast::Field<'buf>,
+    ) -> (&'a Name<'buf>, DefinitionLocation, ResolvedTy<'buf>) {
         let ty = self.resolve_ty_name(
             ty_name,
             TyNameCtx::invariant()
@@ -516,13 +631,13 @@ impl<'dia, 'buf, 'cls> ClassResolver<'dia, 'buf, 'cls> {
         );
         // ty can be Untyped
 
-        (name.0.value.clone(), name.span().into_owned().into(), ty)
+        (name, name.span().into_owned().into(), ty)
     }
 
-    fn resolve_class(
+    fn resolve_class<'a>(
         &mut self,
-        class: &Class<'buf>,
-    ) -> Option<(ClassName<'buf>, ClassIndex<'buf>)> {
+        class: &'a Class<'buf>,
+    ) -> Option<(&'a TyName<'buf>, ClassIndex<'buf>)> {
         let class_ty = self.resolve_ty_name(
             &class.name,
             TyNameCtx::invariant()
@@ -559,7 +674,7 @@ impl<'dia, 'buf, 'cls> ClassResolver<'dia, 'buf, 'cls> {
         let parent = parent
             .try_into()
             .expect("the parent class has a valid name");
-        let mut index = ClassIndex::new(Some(parent));
+        let mut index = ClassIndex::new(class.span().into_owned().into(), Some(parent));
 
         let (fields, methods): (Vec<_>, Vec<_>) =
             class
@@ -572,14 +687,22 @@ impl<'dia, 'buf, 'cls> ClassResolver<'dia, 'buf, 'cls> {
 
         let methods = methods
             .into_iter()
-            .map(|method| self.resolve_method(&class_ty, method));
-        index.add_methods(methods);
+            .map(|method| self.resolve_method(&class_ty, method))
+            .collect::<Vec<_>>();
+        index.add_methods(self.check_duplicate_definitions(
+            methods,
+            MultipleDefinitionKind::Method { inherited: false },
+        ));
 
         let fields = fields
             .into_iter()
-            .map(|field| self.resolve_field(&class_ty, field));
-        index.add_fields(fields);
+            .map(|field| self.resolve_field(&class_ty, field))
+            .collect::<Vec<_>>();
+        index.add_fields(self.check_duplicate_definitions(
+            fields,
+            MultipleDefinitionKind::Field { inherited: false },
+        ));
 
-        Some((class.name.clone().into(), index))
+        Some((&class.name, index))
     }
 }

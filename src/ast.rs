@@ -1036,7 +1036,7 @@ pub struct UnOpExpr<'buf> {
 }
 
 impl_clone_static!(|&self: UnOpExpr| UnOpExpr {
-    op: self.op.clone(),
+    op: self.op,
     expr: Box::new(self.expr.clone_static()),
     span: self.span.clone(),
     ty: self.ty.clone_static(),
