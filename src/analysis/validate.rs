@@ -327,6 +327,8 @@ pub fn check_has_main_class<'buf>(diagnostics: &mut Diagnostics<'_>, ty_ctx: &Ty
             method_ty: method_ty.clone_static(),
         });
 
+        // keep it for consistency
+        #[allow(clippy::needless_return)]
         return;
     }
 }

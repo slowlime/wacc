@@ -91,7 +91,8 @@ fn run(mut ctx: RunnerCtx<'_, '_>) -> ExitCode {
 
     // semantic analysis
     let (classes, ty_ctx) = return_if_stopped!(ctx, passes::typeck(&mut ctx, classes));
-    let (classes, ty_ctx) = return_if_stopped!(ctx, passes::validate_classes(&mut ctx, classes, ty_ctx));
+    let (classes, ty_ctx) =
+        return_if_stopped!(ctx, passes::validate_classes(&mut ctx, classes, ty_ctx));
     let ty_ctx = return_if_stopped!(ctx, passes::check_has_main_class(&mut ctx, ty_ctx));
     let classes = return_if_stopped!(ctx, passes::dump_types_if_asked(&mut ctx, classes));
 
@@ -121,5 +122,5 @@ pub fn prepare_and_run() -> ExitCode {
         diagnostics,
     };
 
-    return run(ctx);
+    run(ctx)
 }

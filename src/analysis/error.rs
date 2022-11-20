@@ -229,8 +229,15 @@ impl Display for TypeckError {
                 write!(f, "redefinition of the built-in class `{}`", builtin)
             }
 
-            Self::ForbiddenInheritance { ty_name: class, builtin } => {
-                write!(f, "class `{}` inherits from the built-in class `{}`, which is forbidden", class, builtin)
+            Self::ForbiddenInheritance {
+                ty_name: class,
+                builtin,
+            } => {
+                write!(
+                    f,
+                    "class `{}` inherits from the built-in class `{}`, which is forbidden",
+                    class, builtin
+                )
             }
 
             Self::InheritanceCycle { ty_name, .. } => {

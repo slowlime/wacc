@@ -357,7 +357,9 @@ impl TypeVisitor<'_, '_, '_, '_> {
 
 impl<'buf> TypeVisitor<'_, '_, '_, 'buf> {
     fn class_index(&self) -> &ClassIndex<'buf> {
-        self.ctx.get_class(&self.class_name).expect("the current class is present in the context")
+        self.ctx
+            .get_class(&self.class_name)
+            .expect("the current class is present in the context")
     }
 
     fn inherits_from(&self, lhs: &ClassName<'buf>, rhs: &ClassName<'buf>) -> bool {
@@ -686,16 +688,11 @@ impl<'buf> TypeVisitor<'_, '_, '_, 'buf> {
         }
     }
 
-    fn check_case_arm_tys_related(
-        &self,
-        expr: &ast::Case<'buf>,
-        scrutinee_ty: &ResolvedTy<'buf>,
-    ) {
+    fn check_case_arm_tys_related(&self, expr: &ast::Case<'buf>, scrutinee_ty: &ResolvedTy<'buf>) {
         for arm in &expr.arms {
             let arm_ty = arm.binding_ty.unwrap_res_ty();
 
-            if !self.is_subtype(&arm_ty, scrutinee_ty) && !self.is_subtype(scrutinee_ty, &arm_ty)
-            {
+            if !self.is_subtype(&arm_ty, scrutinee_ty) && !self.is_subtype(scrutinee_ty, &arm_ty) {
                 self.diagnostics
                     .borrow_mut()
                     .warn()
@@ -825,19 +822,18 @@ impl<'buf> TypeVisitor<'_, '_, '_, 'buf> {
     fn check_forbidden_inheritance(&mut self, ty_name: &TyName<'buf>) {
         let Some(parent) = self.class_index().parent() else { return };
 
-        match *parent {
-            ClassName::Builtin(builtin @ (BuiltinClass::Int | BuiltinClass::String | BuiltinClass::Bool)) => {
-                self.diagnostics
-                    .borrow_mut()
-                    .error()
-                    .with_span_and_error(TypeckError::ForbiddenInheritance {
-                        ty_name: Box::new(ty_name.clone_static()),
-                        builtin,
-                    })
-                    .emit();
-            }
-
-            _ => {}
+        if let ClassName::Builtin(
+            builtin @ (BuiltinClass::Int | BuiltinClass::String | BuiltinClass::Bool),
+        ) = *parent
+        {
+            self.diagnostics
+                .borrow_mut()
+                .error()
+                .with_span_and_error(TypeckError::ForbiddenInheritance {
+                    ty_name: Box::new(ty_name.clone_static()),
+                    builtin,
+                })
+                .emit();
         }
     }
 }
