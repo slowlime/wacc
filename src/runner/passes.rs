@@ -143,6 +143,15 @@ pub fn validate_classes<'buf>(
     PassOutput::continue_with_output((classes, ty_ctx))
 }
 
+pub fn check_has_main_class<'buf>(
+    ctx: &mut RunnerCtx<'buf, '_>,
+    ty_ctx: TypeCtx<'buf>,
+) -> PassOutput<TypeCtx<'buf>> {
+    analysis::check_has_main_class(&mut ctx.diagnostics, &ty_ctx);
+
+    ctx.stop_if_errors(ty_ctx)
+}
+
 pub fn dump_types_if_asked<'buf>(
     ctx: &mut RunnerCtx<'buf, '_>,
     classes: Vec<Class<'buf>>,

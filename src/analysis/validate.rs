@@ -1,13 +1,89 @@
 use std::borrow::Borrow;
-use std::fmt::Debug;
+use std::error::Error;
+use std::fmt::{self, Debug, Display};
 
-use crate::ast::ty::{HasTy, TyExt, BuiltinClass};
+use crate::ast::ty::{BuiltinClass, FunctionTy, HasTy, TyExt};
 use crate::ast::{self, AstRecurse, Class, Visitor as AstVisitor};
+use crate::errors::{DiagnosticMessage, Diagnostics};
 use crate::position::{HasSpan, Span};
 use crate::source::Source;
+use crate::util::CloneStatic;
 
+use super::typectx::{ClassName, DefinitionLocation};
 use super::TypeCtx;
-use super::typectx::ClassName;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NoEntryPointError {
+    NoMainClass,
+
+    NoMainMethod {
+        class_location: DefinitionLocation,
+    },
+
+    MainMethodInherited {
+        main_class_location: DefinitionLocation,
+        def_class: ClassName<'static>,
+        def_location: DefinitionLocation,
+    },
+
+    InvalidMainSignature {
+        method_location: DefinitionLocation,
+        method_ty: FunctionTy<'static>,
+    },
+}
+
+impl NoEntryPointError {
+    pub fn span(&self) -> Option<&Span> {
+        match self {
+            Self::NoMainClass => None,
+            Self::NoMainMethod { class_location } => class_location.span(),
+            Self::MainMethodInherited {
+                main_class_location,
+                ..
+            } => main_class_location.span(),
+            Self::InvalidMainSignature {
+                method_location, ..
+            } => method_location.span(),
+        }
+    }
+}
+
+impl Display for NoEntryPointError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NoMainClass => write!(f, "no `Main` class found"),
+
+            Self::NoMainMethod { .. } => {
+                write!(f, "the `Main` class must define a method named `main`")
+            }
+
+            Self::MainMethodInherited { def_class, .. } => {
+                write!(
+                    f,
+                    "the `main` method is inherited from `{}`; must be defined in the `Main` class",
+                    def_class
+                )
+            }
+
+            Self::InvalidMainSignature { .. } => {
+                write!(f, "the method `Main.main` has an invalid signature")
+            }
+        }
+    }
+}
+
+impl Error for NoEntryPointError {}
+
+impl From<NoEntryPointError> for DiagnosticMessage {
+    fn from(err: NoEntryPointError) -> DiagnosticMessage {
+        let message = DiagnosticMessage::new(err.to_string());
+
+        match err.span() {
+            Some(span) => message.with_span(span.clone()),
+            None => message,
+        }
+    }
+}
 
 trait AssertResolved {
     fn assert_resolved(&self, source: &Source<'_>, span: &Span);
@@ -56,7 +132,10 @@ impl<'buf> Validator<'_, 'buf> {
 
             match (&name, index.parent()) {
                 (ClassName::Builtin(BuiltinClass::Object), Some(parent)) => {
-                    panic!("The built-in class `Object` must not inherit from {}", parent);
+                    panic!(
+                        "The built-in class `Object` must not inherit from {}",
+                        parent
+                    );
                 }
 
                 (_, None) => {
@@ -194,7 +273,60 @@ impl<'buf> ast::Visitor<'buf> for Validator<'_, 'buf> {
     }
 }
 
-pub fn validate_classes<'buf>(source: &Source<'buf>, ty_ctx: &TypeCtx<'buf>, classes: &[Class<'buf>]) {
-    let validator = Validator { classes, ty_ctx, source };
+pub fn validate_classes<'buf>(
+    source: &Source<'buf>,
+    ty_ctx: &TypeCtx<'buf>,
+    classes: &[Class<'buf>],
+) {
+    let validator = Validator {
+        classes,
+        ty_ctx,
+        source,
+    };
     validator.validate();
+}
+
+pub fn check_has_main_class<'buf>(diagnostics: &mut Diagnostics<'_>, ty_ctx: &TypeCtx<'buf>) {
+    let mut emit = |err: NoEntryPointError| {
+        diagnostics
+            .error()
+            .with_message(err.clone())
+            .with_source(Box::new(err))
+            .emit();
+    };
+
+    let class_name = b"Main".as_slice().into();
+
+    let Some(index) = ty_ctx.get_class(&class_name) else {
+        emit(NoEntryPointError::NoMainClass);
+
+        return;
+    };
+
+    let Some((main_def_class, method_location, method_ty)) = ty_ctx.get_method_ty(&class_name, b"main") else {
+        emit(NoEntryPointError::NoMainMethod {
+            class_location: index.location().clone(),
+        });
+
+        return;
+    };
+
+    if main_def_class != &class_name {
+        emit(NoEntryPointError::MainMethodInherited {
+            main_class_location: index.location().clone(),
+            def_class: main_def_class.clone_static(),
+            def_location: method_location.clone(),
+        });
+
+        return;
+    }
+
+    if !method_ty.params.is_empty() {
+        emit(NoEntryPointError::InvalidMainSignature {
+            method_location: method_location.clone(),
+            method_ty: method_ty.clone_static(),
+        });
+
+        return;
+    }
 }

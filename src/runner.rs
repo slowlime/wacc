@@ -79,13 +79,20 @@ macro_rules! return_if_stopped {
 
 fn run(mut ctx: RunnerCtx<'_, '_>) -> ExitCode {
     return_if_stopped!(ctx, passes::load_files(&mut ctx));
+
+    // lexical analysis
     let lexers = return_if_stopped!(ctx, passes::scan_files(&mut ctx));
     let lexers = return_if_stopped!(ctx, passes::dump_tokens_if_asked(&mut ctx, lexers));
+
+    // syntax analysis
     let asts = return_if_stopped!(ctx, passes::parse_all(&mut ctx, lexers));
     let asts = return_if_stopped!(ctx, passes::dump_asts_if_asked(&mut ctx, asts));
     let classes = return_if_stopped!(ctx, passes::merge_asts(&mut ctx, asts));
+
+    // semantic analysis
     let (classes, ty_ctx) = return_if_stopped!(ctx, passes::typeck(&mut ctx, classes));
     let (classes, ty_ctx) = return_if_stopped!(ctx, passes::validate_classes(&mut ctx, classes, ty_ctx));
+    let ty_ctx = return_if_stopped!(ctx, passes::check_has_main_class(&mut ctx, ty_ctx));
     let classes = return_if_stopped!(ctx, passes::dump_types_if_asked(&mut ctx, classes));
 
     let (_, _) = (classes, ty_ctx);

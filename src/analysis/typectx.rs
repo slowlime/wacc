@@ -10,6 +10,7 @@ use itertools::Itertools;
 use crate::ast::ty::{BuiltinClass, FunctionTy, ResolvedTy, Ty, UnresolvedTy};
 use crate::ast::TyName;
 use crate::position::Span;
+use crate::try_match;
 use crate::util::slice_formatter;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -513,6 +514,12 @@ pub enum BindingKind {
 pub enum DefinitionLocation {
     UserCode(Span),
     Synthetic(BuiltinClass),
+}
+
+impl DefinitionLocation {
+    pub fn span(&self) -> Option<&Span> {
+        try_match!(self, Self::UserCode(span) => span)
+    }
 }
 
 impl From<Span> for DefinitionLocation {

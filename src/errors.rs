@@ -25,10 +25,14 @@ impl DiagnosticMessage {
         }
     }
 
-    pub fn with_span(span: Span, message: String) -> Self {
+    pub fn new_with_span(span: Span, message: String) -> Self {
+        Self::new(message).with_span(span)
+    }
+
+    pub fn with_span(self, span: Span) -> Self {
         Self {
             span: Some(span),
-            message,
+            ..self
         }
     }
 }
