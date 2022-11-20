@@ -108,14 +108,14 @@ impl<'buf> Iterator for Cursor<'buf> {
             HeadByte if c == b'\r' && self.peek() == Some(b'\n') => HeadByte,
 
             HeadByte if c == b'\n' || c == b'\r' => {
-                self.pos.line.checked_add(1).unwrap();
+                self.pos.line = self.pos.line.checked_add(1).unwrap();
                 self.pos.col = 1.try_into().unwrap();
 
                 HeadByte
             }
 
             HeadByte => {
-                self.pos.col.checked_add(1).unwrap();
+                self.pos.col = self.pos.col.checked_add(1).unwrap();
 
                 match c {
                     // `c` is a single-byte utf-8 sequence

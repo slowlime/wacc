@@ -1,5 +1,7 @@
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+use std::hash::Hash;
 use std::iter::successors;
 
 use itertools::{Either, Itertools};
@@ -221,7 +223,7 @@ pub(super) struct ClassResolverResult<'buf, 'cls> {
 }
 
 pub(super) struct ClassResolver<'dia, 'emt, 'buf, 'cls> {
-    diagnostics: &'dia mut Diagnostics<'emt>,
+    diagnostics: RefCell<&'dia mut Diagnostics<'emt>>,
     unrecognized_tys: Vec<UnrecognizedTy<'buf>>,
     classes: &'cls [Class<'buf>],
     class_names: HashSet<ClassName<'buf>>,
@@ -238,7 +240,7 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
             .collect::<HashSet<_>>();
 
         Self {
-            diagnostics,
+            diagnostics: RefCell::new(diagnostics),
             unrecognized_tys: vec![],
             classes,
             class_names,
@@ -257,7 +259,7 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
         let indexes = self
             .check_duplicate_classes(indexes, &mut excluded)
             .collect();
-        excluded.extend(self.add_to_ctx(indexes));
+        self.add_to_ctx(indexes, &mut excluded);
 
         ClassResolverResult {
             unrecognized_tys: self.unrecognized_tys,
@@ -267,7 +269,7 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
     }
 
     fn check_duplicate_classes(
-        &mut self,
+        &self,
         indexes: impl IntoIterator<Item = (&'cls TyName<'buf>, ClassIndex<'buf>)>,
         excluded: &mut HashSet<&'cls TyName<'buf>>,
     ) -> impl Iterator<Item = (&'cls TyName<'buf>, ClassIndex<'buf>)> {
@@ -283,6 +285,7 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
 
                 Entry::Occupied(entry) => {
                     self.diagnostics
+                        .borrow_mut()
                         .error()
                         .with_span_and_error(TypeckError::MultipleClassDefinition {
                             ty_name: Box::new(ty_name.clone_static()),
@@ -302,7 +305,8 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
     fn add_to_ctx(
         &mut self,
         ty_indexes: HashMap<&'cls TyName<'buf>, ClassIndex<'buf>>,
-    ) -> HashSet<&'cls TyName<'buf>> {
+        ignored: &mut HashSet<&'cls TyName<'buf>>,
+    ) {
         // perform a toposort on the indexes;
         // if a cycle is detected, remove the offending nodes and repeat
 
@@ -313,8 +317,11 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
 
         let name_map = ty_indexes
             .iter()
-            .map(|(&ty_name, _)| (ty_name.into(), ty_name))
+            .map(|(ty_name, _)| ty_name)
+            .chain(ignored.iter())
+            .map(|&ty_name| (ty_name.into(), ty_name))
             .collect::<HashMap<_, _>>();
+
         let mut indexes = Indexes {
             ty_indexes,
             name_map,
@@ -331,29 +338,30 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
         use State::*;
 
         fn get_parent<'a, 'buf>(
+            this: &'a ClassResolver<'_, '_, 'buf, '_>,
             indexes: &'a Indexes<'_, 'buf>,
-            name: &ClassName<'buf>,
+            name: &'a ClassName<'buf>,
         ) -> Option<&'a ClassName<'buf>> {
-            let ty_name = indexes
-                .name_map
-                .get(name)
-                .expect("all names have been resolvde");
+            let index = this.ctx.get_class(name).or_else(|| {
+                let ty_name = indexes
+                    .name_map
+                    .get(name)
+                    .expect("all names have been resolved");
 
-            indexes
-                .ty_indexes
-                .get(ty_name)
-                .expect("all names have been resolved")
-                .parent()
+                indexes.ty_indexes.get(ty_name)
+            });
+
+            index.expect("all names have been resolved").parent()
         }
 
         fn handle_cycle<'a, 'buf, 'cls>(
-            this: &mut ClassResolver<'_, '_, 'buf, 'cls>,
+            this: &ClassResolver<'_, '_, 'buf, 'cls>,
             offending: &'a ClassName<'buf>,
             ignored: &mut HashSet<&'cls TyName<'buf>>,
             indexes: &'a Indexes<'cls, 'buf>,
         ) {
             let cycle = successors(Some(offending), |node| {
-                let parent = get_parent(indexes, node)
+                let parent = get_parent(this, indexes, node)
                     .expect("a class participating in the cycle must have a parent");
 
                 Some(parent).filter(|&parent| parent != offending)
@@ -379,6 +387,7 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
             let cycle = cycle.into_iter().map(ClassName::clone_static).collect();
 
             this.diagnostics
+                .borrow_mut()
                 .error()
                 .with_span_and_error(TypeckError::InheritanceCycle {
                     ty_name: Box::new(ty_name.clone_static()),
@@ -387,13 +396,15 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
                 .emit();
         }
 
-        let mut ignored: HashSet<&'cls TyName<'buf>> = HashSet::new();
-
         let sorted: Vec<ClassName<'buf>> = 'outer: loop {
             let mut visited = self
                 .class_names
                 .iter()
                 .map(|name| {
+                    if self.ctx.get_class(name).is_some() {
+                        return (name.clone(), Unvisited);
+                    }
+
                     let ty_name = indexes
                         .name_map
                         .get(name)
@@ -414,6 +425,7 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
 
             for &ty_name in indexes.ty_indexes.keys() {
                 let name = ty_name.into();
+                let mut chain = vec![];
 
                 match visited[&name] {
                     Ignored | Visited => continue,
@@ -437,7 +449,7 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
                         discover(&mut stack, &mut visited, name);
 
                         while let Some(name) = stack.pop() {
-                            match get_parent(&indexes, &name)
+                            match get_parent(self, &indexes, &name)
                                 .map(|parent| (parent, visited[parent]))
                             {
                                 None | Some((_, Ignored | Visited)) => {}
@@ -446,17 +458,22 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
                                 }
 
                                 Some((parent, Discovered)) => {
-                                    handle_cycle(self, parent, &mut ignored, &indexes);
+                                    handle_cycle(self, parent, ignored, &indexes);
 
                                     continue 'outer;
                                 }
                             }
 
                             *visited.get_mut(&name).unwrap() = Visited;
-                            sorted.push(name.clone());
+
+                            if self.ctx.get_class(&name).is_none() {
+                                chain.push(name.clone());
+                            }
                         }
                     }
                 }
+
+                sorted.extend(chain.into_iter().rev());
             }
 
             break sorted;
@@ -473,8 +490,6 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
                 .expect("toposort does not add new names");
             self.ctx.add_class(name, index);
         }
-
-        ignored
     }
 
     /// Resolves a type name using the list of available classes.
@@ -502,6 +517,7 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
 
                 SelfTypeAllowed::No(position) => {
                     self.diagnostics
+                        .borrow_mut()
                         .error()
                         .with_span_and_error(TypeckError::IllegalSelfType {
                             ty_name: Box::new(ty_name.clone_static()),
@@ -546,16 +562,33 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
     {
         use std::collections::hash_map::Entry;
 
+        struct NameKey<'a, 'buf>(&'a Name<'buf>);
+
+        impl PartialEq for NameKey<'_, '_> {
+            fn eq(&self, other: &Self) -> bool {
+                self.0.as_slice() == other.0.as_slice()
+            }
+        }
+
+        impl Eq for NameKey<'_, '_> {}
+
+        impl Hash for NameKey<'_, '_> {
+            fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+                self.0.as_slice().hash(state);
+            }
+        }
+
         let mut map = HashMap::new();
 
         for (name, location, ty) in items {
-            match map.entry(name) {
+            match map.entry(NameKey(name)) {
                 Entry::Vacant(entry) => {
                     entry.insert((location, ty));
                 }
 
                 Entry::Occupied(entry) => {
                     self.diagnostics
+                        .borrow_mut()
                         .error()
                         .with_span_and_error(TypeckError::MultipleDefinition {
                             kind,
@@ -568,7 +601,7 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
         }
 
         map.into_iter()
-            .map(|(name, (location, ty))| (name.0.value.clone(), location, ty))
+            .map(|(NameKey(name), (location, ty))| (name.0.value.clone(), location, ty))
     }
 
     fn resolve_method<'a>(

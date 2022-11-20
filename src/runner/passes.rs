@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::io;
 
-use crate::analysis::{TypeCtx, TypeChecker, TypeckResult};
+use crate::analysis::{TypeChecker, TypeCtx, TypeckResult, self};
 use crate::ast::{Class, Program};
 use crate::parse::{Cursor, Lexer, Parser};
 use crate::position::HasSpan;
@@ -125,9 +125,21 @@ pub fn typeck<'buf>(
     classes: Vec<Class<'buf>>,
 ) -> PassOutput<(Vec<Class<'buf>>, TypeCtx<'buf>)> {
     let typeck = TypeChecker::new(&mut ctx.diagnostics, classes);
-    let TypeckResult { classes, ctx: ty_ctx } = typeck.resolve();
+    let TypeckResult {
+        classes,
+        ctx: ty_ctx,
+    } = typeck.resolve();
 
     ctx.stop_if_errors((classes, ty_ctx))
+}
+
+pub fn check_all_types_resolved<'buf>(
+    ctx: &mut RunnerCtx<'buf, '_>,
+    classes: Vec<Class<'buf>>,
+) -> PassOutput<Vec<Class<'buf>>> {
+    analysis::validate_classes(&ctx.source.borrow(), &classes);
+
+    PassOutput::continue_with_output(classes)
 }
 
 pub fn dump_types_if_asked<'buf>(
@@ -139,11 +151,20 @@ pub fn dump_types_if_asked<'buf>(
     }
 
     let format = ctx.config.output.format.unwrap_or(OutputFormat::Coolc);
-    let span = classes.iter().map(|class| class.span()).reduce(|lhs, rhs| {
-        Cow::Owned(lhs.convex_hull(&rhs))
-    }).expect("class array is not empty").into_owned();
+    let span = classes
+        .iter()
+        .map(|class| class.span())
+        .reduce(|lhs, rhs| Cow::Owned(lhs.convex_hull(&rhs)))
+        .map(Cow::into_owned);
 
-    let result = dump_ast(&ctx.source.borrow(), format, Program { classes, span }, io::stdout());
+    let Some(span) = span else { return PassOutput::stop_with_output(vec![]); };
+
+    let result = dump_ast(
+        &ctx.source.borrow(),
+        format,
+        Program { classes, span },
+        io::stdout(),
+    );
 
     if let Err(e) = result {
         ctx.diagnostics

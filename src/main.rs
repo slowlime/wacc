@@ -7,13 +7,14 @@ mod runner;
 pub mod source;
 pub mod util;
 
-use color_eyre::eyre::Report;
+use std::process::ExitCode;
+
 use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 use tracing_subscriber::prelude::*;
 
 const LOG_ENV_NAME: &str = "WACC_LOG";
 
-pub fn main() -> Result<(), Report> {
+pub fn main() -> ExitCode {
     let filter = EnvFilter::builder()
         .with_default_directive(LevelFilter::INFO.into())
         .with_env_var(LOG_ENV_NAME)
@@ -23,7 +24,5 @@ pub fn main() -> Result<(), Report> {
         .with(filter)
         .init();
 
-    runner::prepare_and_run();
-
-    Ok(())
+    runner::prepare_and_run()
 }

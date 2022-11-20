@@ -801,7 +801,14 @@ impl<'buf> TypeVisitor<'_, '_, '_, 'buf> {
             },
         );
 
-        self.bind(&binding.name, ty, binding_kind);
+        if let Some(ref mut init) = binding.init {
+            self.visit_expr(init);
+            self.check_expr_conforms(init, &ty);
+        }
+
+        self.bind(&binding.name, ty.clone(), binding_kind);
+        binding.ty = ty.into();
+
     }
 }
 

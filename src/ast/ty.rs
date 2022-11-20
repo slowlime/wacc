@@ -89,7 +89,27 @@ impl<'buf> TyExt<'buf> for Option<Ty<'buf>> {
     }
 
     fn is_resolved(&self) -> bool {
-        self.as_ref().map(Ty::is_resolved).unwrap_or(false)
+        self.as_ref().is_resolved()
+    }
+}
+
+impl<'buf> private::Sealed for Option<&Ty<'buf>> {}
+
+impl<'buf> TyExt<'buf> for Option<&Ty<'buf>> {
+    fn raw(&self) -> Option<Option<&UnresolvedTy<'buf>>> {
+        match self {
+            None => Some(None),
+            Some(Ty::Unresolved(ty)) => Some(Some(ty)),
+            Some(Ty::Resolved(_)) => None,
+        }
+    }
+
+    fn resolved(&self) -> Option<&ResolvedTy<'buf>> {
+        self.and_then(Ty::resolved)
+    }
+
+    fn is_resolved(&self) -> bool {
+        self.map(Ty::is_resolved).unwrap_or(false)
     }
 }
 

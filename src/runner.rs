@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::process::ExitCode;
 use std::rc::Rc;
 
 use crate::errors::Diagnostics;
@@ -58,27 +59,36 @@ impl RunnerCtx<'_, '_> {
 }
 
 macro_rules! return_if_stopped {
-    ($e:expr) => (match $e {
-        PassOutput { compilation_control: CompilationControl::Stop, .. } => return,
+    ($ctx:expr, $e:expr) => (match $e {
+        PassOutput { compilation_control: CompilationControl::Stop, .. } => {
+            return if $ctx.diagnostics.has_errors() {
+                ExitCode::FAILURE
+            } else {
+                ExitCode::SUCCESS
+            }
+        },
+
         PassOutput { output, .. } => output,
     });
 }
 
-fn run(mut ctx: RunnerCtx<'_, '_>) {
-    return_if_stopped!(passes::load_files(&mut ctx));
-    let lexers = return_if_stopped!(passes::scan_files(&mut ctx));
-    let lexers = return_if_stopped!(passes::dump_tokens_if_asked(&mut ctx, lexers));
-    let asts = return_if_stopped!(passes::parse_all(&mut ctx, lexers));
-    let asts = return_if_stopped!(passes::dump_asts_if_asked(&mut ctx, asts));
-    let classes = return_if_stopped!(passes::merge_asts(&mut ctx, asts));
-    let (classes, ty_ctx) = return_if_stopped!(passes::typeck(&mut ctx, classes));
-    let classes = return_if_stopped!(passes::dump_types_if_asked(&mut ctx, classes));
+fn run(mut ctx: RunnerCtx<'_, '_>) -> ExitCode {
+    return_if_stopped!(ctx, passes::load_files(&mut ctx));
+    let lexers = return_if_stopped!(ctx, passes::scan_files(&mut ctx));
+    let lexers = return_if_stopped!(ctx, passes::dump_tokens_if_asked(&mut ctx, lexers));
+    let asts = return_if_stopped!(ctx, passes::parse_all(&mut ctx, lexers));
+    let asts = return_if_stopped!(ctx, passes::dump_asts_if_asked(&mut ctx, asts));
+    let classes = return_if_stopped!(ctx, passes::merge_asts(&mut ctx, asts));
+    let (classes, ty_ctx) = return_if_stopped!(ctx, passes::typeck(&mut ctx, classes));
+    let classes = return_if_stopped!(ctx, passes::check_all_types_resolved(&mut ctx, classes));
+    let classes = return_if_stopped!(ctx, passes::dump_types_if_asked(&mut ctx, classes));
 
     let (_, _) = (classes, ty_ctx);
-    todo!()
+
+    ExitCode::SUCCESS
 }
 
-pub fn prepare_and_run() {
+pub fn prepare_and_run() -> ExitCode {
     let config = parse_args_or_exit();
     let mut source_buf = SourceBuffer::new();
     let source = Rc::new(RefCell::new(Source::new(&mut source_buf)));
@@ -99,5 +109,5 @@ pub fn prepare_and_run() {
         diagnostics,
     };
 
-    run(ctx);
+    return run(ctx);
 }
