@@ -133,13 +133,14 @@ pub fn typeck<'buf>(
     ctx.stop_if_errors((classes, ty_ctx))
 }
 
-pub fn check_all_types_resolved<'buf>(
+pub fn validate_classes<'buf>(
     ctx: &mut RunnerCtx<'buf, '_>,
     classes: Vec<Class<'buf>>,
-) -> PassOutput<Vec<Class<'buf>>> {
-    analysis::validate_classes(&ctx.source.borrow(), &classes);
+    ty_ctx: TypeCtx<'buf>,
+) -> PassOutput<(Vec<Class<'buf>>, TypeCtx<'buf>)> {
+    analysis::validate_classes(&ctx.source.borrow(), &ty_ctx, &classes);
 
-    PassOutput::continue_with_output(classes)
+    PassOutput::continue_with_output((classes, ty_ctx))
 }
 
 pub fn dump_types_if_asked<'buf>(

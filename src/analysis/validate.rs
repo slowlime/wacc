@@ -1,9 +1,13 @@
+use std::borrow::Borrow;
 use std::fmt::Debug;
 
-use crate::ast::ty::{HasTy, TyExt};
+use crate::ast::ty::{HasTy, TyExt, BuiltinClass};
 use crate::ast::{self, AstRecurse, Class, Visitor as AstVisitor};
 use crate::position::{HasSpan, Span};
 use crate::source::Source;
+
+use super::TypeCtx;
+use super::typectx::ClassName;
 
 trait AssertResolved {
     fn assert_resolved(&self, source: &Source<'_>, span: &Span);
@@ -26,13 +30,41 @@ where
 
 struct Validator<'a, 'buf> {
     source: &'a Source<'buf>,
+    ty_ctx: &'a TypeCtx<'buf>,
     classes: &'a [Class<'buf>],
 }
 
 impl<'buf> Validator<'_, 'buf> {
     fn validate(mut self) {
+        self.check_types_resolved();
+        self.check_object_is_maximum();
+    }
+
+    fn check_types_resolved(&mut self) {
         for class in self.classes {
             self.visit_class(class);
+        }
+    }
+
+    fn check_object_is_maximum(&self) {
+        for class in self.classes {
+            let name: ClassName<'_> = class.name.borrow().into();
+
+            let Some(index) = self.ty_ctx.get_class(&name) else {
+                panic!("Class {} is not present in the index", name);
+            };
+
+            match (&name, index.parent()) {
+                (ClassName::Builtin(BuiltinClass::Object), Some(parent)) => {
+                    panic!("The built-in class `Object` must not inherit from {}", parent);
+                }
+
+                (_, None) => {
+                    panic!("The class `{}` must have a parent class", name);
+                }
+
+                _ => {}
+            }
         }
     }
 
@@ -162,7 +194,7 @@ impl<'buf> ast::Visitor<'buf> for Validator<'_, 'buf> {
     }
 }
 
-pub fn validate_classes<'buf>(source: &Source<'buf>, classes: &[Class<'buf>]) {
-    let validator = Validator { classes, source };
+pub fn validate_classes<'buf>(source: &Source<'buf>, ty_ctx: &TypeCtx<'buf>, classes: &[Class<'buf>]) {
+    let validator = Validator { classes, ty_ctx, source };
     validator.validate();
 }

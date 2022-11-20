@@ -85,7 +85,7 @@ fn run(mut ctx: RunnerCtx<'_, '_>) -> ExitCode {
     let asts = return_if_stopped!(ctx, passes::dump_asts_if_asked(&mut ctx, asts));
     let classes = return_if_stopped!(ctx, passes::merge_asts(&mut ctx, asts));
     let (classes, ty_ctx) = return_if_stopped!(ctx, passes::typeck(&mut ctx, classes));
-    let classes = return_if_stopped!(ctx, passes::check_all_types_resolved(&mut ctx, classes));
+    let (classes, ty_ctx) = return_if_stopped!(ctx, passes::validate_classes(&mut ctx, classes, ty_ctx));
     let classes = return_if_stopped!(ctx, passes::dump_types_if_asked(&mut ctx, classes));
 
     let (_, _) = (classes, ty_ctx);
