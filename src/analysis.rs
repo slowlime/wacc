@@ -1,6 +1,8 @@
 mod class_resolver;
-mod error;
-mod typectx;
+pub mod error;
 mod typeck;
+mod typectx;
 
+pub use error::TypeckError;
 pub use typeck::{TypeChecker, TypeckResult};
+pub use typectx::TypeCtx;

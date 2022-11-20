@@ -13,7 +13,7 @@ use crate::analysis::error::{
 use crate::analysis::typectx::{
     BindErrorKind, Binding, BindingKind, BindingMap, ClassName, DefinitionLocation, TypeCtx,
 };
-use crate::ast::ty::{BuiltinClass, FunctionTy, HasTy, ResolvedTy, Ty, TyExt};
+use crate::ast::ty::{BuiltinClass, FunctionTy, ResolvedTy, UnwrapResolvedTy};
 use crate::ast::{self, AstRecurse, Class, Expr, Name, TyName, VisitorMut};
 use crate::errors::Diagnostics;
 use crate::position::HasSpan;
@@ -55,15 +55,15 @@ pub struct TypeckResult<'buf> {
     pub ctx: TypeCtx<'buf>,
 }
 
-pub struct TypeChecker<'dia, 'buf> {
-    diagnostics: &'dia mut Diagnostics,
+pub struct TypeChecker<'dia, 'emt, 'buf> {
+    diagnostics: &'dia mut Diagnostics<'emt>,
     classes: Vec<Class<'buf>>,
     unrecognized_tys: Vec<UnrecognizedTy<'buf>>,
     unrecognized_names: Vec<UnrecognizedName<'buf>>,
 }
 
-impl<'dia, 'buf> TypeChecker<'dia, 'buf> {
-    pub fn new(diagnostics: &'dia mut Diagnostics, classes: Vec<Class<'buf>>) -> Self {
+impl<'dia, 'emt, 'buf> TypeChecker<'dia, 'emt, 'buf> {
+    pub fn new(diagnostics: &'dia mut Diagnostics<'emt>, classes: Vec<Class<'buf>>) -> Self {
         Self {
             diagnostics,
             classes,
@@ -170,27 +170,6 @@ impl<'dia, 'buf> TypeChecker<'dia, 'buf> {
     }
 }
 
-trait UnwrapResolvedTy<'buf>: HasTy<'buf> {
-    fn unwrap_res_ty(&self) -> Cow<'_, ResolvedTy<'buf>>;
-}
-
-impl<'buf, T: HasTy<'buf>> UnwrapResolvedTy<'buf> for T {
-    fn unwrap_res_ty(&self) -> Cow<'_, ResolvedTy<'buf>> {
-        let resolved = match self
-            .ty()
-            .expect("unwrap_res_ty called on an uninferred type")
-        {
-            Cow::Borrowed(borrowed) => borrowed.resolved().map(Cow::Borrowed),
-            Cow::Owned(owned) => match owned {
-                Ty::Resolved(resolved) => Some(Cow::Owned(resolved)),
-                Ty::Unresolved(_) => None,
-            },
-        };
-
-        resolved.expect("unwrap_res_ty called on an unresolved type")
-    }
-}
-
 trait ResolvedTyExt<'buf> {
     fn to_builtin_ty(&self) -> Option<BuiltinClass>;
 
@@ -282,8 +261,8 @@ impl<'buf> From<Location<'buf>> for UnrecognizedNamePosition<'buf> {
     }
 }
 
-struct TypeVisitor<'a, 'dia, 'buf> {
-    diagnostics: RefCell<&'dia mut Diagnostics>,
+struct TypeVisitor<'a, 'dia, 'emt, 'buf> {
+    diagnostics: RefCell<&'dia mut Diagnostics<'emt>>,
     ctx: &'a mut TypeCtx<'buf>,
     bindings: BindingMap<'buf>,
     unrecognized_tys: RefCell<&'a mut Vec<UnrecognizedTy<'buf>>>,
@@ -292,7 +271,7 @@ struct TypeVisitor<'a, 'dia, 'buf> {
     location: Option<Location<'buf>>,
 }
 
-impl TypeVisitor<'_, '_, '_> {
+impl TypeVisitor<'_, '_, '_, '_> {
     pub fn with_scope<F, R>(&mut self, f: F) -> R
     where
         F: FnOnce(&mut Self) -> R,
@@ -372,7 +351,7 @@ impl TypeVisitor<'_, '_, '_> {
     }
 }
 
-impl<'buf> TypeVisitor<'_, '_, 'buf> {
+impl<'buf> TypeVisitor<'_, '_, '_, 'buf> {
     fn inherits_from(&self, lhs: &ClassName<'buf>, rhs: &ClassName<'buf>) -> bool {
         self.ctx.is_subtype(lhs, rhs)
     }
@@ -826,7 +805,7 @@ impl<'buf> TypeVisitor<'_, '_, 'buf> {
     }
 }
 
-impl<'buf> ast::VisitorMut<'buf> for TypeVisitor<'_, '_, 'buf> {
+impl<'buf> ast::VisitorMut<'buf> for TypeVisitor<'_, '_, '_, 'buf> {
     type Output = ();
 
     fn visit_program(&mut self, program: &mut ast::Program<'buf>) {
@@ -964,7 +943,16 @@ impl<'buf> ast::VisitorMut<'buf> for TypeVisitor<'_, '_, 'buf> {
 
                     None => {
                         // does not have to be deduped, emit right away
-                        todo!("emit and error")
+                        self.diagnostics
+                            .borrow_mut()
+                            .error()
+                            .with_span_and_error(TypeckError::UnknownMethod {
+                                class: Box::new(class_name.clone_static()),
+                                method: Box::new(expr.method.clone_static()),
+                            })
+                            .emit();
+
+                        ResolvedTy::Bottom
                     }
                 }
             }

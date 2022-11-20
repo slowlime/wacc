@@ -220,16 +220,16 @@ pub(super) struct ClassResolverResult<'buf, 'cls> {
     pub excluded: HashSet<&'cls TyName<'buf>>,
 }
 
-pub(super) struct ClassResolver<'dia, 'buf, 'cls> {
-    diagnostics: &'dia mut Diagnostics,
+pub(super) struct ClassResolver<'dia, 'emt, 'buf, 'cls> {
+    diagnostics: &'dia mut Diagnostics<'emt>,
     unrecognized_tys: Vec<UnrecognizedTy<'buf>>,
     classes: &'cls [Class<'buf>],
     class_names: HashSet<ClassName<'buf>>,
     ctx: TypeCtx<'buf>,
 }
 
-impl<'dia, 'buf, 'cls> ClassResolver<'dia, 'buf, 'cls> {
-    pub fn new(diagnostics: &'dia mut Diagnostics, classes: &'cls [Class<'buf>]) -> Self {
+impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
+    pub fn new(diagnostics: &'dia mut Diagnostics<'emt>, classes: &'cls [Class<'buf>]) -> Self {
         let ctx = builtin_ctx();
         let class_names = classes
             .iter()
@@ -347,7 +347,7 @@ impl<'dia, 'buf, 'cls> ClassResolver<'dia, 'buf, 'cls> {
         }
 
         fn handle_cycle<'a, 'buf, 'cls>(
-            this: &mut ClassResolver<'_, 'buf, 'cls>,
+            this: &mut ClassResolver<'_, '_, 'buf, 'cls>,
             offending: &'a ClassName<'buf>,
             ignored: &mut HashSet<&'cls TyName<'buf>>,
             indexes: &'a Indexes<'cls, 'buf>,

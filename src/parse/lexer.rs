@@ -218,7 +218,7 @@ impl<'buf> Lexer<'buf> {
     fn scan_ident_or_symbol(&mut self) -> ScanResult<'buf> {
         let ident = self.cursor.consume_while(|&c| is_ident_continuation(c));
 
-        Ok(scan_symbol(ident, true).unwrap_or(TokenValue::Ident(ident)))
+        Ok(scan_symbol(ident, true).unwrap_or(TokenValue::Ident(Cow::Borrowed(ident))))
     }
 
     fn scan_string(&mut self) -> ScanResult<'buf> {

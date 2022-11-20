@@ -273,6 +273,27 @@ impl<'buf> HasExplicitTy<'buf> for Ty<'buf> {
     }
 }
 
+pub trait UnwrapResolvedTy<'buf>: HasTy<'buf> {
+    fn unwrap_res_ty(&self) -> Cow<'_, ResolvedTy<'buf>>;
+}
+
+impl<'buf, T: HasTy<'buf>> UnwrapResolvedTy<'buf> for T {
+    fn unwrap_res_ty(&self) -> Cow<'_, ResolvedTy<'buf>> {
+        let resolved = match self
+            .ty()
+            .expect("unwrap_res_ty called on an uninferred type")
+        {
+            Cow::Borrowed(borrowed) => borrowed.resolved().map(Cow::Borrowed),
+            Cow::Owned(owned) => match owned {
+                Ty::Resolved(resolved) => Some(Cow::Owned(resolved)),
+                Ty::Unresolved(_) => None,
+            },
+        };
+
+        resolved.expect("unwrap_res_ty called on an unresolved type")
+    }
+}
+
 mod private {
     pub trait Sealed {}
 }

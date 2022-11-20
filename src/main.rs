@@ -3,11 +3,10 @@ pub mod ast;
 pub mod errors;
 pub mod parse;
 pub mod position;
+mod runner;
 pub mod source;
-mod ui;
 pub mod util;
 
-use clap::Parser as ClapParser;
 use color_eyre::eyre::Report;
 use tracing_subscriber::filter::{EnvFilter, LevelFilter};
 use tracing_subscriber::prelude::*;
@@ -24,5 +23,7 @@ pub fn main() -> Result<(), Report> {
         .with(filter)
         .init();
 
-    ui::WaccCli::parse().run()
+    runner::prepare_and_run();
+
+    Ok(())
 }

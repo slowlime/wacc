@@ -55,6 +55,10 @@ impl<'buf> Source<'buf> {
     pub fn get(&self, id: SourceId) -> Option<&SourceFile<'buf>> {
         self.files.get(usize::from(id.0) - 1)
     }
+
+    pub fn iter(&self) -> impl Iterator<Item = &SourceFile<'buf>> {
+        self.files.iter()
+    }
 }
 
 impl<'buf> SourceFile<'buf> {

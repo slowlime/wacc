@@ -39,6 +39,12 @@ impl Display for DiagnosticMessage {
     }
 }
 
+impl From<String> for DiagnosticMessage {
+    fn from(s: String) -> DiagnosticMessage {
+        DiagnosticMessage::new(s)
+    }
+}
+
 #[derive(Debug)]
 pub struct Diagnostic {
     pub level: Level,
@@ -59,8 +65,8 @@ impl Error for Diagnostic {
 }
 
 #[must_use = "DiagnosticBuilder is useless unless emitted"]
-pub struct DiagnosticBuilder<'a> {
-    owner: &'a mut Diagnostics,
+pub struct DiagnosticBuilder<'a, 'e> {
+    owner: &'a mut Diagnostics<'e>,
     level: Level,
     message: Option<DiagnosticMessage>,
     source: Option<Box<dyn Error + 'static>>,
@@ -70,8 +76,8 @@ pub trait SpannedError: Error + HasSpan {}
 
 impl<T: Error + HasSpan> SpannedError for T {}
 
-impl<'a> DiagnosticBuilder<'a> {
-    fn new(owner: &'a mut Diagnostics, level: Level) -> Self {
+impl<'a, 'e> DiagnosticBuilder<'a, 'e> {
+    fn new(owner: &'a mut Diagnostics<'e>, level: Level) -> Self {
         Self {
             owner,
             level,
@@ -86,6 +92,13 @@ impl<'a> DiagnosticBuilder<'a> {
         self.message = Some(message);
 
         self
+    }
+
+    pub fn with_source(self, source: Box<dyn Error + 'static>) -> Self {
+        Self {
+            source: Some(source),
+            ..self
+        }
     }
 
     /// Uses the `error` to fill in the following details of the diagnostic to be emitted:
@@ -118,43 +131,58 @@ impl<'a> DiagnosticBuilder<'a> {
     }
 }
 
-pub struct Diagnostics {
+fn null_emitter(_: &Diagnostic) {}
+
+pub struct Diagnostics<'e> {
     diagnostics: Vec<Diagnostic>,
+    emitter: Box<dyn FnMut(&Diagnostic) + 'e>,
+    has_errors: bool,
 }
 
-impl Diagnostics {
+impl<'e> Diagnostics<'e> {
     pub fn new() -> Self {
         Self {
             diagnostics: vec![],
+            emitter: Box::new(null_emitter),
+            has_errors: false,
         }
     }
 
-    pub fn with_level(&mut self, level: Level) -> DiagnosticBuilder<'_> {
+    pub fn set_emitter(&mut self, emitter: Box<dyn FnMut(&Diagnostic) + 'e>) {
+        self.emitter = emitter;
+    }
+
+    pub fn has_errors(&self) -> bool {
+        self.has_errors
+    }
+
+    pub fn with_level(&mut self, level: Level) -> DiagnosticBuilder<'_, 'e> {
         DiagnosticBuilder::new(self, level)
     }
 
-    pub fn fatal(&mut self) -> DiagnosticBuilder<'_> {
+    pub fn fatal(&mut self) -> DiagnosticBuilder<'_, 'e> {
         self.with_level(Level::Fatal)
     }
 
-    pub fn error(&mut self) -> DiagnosticBuilder<'_> {
+    pub fn error(&mut self) -> DiagnosticBuilder<'_, 'e> {
         self.with_level(Level::Error)
     }
 
-    pub fn warn(&mut self) -> DiagnosticBuilder<'_> {
+    pub fn warn(&mut self) -> DiagnosticBuilder<'_, 'e> {
         self.with_level(Level::Warn)
     }
 
-    pub fn info(&mut self) -> DiagnosticBuilder<'_> {
+    pub fn info(&mut self) -> DiagnosticBuilder<'_, 'e> {
         self.with_level(Level::Info)
     }
 
     fn emit(&mut self, diagnostic: Diagnostic) {
+        self.has_errors = diagnostic.level <= Level::Error;
         self.diagnostics.push(diagnostic);
     }
 }
 
-impl Default for Diagnostics {
+impl Default for Diagnostics<'_> {
     fn default() -> Self {
         Self::new()
     }

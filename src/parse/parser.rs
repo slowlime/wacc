@@ -11,6 +11,7 @@ use crate::ast::{self, BinOpKind, Expr, Name, TyName, UnOpKind};
 use crate::parse::lexer::{Lexer, LexerError};
 use crate::parse::token::{Symbol, Token, TokenType};
 use crate::position::{HasSpan, Span, Spanned};
+use crate::util::CloneStatic;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum ParserError<'buf> {
@@ -80,6 +81,21 @@ impl Error for ParserError<'_> {
         match self {
             Self::LexerError(err) => Some(err),
             _ => None,
+        }
+    }
+}
+
+impl CloneStatic<ParserError<'static>> for ParserError<'_> {
+    fn clone_static(&self) -> ParserError<'static> {
+        match self {
+            Self::UnexpectedToken { expected, actual } => ParserError::UnexpectedToken {
+                expected: expected.clone_static(),
+                actual: actual.clone_static(),
+            },
+
+            Self::UppercasedName(ty_name) => ParserError::UppercasedName(ty_name.clone_static()),
+            Self::LowercasedTyName(name) => ParserError::LowercasedTyName(name.clone_static()),
+            Self::LexerError(e) => ParserError::LexerError(e.clone()),
         }
     }
 }

@@ -180,6 +180,11 @@ pub enum TypeckError {
 
     UnrecognizedName(Box<UnrecognizedName<'static>>),
 
+    UnknownMethod {
+        class: Box<ClassName<'static>>,
+        method: Box<Name<'static>>,
+    },
+
     InvalidNumberOfArguments {
         call_span: Span,
         expected_count: usize,
@@ -247,6 +252,15 @@ impl Display for TypeckError {
                 let UnrecognizedName { name, .. } = err.deref();
 
                 write!(f, "unrecognized name `{}`", name)
+            }
+
+            Self::UnknownMethod { class, method } => {
+                write!(
+                    f,
+                    "class `{}` does not have a method named `{}`",
+                    class,
+                    method,
+                )
             }
 
             Self::InvalidNumberOfArguments {
@@ -337,6 +351,7 @@ impl HasSpan for TypeckError {
             Self::InheritanceCycle { ty_name, .. } => ty_name.span(),
             Self::MismatchedTypes(err) => Cow::Borrowed(&err.span),
             Self::UnrecognizedName(err) => err.name.span(),
+            Self::UnknownMethod { method, .. } => method.span(),
             Self::InvalidNumberOfArguments { call_span, .. } => Cow::Borrowed(call_span),
             Self::UnrelatedTypesInCase(err) => Cow::Borrowed(&err.arm_span),
             Self::CaseArmSubsumed(err) => Cow::Borrowed(&err.subsumed_arm_span),

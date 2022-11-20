@@ -8,7 +8,7 @@ use phf::phf_map;
 
 use crate::position::{HasSpan, Span, Spanned};
 use crate::try_match;
-use crate::util::slice_formatter;
+use crate::util::{slice_formatter, CloneStatic};
 
 pub const BACKSPACE: u8 = 8;
 pub const VERTICAL_TAB: u8 = 11;
@@ -29,6 +29,15 @@ impl Token<'_> {
 impl HasSpan for Token<'_> {
     fn span(&self) -> Cow<'_, Span> {
         Cow::Borrowed(&self.span)
+    }
+}
+
+impl CloneStatic<Token<'static>> for Token<'_> {
+    fn clone_static(&self) -> Token<'static> {
+        Token {
+            span: self.span.clone(),
+            value: self.value.clone_static(),
+        }
     }
 }
 
@@ -61,7 +70,7 @@ impl Display for TokenType {
 pub enum TokenValue<'buf> {
     Int(i32),
     Symbol(Symbol),
-    Ident(&'buf [u8]),
+    Ident(Cow<'buf, [u8]>),
     String(Cow<'buf, [u8]>),
     Eof,
 }
@@ -86,6 +95,18 @@ impl fmt::Debug for TokenValue<'_> {
             Self::Ident(id) => f.debug_tuple("Ident").field(&slice_formatter(id)).finish(),
             Self::String(s) => f.debug_tuple("String").field(&slice_formatter(s.as_ref())).finish(),
             Self::Eof => f.debug_struct("Eof").finish(),
+        }
+    }
+}
+
+impl CloneStatic<TokenValue<'static>> for TokenValue<'_> {
+    fn clone_static(&self) -> TokenValue<'static> {
+        match self {
+            Self::Int(value) => TokenValue::Int(*value),
+            Self::Symbol(sym) => TokenValue::Symbol(*sym),
+            Self::Ident(id) => TokenValue::Ident(id.clone_static()),
+            Self::String(s) => TokenValue::String(s.clone_static()),
+            Self::Eof => TokenValue::Eof,
         }
     }
 }
@@ -119,7 +140,7 @@ impl<'buf> TryFrom<Token<'buf>> for Spanned<Cow<'buf, [u8]>> {
         Ok(Spanned {
             span: token.span,
             value: match token.value {
-                TokenValue::Ident(id) => id.into(),
+                TokenValue::Ident(id) => id,
                 TokenValue::String(s) => s,
                 _ => return Err(()),
             },
