@@ -169,6 +169,11 @@ pub enum TypeckError {
         builtin: BuiltinClass,
     },
 
+    ForbiddenInheritance {
+        ty_name: Box<TyName<'static>>,
+        builtin: BuiltinClass,
+    },
+
     InheritanceCycle {
         ty_name: Box<TyName<'static>>,
         cycle: Vec<ClassName<'static>>,
@@ -222,6 +227,10 @@ impl Display for TypeckError {
 
             Self::BuiltinRedefined { builtin, .. } => {
                 write!(f, "redefinition of the built-in class `{}`", builtin)
+            }
+
+            Self::ForbiddenInheritance { ty_name: class, builtin } => {
+                write!(f, "class `{}` inherits from the built-in class `{}`, which is forbidden", class, builtin)
             }
 
             Self::InheritanceCycle { ty_name, .. } => {
@@ -345,6 +354,7 @@ impl HasSpan for TypeckError {
             Self::UnrecognizedTy(err) => err.ty_name.span(),
             Self::IllegalSelfType { ty_name, .. } => ty_name.span(),
             Self::BuiltinRedefined { ty_name, .. } => ty_name.span(),
+            Self::ForbiddenInheritance { ty_name, .. } => ty_name.span(),
             Self::InheritanceCycle { ty_name, .. } => ty_name.span(),
             Self::MismatchedTypes(err) => Cow::Borrowed(&err.span),
             Self::UnrecognizedName(err) => err.name.span(),

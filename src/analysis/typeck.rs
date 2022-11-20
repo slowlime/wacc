@@ -20,6 +20,8 @@ use crate::position::HasSpan;
 use crate::try_match;
 use crate::util::CloneStatic;
 
+use super::typectx::ClassIndex;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Variance {
     Contravariant,
@@ -331,6 +333,8 @@ impl TypeVisitor<'_, '_, '_, '_> {
         let supertys = self
             .ctx
             .inheritance_chain(&self.class_name)
+            // skip ourselves
+            .skip(1)
             .collect::<Vec<_>>();
 
         supertys
@@ -352,6 +356,10 @@ impl TypeVisitor<'_, '_, '_, '_> {
 }
 
 impl<'buf> TypeVisitor<'_, '_, '_, 'buf> {
+    fn class_index(&self) -> &ClassIndex<'buf> {
+        self.ctx.get_class(&self.class_name).expect("the current class is present in the context")
+    }
+
     fn inherits_from(&self, lhs: &ClassName<'buf>, rhs: &ClassName<'buf>) -> bool {
         self.ctx.is_subtype(lhs, rhs)
     }
@@ -464,7 +472,7 @@ impl<'buf> TypeVisitor<'_, '_, '_, 'buf> {
         if let Err(e) = self
             .bindings
             .innermost_mut()
-            .bind(name.0.value.clone(), binding)
+            .bind_if_empty(name.0.value.clone(), binding)
         {
             match e.kind {
                 BindErrorKind::DoubleDefinition { previous } => self
@@ -681,12 +689,12 @@ impl<'buf> TypeVisitor<'_, '_, '_, 'buf> {
     fn check_case_arm_tys_related(
         &self,
         expr: &ast::Case<'buf>,
-        scrutinee_ty: Cow<ResolvedTy<'buf>>,
+        scrutinee_ty: &ResolvedTy<'buf>,
     ) {
         for arm in &expr.arms {
             let arm_ty = arm.binding_ty.unwrap_res_ty();
 
-            if !self.is_subtype(&arm_ty, &scrutinee_ty) && !self.is_subtype(&scrutinee_ty, &arm_ty)
+            if !self.is_subtype(&arm_ty, scrutinee_ty) && !self.is_subtype(scrutinee_ty, &arm_ty)
             {
                 self.diagnostics
                     .borrow_mut()
@@ -694,7 +702,7 @@ impl<'buf> TypeVisitor<'_, '_, '_, 'buf> {
                     .with_span_and_error(TypeckError::UnrelatedTypesInCase(Box::new(
                         UnrelatedTypesInCase {
                             scrutinee_span: expr.scrutinee.span().into_owned(),
-                            scrutinee_ty: scrutinee_ty.clone().into_owned().clone_static(),
+                            scrutinee_ty: scrutinee_ty.clone_static(),
                             arm_span: arm.span.clone(),
                             arm_ty: arm_ty.clone().into_owned().clone_static(),
                         },
@@ -813,6 +821,25 @@ impl<'buf> TypeVisitor<'_, '_, '_, 'buf> {
         self.bind(&binding.name, ty.clone(), binding_kind);
         binding.ty = ty.into();
     }
+
+    fn check_forbidden_inheritance(&mut self, ty_name: &TyName<'buf>) {
+        let Some(parent) = self.class_index().parent() else { return };
+
+        match *parent {
+            ClassName::Builtin(builtin @ (BuiltinClass::Int | BuiltinClass::String | BuiltinClass::Bool)) => {
+                self.diagnostics
+                    .borrow_mut()
+                    .error()
+                    .with_span_and_error(TypeckError::ForbiddenInheritance {
+                        ty_name: Box::new(ty_name.clone_static()),
+                        builtin,
+                    })
+                    .emit();
+            }
+
+            _ => {}
+        }
+    }
 }
 
 impl<'buf> ast::VisitorMut<'buf> for TypeVisitor<'_, '_, '_, 'buf> {
@@ -826,6 +853,8 @@ impl<'buf> ast::VisitorMut<'buf> for TypeVisitor<'_, '_, '_, 'buf> {
         assert_eq!(ClassName::from(class.name.borrow()), self.class_name);
 
         self.with_scope(|this| {
+            this.check_forbidden_inheritance(&class.name);
+
             this.add_inherited_fields();
 
             // visit the fields first to populate the scope
@@ -948,7 +977,12 @@ impl<'buf> ast::VisitorMut<'buf> for TypeVisitor<'_, '_, '_, 'buf> {
                                 .emit();
                         }
 
-                        ret.reify_self_ty_with(&recv_ty).clone()
+                        let object_ty = match expr.receiver {
+                            ast::Receiver::Static { ref object, .. } => object.unwrap_res_ty(),
+                            _ => recv_ty,
+                        };
+
+                        ret.reify_self_ty_with(&object_ty).clone()
                     }
 
                     None => {
@@ -976,7 +1010,7 @@ impl<'buf> ast::VisitorMut<'buf> for TypeVisitor<'_, '_, '_, 'buf> {
         self.check_expr_conforms(&expr.antecedent, &BuiltinClass::Bool.into());
 
         let consequent_ty = expr.consequent.unwrap_res_ty();
-        let alternative_ty = expr.consequent.unwrap_res_ty();
+        let alternative_ty = expr.alternative.unwrap_res_ty();
         let ty = self.join_tys(&consequent_ty, &alternative_ty);
         expr.ty = Some(ty.into());
     }
@@ -1001,7 +1035,8 @@ impl<'buf> ast::VisitorMut<'buf> for TypeVisitor<'_, '_, '_, 'buf> {
         expr.recurse_mut(self);
 
         let scrutinee_ty = expr.scrutinee.unwrap_res_ty();
-        self.check_case_arm_tys_related(expr, scrutinee_ty);
+        let reified_scrutinee_ty = scrutinee_ty.reify_self_ty();
+        self.check_case_arm_tys_related(expr, reified_scrutinee_ty);
         self.check_case_subsumption(expr);
 
         let ty = expr
@@ -1095,7 +1130,9 @@ impl<'buf> ast::VisitorMut<'buf> for TypeVisitor<'_, '_, '_, 'buf> {
             &formal.ty_name,
             TyNameCtx {
                 variance: Variance::Invariant,
-                allow_self_ty: IllegalSelfTypePosition::Parameter.into(),
+                // actually it's forbidden here, but in that case ClassResolver should
+                // already have emitted an error
+                allow_self_ty: SelfTypeAllowed::Yes,
             },
         );
 
