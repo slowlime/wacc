@@ -1,10 +1,10 @@
-use std::io::{Write, self};
+use std::io::{self, Write};
 
 use crate::ast;
 use crate::ast::ty::{HasTy, ResolvedTy, Ty};
+use crate::parse::token::{write_escaped_string, Symbol, SymbolCategory, Token, TokenValue};
 use crate::parse::LexerError;
-use crate::parse::token::{Token, write_escaped_string, TokenValue, Symbol, SymbolCategory};
-use crate::position::{HasSpan, Span, PositionPath, Spanned};
+use crate::position::{HasSpan, PositionPath, Span, Spanned};
 use crate::source::Source;
 use crate::util::slice_formatter;
 
@@ -25,7 +25,11 @@ where
     }
 }
 
-fn dump_tokens_coolc<'buf, I>(source: &Source<'buf>, tokens: I, mut out: impl Write) -> io::Result<()>
+fn dump_tokens_coolc<'buf, I>(
+    source: &Source<'buf>,
+    tokens: I,
+    mut out: impl Write,
+) -> io::Result<()>
 where
     I: Iterator<Item = Result<Token<'buf>, LexerError>>,
 {
@@ -37,7 +41,14 @@ where
         .map(|token| token.span.start.src)
         .unwrap_or_else(|err| err.span().start.src);
     let name = match src_id {
-        Some(src_id) => format!("{}", source.get(src_id).expect("the span has a valid source id").path().display()),
+        Some(src_id) => format!(
+            "{}",
+            source
+                .get(src_id)
+                .expect("the span has a valid source id")
+                .path()
+                .display()
+        ),
         None => "<unknown>".to_owned(),
     };
     write!(out, "#name ")?;
@@ -131,8 +142,6 @@ fn dump_ast_coolc<'buf>(
     use ast::Visitor;
 
     struct Dumper<'src, W: Write> {
-        // a hack: visit_receiver needs to know the line when dumping Receiver::SelfType
-        call_span: Option<Span>,
         source: &'src Source<'src>,
         out: W,
         level: usize,
@@ -188,7 +197,7 @@ fn dump_ast_coolc<'buf>(
                     ResolvedTy::Function(ty) => write!(&mut this.out, ": {}", ty),
                     ResolvedTy::Bottom => write!(&mut this.out, ": {}", ty),
                     ResolvedTy::Untyped => write!(&mut this.out, ": {}", ty),
-                }
+                },
             })
         }
     }
@@ -323,9 +332,7 @@ fn dump_ast_coolc<'buf>(
             })?;
 
             self.with_nested(|this| {
-                this.call_span = Some(expr.span.clone());
                 this.visit_receiver(&expr.receiver)?;
-                this.call_span = None;
                 this.visit_name(&expr.method)?;
                 this.indented_line(|this| write!(&mut this.out, "("))?;
 
@@ -474,21 +481,26 @@ fn dump_ast_coolc<'buf>(
             use ast::Receiver;
 
             match recv {
-                Receiver::SelfType { .. } => {
+                Receiver::SelfType {
+                    method_name_span,
+                    ty,
+                } => {
                     // synthesize a "self" NameExpr
                     let mock_self = ast::Expr::Name(ast::NameExpr {
                         name: ast::Name(Spanned {
                             value: b"self".as_slice().into(),
-                            span: self.call_span.take().unwrap(),
+                            span: method_name_span.clone(),
                         }),
-                        ty: None,
+                        ty: Some(ty.clone()),
                     });
                     self.visit_expr(&mock_self)?;
                 }
 
                 Receiver::Dynamic(object) => self.visit_expr(object)?,
 
-                Receiver::Static { object, ty_name, .. } => {
+                Receiver::Static {
+                    object, ty_name, ..
+                } => {
                     self.visit_expr(object)?;
                     self.visit_ty_name(ty_name)?;
                 }
@@ -564,7 +576,6 @@ fn dump_ast_coolc<'buf>(
     }
 
     let mut dumper = Dumper {
-        call_span: None,
         source,
         out,
         level: 0,

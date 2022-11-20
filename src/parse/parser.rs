@@ -828,10 +828,13 @@ impl<'buf> Parser<'buf> {
     #[instrument(level = "trace", skip(self), ret)]
     fn parse_expr_self_call(&mut self) -> Result<Box<ast::Expr<'buf>>, ParserError<'buf>> {
         if self.matches_nth(1, Symbol::ParenLeft) {
+            let method_name_span = self.lexer.peek().unwrap().as_ref().unwrap().span.clone();
+
             self.parse_method_call(
                 None,
                 ast::Receiver::SelfType {
                     ty: UnresolvedTy::SelfType.into(),
+                    method_name_span,
                 },
             )
         } else {

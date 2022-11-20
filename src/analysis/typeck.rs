@@ -639,7 +639,11 @@ impl<'buf> TypeVisitor<'_, '_, '_, 'buf> {
 
         // https://github.com/rust-lang/rust-clippy/issues/8132
         #[allow(clippy::needless_collect)]
-        let inheritance_chain: Vec<_> = self.ctx.inheritance_chain(&self.class_name).skip(1).collect();
+        let inheritance_chain: Vec<_> = self
+            .ctx
+            .inheritance_chain(&self.class_name)
+            .skip(1)
+            .collect();
         let super_method = inheritance_chain
             .into_iter()
             .rev()
@@ -808,7 +812,6 @@ impl<'buf> TypeVisitor<'_, '_, '_, 'buf> {
 
         self.bind(&binding.name, ty.clone(), binding_kind);
         binding.ty = ty.into();
-
     }
 }
 
@@ -1106,7 +1109,7 @@ impl<'buf> ast::VisitorMut<'buf> for TypeVisitor<'_, '_, '_, 'buf> {
         recv.recurse_mut(self);
 
         match recv {
-            Receiver::SelfType { ty } => {
+            Receiver::SelfType { ty, .. } => {
                 *ty = self.make_self_ty().into();
             }
 

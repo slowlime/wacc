@@ -107,10 +107,12 @@ impl<'a, 'e> DiagnosticBuilder<'a, 'e> {
     /// - the message (unless already set)
     /// - the source
     pub fn with_span_and_error(mut self, error: impl SpannedError + 'static) -> Self {
-        self.message = self.message.or_else(|| Some(DiagnosticMessage {
-            span: Some(error.span().into_owned()),
-            message: format!("{}", error),
-        }));
+        self.message = self.message.or_else(|| {
+            Some(DiagnosticMessage {
+                span: Some(error.span().into_owned()),
+                message: format!("{}", error),
+            })
+        });
 
         self.source = Some(Box::new(error));
 

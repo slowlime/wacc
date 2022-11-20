@@ -4,7 +4,7 @@ use std::num::NonZeroU32;
 use std::path::Path;
 
 use crate::source::{Source, SourceFile, SourceId};
-use crate::util::{try_min, try_max};
+use crate::util::{try_max, try_min};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PositionPath<'src> {

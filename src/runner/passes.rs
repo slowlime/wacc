@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::io;
 
-use crate::analysis::{TypeChecker, TypeCtx, TypeckResult, self};
+use crate::analysis::{self, TypeChecker, TypeCtx, TypeckResult};
 use crate::ast::{Class, Program};
 use crate::parse::{Cursor, Lexer, Parser};
 use crate::position::HasSpan;

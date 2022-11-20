@@ -1,8 +1,8 @@
 use std::fmt::Debug;
 
 use crate::ast::ty::{HasTy, TyExt};
-use crate::ast::{self, Class, Visitor as AstVisitor, AstRecurse};
-use crate::position::{Span, HasSpan};
+use crate::ast::{self, AstRecurse, Class, Visitor as AstVisitor};
+use crate::position::{HasSpan, Span};
 use crate::source::Source;
 
 trait AssertResolved {
@@ -15,7 +15,11 @@ where
 {
     fn assert_resolved(&self, source: &Source<'_>, span: &Span) {
         if !self.is_resolved() {
-            panic!("Type {:?} (spanning {}) has not been resolved", self, span.display(source));
+            panic!(
+                "Type {:?} (spanning {}) has not been resolved",
+                self,
+                span.display(source)
+            );
         }
     }
 }
@@ -127,6 +131,7 @@ impl<'buf> ast::Visitor<'buf> for Validator<'_, 'buf> {
     }
 
     fn visit_receiver(&mut self, recv: &ast::Receiver<'buf>) -> Self::Output {
+        self.assert_resolved(&recv.span(), &recv.ty().as_deref());
         recv.recurse(self);
     }
 

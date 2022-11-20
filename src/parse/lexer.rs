@@ -5,8 +5,8 @@ use std::iter::FusedIterator;
 use std::num::{IntErrorKind, ParseIntError};
 
 use crate::parse::cursor::Cursor;
-use crate::position::{Position, Span, HasSpan};
-use crate::parse::token::{BACKSPACE, FORM_FEED, VERTICAL_TAB, Symbol, Token, TokenValue};
+use crate::parse::token::{Symbol, Token, TokenValue, BACKSPACE, FORM_FEED, VERTICAL_TAB};
+use crate::position::{HasSpan, Position, Span};
 use crate::try_match;
 
 type ScanResult<'buf> = Result<TokenValue<'buf>, PosLexerError>;
@@ -24,7 +24,11 @@ fn is_ident_continuation(c: u8) -> bool {
 }
 
 fn scan_symbol(s: &[u8], exact: bool) -> Option<TokenValue<'_>> {
-    let f = if exact { Symbol::parse_exact } else { Symbol::parse_prefix };
+    let f = if exact {
+        Symbol::parse_exact
+    } else {
+        Symbol::parse_prefix
+    };
 
     match f(s) {
         // boolean literals must start with a lowercase letter
@@ -354,14 +358,15 @@ impl<'buf> Iterator for Lexer<'buf> {
 
                 Some(c) => match scan_symbol(self.cursor.remaining(), false) {
                     Some(value) => {
-                        let n = try_match!(value, TokenValue::Symbol(s) => s.as_slice().len()).unwrap();
+                        let n =
+                            try_match!(value, TokenValue::Symbol(s) => s.as_slice().len()).unwrap();
                         self.cursor.consume_n(n);
 
                         Ok(value)
                     }
 
                     None => Err(self.create_error_at_pos(LexerErrorKind::UnrecognizedCharacter(c))),
-                }
+                },
             };
         };
 

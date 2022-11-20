@@ -24,7 +24,6 @@ impl Display for IllegalSelfTypePosition {
         write!(
             f,
             "{}{}",
-
             match self {
                 _ if !f.alternate() => "",
                 Self::ClassName => "a ",
@@ -33,7 +32,6 @@ impl Display for IllegalSelfTypePosition {
                 Self::StaticDispatch => "a ",
                 Self::CaseArm => "a ",
             },
-
             match self {
                 Self::ClassName => "class name position",
                 Self::Inherits => "inherits clause",
@@ -258,8 +256,7 @@ impl Display for TypeckError {
                 write!(
                     f,
                     "class `{}` does not have a method named `{}`",
-                    class,
-                    method,
+                    class, method,
                 )
             }
 

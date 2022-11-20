@@ -3,10 +3,10 @@ pub mod ty;
 use std::borrow::Cow;
 use std::fmt;
 
+use self::ty::{BuiltinClass, HasExplicitTy, HasTy, ResolvedTy, Ty};
 use crate::parse::token::Symbol;
 use crate::position::{HasSpan, Span, Spanned};
 use crate::util::{slice_formatter, CloneStatic};
-use self::ty::{HasExplicitTy, HasTy, Ty, BuiltinClass, ResolvedTy};
 
 pub trait AstRecurse<'buf> {
     fn recurse<V: Visitor<'buf, Output = ()>>(&self, visitor: &mut V);
@@ -367,7 +367,7 @@ pub struct TyName<'buf>(pub Name<'buf>);
 
 impl_clone_static!(|&self: TyName| TyName(self.0.clone_static()));
 
-impl_has_span!(|&self: TyName<'_>| &self.0.0.span);
+impl_has_span!(|&self: TyName<'_>| &self.0 .0.span);
 
 impl_recurse!(|self: TyName<'buf>, visitor| {
     const => visitor.visit_name(&self.0),
@@ -377,8 +377,8 @@ impl_recurse!(|self: TyName<'buf>, visitor| {
 impl fmt::Debug for TyName<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TyName")
-            .field("span", &self.0.0.span)
-            .field("value", &slice_formatter(&self.0.0.value))
+            .field("span", &self.0 .0.span)
+            .field("value", &slice_formatter(&self.0 .0.value))
             .finish()
     }
 }
@@ -696,7 +696,11 @@ pub struct Call<'buf> {
 impl_clone_static!(|&self: Call| Call {
     receiver: self.receiver.clone_static(),
     method: self.method.clone_static(),
-    args: self.args.iter().map(|arg| Box::new(arg.clone_static())).collect(),
+    args: self
+        .args
+        .iter()
+        .map(|arg| Box::new(arg.clone_static()))
+        .collect(),
     span: self.span.clone(),
     ty: self.ty.clone_static(),
 });
@@ -722,12 +726,13 @@ impl_recurse!(|self: Call<'buf>, visitor| {
 });
 
 impl_has_span!(Call<'_>);
-impl_has_ty!(? Call<'buf>);
+impl_has_ty!(?Call<'buf>);
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Receiver<'buf> {
     SelfType {
         ty: Ty<'buf>,
+        method_name_span: Span,
     },
 
     Dynamic(Box<Expr<'buf>>),
@@ -740,12 +745,20 @@ pub enum Receiver<'buf> {
 }
 
 impl_clone_static!(|&self: Receiver| match self {
-    Self::SelfType { ty } => Receiver::SelfType {
+    Self::SelfType {
+        ty,
+        method_name_span,
+    } => Receiver::SelfType {
         ty: ty.clone_static(),
+        method_name_span: method_name_span.clone(),
     },
 
     Self::Dynamic(expr) => Receiver::Dynamic(Box::new(expr.clone_static())),
-    Self::Static { object, ty_name, ty } => Receiver::Static {
+    Self::Static {
+        object,
+        ty_name,
+        ty,
+    } => Receiver::Static {
         object: Box::new(object.clone_static()),
         ty_name: ty_name.clone_static(),
         ty: ty.clone_static(),
@@ -774,8 +787,14 @@ impl_recurse!(|self: Receiver<'buf>, visitor| {
     },
 });
 
+impl_has_span!(&self: Receiver<'_> => match self {
+    Self::SelfType { method_name_span, .. } => Cow::Borrowed(method_name_span),
+    Self::Dynamic(expr) => expr.span(),
+    Self::Static { object, .. } => object.span(),
+});
+
 impl_has_ty!(? |&self: Receiver<'buf>| match self {
-    Self::SelfType { ty } => Some(Cow::Borrowed(ty)),
+    Self::SelfType { ty, .. } => Some(Cow::Borrowed(ty)),
     Self::Dynamic(expr) => expr.ty(),
     Self::Static { ty, .. } => Some(Cow::Borrowed(ty)),
 });
@@ -812,7 +831,7 @@ impl_recurse!(|self: If<'buf>, visitor| {
 });
 
 impl_has_span!(If<'_>);
-impl_has_ty!(? If<'buf>);
+impl_has_ty!(?If<'buf>);
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct While<'buf> {
@@ -849,7 +868,11 @@ pub struct Block<'buf> {
 }
 
 impl_clone_static!(|&self: Block| Block {
-    body: self.body.iter().map(|expr| Box::new(expr.clone_static())).collect(),
+    body: self
+        .body
+        .iter()
+        .map(|expr| Box::new(expr.clone_static()))
+        .collect(),
     span: self.span.clone(),
 });
 
@@ -928,7 +951,7 @@ impl_recurse!(|self: Case<'buf>, visitor| {
 });
 
 impl_has_span!(Case<'_>);
-impl_has_ty!(? Case<'buf>);
+impl_has_ty!(?Case<'buf>);
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct CaseArm<'buf> {
@@ -1015,7 +1038,7 @@ impl_recurse!(|self: BinOpExpr<'buf>, visitor| {
 });
 
 impl_has_span!(BinOpExpr<'_>);
-impl_has_ty!(? BinOpExpr<'buf>);
+impl_has_ty!(?BinOpExpr<'buf>);
 
 define_op_kind!(BinOpKind {
     Add => Plus,
@@ -1048,7 +1071,7 @@ impl_recurse!(|self: UnOpExpr<'buf>, visitor| {
 });
 
 impl_has_span!(UnOpExpr<'_>);
-impl_has_ty!(? UnOpExpr<'buf>);
+impl_has_ty!(?UnOpExpr<'buf>);
 
 define_op_kind!(UnOpKind {
     IsVoid => IsVoid,
@@ -1073,7 +1096,7 @@ impl_recurse!(|self: NameExpr<'buf>, visitor| {
 });
 
 impl_has_span!(&self: NameExpr<'_> => self.name.span());
-impl_has_ty!(? NameExpr<'buf>);
+impl_has_ty!(?NameExpr<'buf>);
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct IntLit(pub Spanned<i32>);

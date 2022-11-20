@@ -41,7 +41,8 @@ impl<'buf> Cursor<'buf> {
 
     /// Returns the position of the previously returned character.
     pub fn prev_pos(&self) -> Position {
-        self.prev_pos.unwrap_or_else(|| Position::with_source_id(self.source_id))
+        self.prev_pos
+            .unwrap_or_else(|| Position::with_source_id(self.source_id))
     }
 
     pub fn peek(&self) -> Option<u8> {

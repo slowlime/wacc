@@ -259,12 +259,20 @@ impl<'buf> ClassIndex<'buf> {
         self.parent.as_ref()
     }
 
-    pub fn methods(&self) -> impl Iterator<Item = (&Cow<'buf, [u8]>, &DefinitionLocation, &FunctionTy<'buf>)> {
-        self.methods.iter().map(|(name, (location, ty))| (name, location, ty))
+    pub fn methods(
+        &self,
+    ) -> impl Iterator<Item = (&Cow<'buf, [u8]>, &DefinitionLocation, &FunctionTy<'buf>)> {
+        self.methods
+            .iter()
+            .map(|(name, (location, ty))| (name, location, ty))
     }
 
-    pub fn fields(&self) -> impl Iterator<Item = (&Cow<'buf, [u8]>, &DefinitionLocation, &ResolvedTy<'buf>)> {
-        self.fields.iter().map(|(name, (location, ty))| (name, location, ty))
+    pub fn fields(
+        &self,
+    ) -> impl Iterator<Item = (&Cow<'buf, [u8]>, &DefinitionLocation, &ResolvedTy<'buf>)> {
+        self.fields
+            .iter()
+            .map(|(name, (location, ty))| (name, location, ty))
     }
 }
 
@@ -327,8 +335,7 @@ impl<'buf> TypeCtx<'buf> {
         &'a self,
         class_name: impl Into<&'a ClassName<'buf>>,
     ) -> impl Iterator<Item = (&'a ClassName<'buf>, &'a ClassIndex<'buf>)> {
-        const PRESENT_MESSAGE: &str =
-            "the iterator only returns entries present in the typectx";
+        const PRESENT_MESSAGE: &str = "the iterator only returns entries present in the typectx";
 
         let iter = successors(Some(class_name.into()), |name| {
             self.types.get(name).expect(PRESENT_MESSAGE).parent()

@@ -53,23 +53,28 @@ impl RunnerCtx<'_, '_> {
                 CompilationControl::Stop
             } else {
                 CompilationControl::Continue
-            }
+            },
         }
     }
 }
 
 macro_rules! return_if_stopped {
-    ($ctx:expr, $e:expr) => (match $e {
-        PassOutput { compilation_control: CompilationControl::Stop, .. } => {
-            return if $ctx.diagnostics.has_errors() {
-                ExitCode::FAILURE
-            } else {
-                ExitCode::SUCCESS
+    ($ctx:expr, $e:expr) => {
+        match $e {
+            PassOutput {
+                compilation_control: CompilationControl::Stop,
+                ..
+            } => {
+                return if $ctx.diagnostics.has_errors() {
+                    ExitCode::FAILURE
+                } else {
+                    ExitCode::SUCCESS
+                }
             }
-        },
 
-        PassOutput { output, .. } => output,
-    });
+            PassOutput { output, .. } => output,
+        }
+    };
 }
 
 fn run(mut ctx: RunnerCtx<'_, '_>) -> ExitCode {

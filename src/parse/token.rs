@@ -93,7 +93,10 @@ impl fmt::Debug for TokenValue<'_> {
             Self::Int(value) => f.debug_tuple("Int").field(value).finish(),
             Self::Symbol(sym) => f.debug_tuple("Symbol").field(sym).finish(),
             Self::Ident(id) => f.debug_tuple("Ident").field(&slice_formatter(id)).finish(),
-            Self::String(s) => f.debug_tuple("String").field(&slice_formatter(s.as_ref())).finish(),
+            Self::String(s) => f
+                .debug_tuple("String")
+                .field(&slice_formatter(s.as_ref()))
+                .finish(),
             Self::Eof => f.debug_struct("Eof").finish(),
         }
     }
