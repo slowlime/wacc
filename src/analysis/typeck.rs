@@ -337,17 +337,26 @@ impl TypeVisitor<'_, '_, '_, '_> {
             .skip(1)
             .collect::<Vec<_>>();
 
+        let self_ty = self.make_self_ty();
+
         supertys
             .into_iter()
             .rev()
             .flat_map(|(_, index)| index.fields())
             .for_each(|(name, location, ty)| {
+                // all the inherited fields of type `SELF_TYPE` must be resolved to `SELF_TYPE[C]`
+                let ty = if ty.is_self_ty() {
+                    self_ty.clone()
+                } else {
+                    ty.clone()
+                };
+
                 // ignore the error here: it'll get emitted while typecking the offending class
                 let _ = self.bindings.innermost_mut().bind_if_empty(
                     name.clone(),
                     Binding {
                         kind: BindingKind::Field { inherited: true },
-                        ty: ty.clone(),
+                        ty,
                         location: location.clone(),
                     },
                 );
