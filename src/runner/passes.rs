@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::io;
 
-use crate::analysis::{self, TypeChecker, TypeCtx, TypeckResult};
+use crate::analysis::{self, TypeChecker, TypeCtx, TypeckResult, ClassName};
 use crate::ast::{Class, Program};
 use crate::parse::{Cursor, Lexer, Parser};
 use crate::position::HasSpan;
@@ -123,14 +123,15 @@ pub fn merge_asts<'buf>(
 pub fn typeck<'buf>(
     ctx: &mut RunnerCtx<'buf, '_>,
     classes: Vec<Class<'buf>>,
-) -> PassOutput<(Vec<Class<'buf>>, TypeCtx<'buf>)> {
+) -> PassOutput<(Vec<Class<'buf>>, Vec<ClassName<'buf>>, TypeCtx<'buf>)> {
     let typeck = TypeChecker::new(&mut ctx.diagnostics, classes);
     let TypeckResult {
         classes,
         ctx: ty_ctx,
+        sorted,
     } = typeck.resolve();
 
-    ctx.stop_if_errors((classes, ty_ctx))
+    ctx.stop_if_errors((classes, sorted, ty_ctx))
 }
 
 pub fn validate_classes<'buf>(

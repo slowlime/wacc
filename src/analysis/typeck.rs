@@ -55,6 +55,7 @@ struct TyNameCtx {
 pub struct TypeckResult<'buf> {
     pub classes: Vec<Class<'buf>>,
     pub ctx: TypeCtx<'buf>,
+    pub sorted: Vec<ClassName<'buf>>,
 }
 
 pub struct TypeChecker<'dia, 'emt, 'buf> {
@@ -80,6 +81,7 @@ impl<'dia, 'emt, 'buf> TypeChecker<'dia, 'emt, 'buf> {
             unrecognized_tys,
             mut ctx,
             excluded,
+            sorted,
         } = method_resolver.resolve();
 
         let excluded: HashSet<_> = excluded.into_iter().cloned().collect();
@@ -107,6 +109,7 @@ impl<'dia, 'emt, 'buf> TypeChecker<'dia, 'emt, 'buf> {
         TypeckResult {
             classes: self.classes,
             ctx,
+            sorted,
         }
     }
 

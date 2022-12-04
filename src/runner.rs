@@ -90,7 +90,7 @@ fn run(mut ctx: RunnerCtx<'_, '_>) -> ExitCode {
     let classes = return_if_stopped!(ctx, passes::merge_asts(&mut ctx, asts));
 
     // semantic analysis
-    let (classes, ty_ctx) = return_if_stopped!(ctx, passes::typeck(&mut ctx, classes));
+    let (classes, sorted, ty_ctx) = return_if_stopped!(ctx, passes::typeck(&mut ctx, classes));
     let (classes, ty_ctx) =
         return_if_stopped!(ctx, passes::validate_classes(&mut ctx, classes, ty_ctx));
     let ty_ctx = return_if_stopped!(ctx, passes::check_has_main_class(&mut ctx, ty_ctx));

@@ -220,6 +220,7 @@ pub(super) struct ClassResolverResult<'buf, 'cls> {
     pub unrecognized_tys: Vec<UnrecognizedTy<'buf>>,
     pub ctx: TypeCtx<'buf>,
     pub excluded: HashSet<&'cls TyName<'buf>>,
+    pub sorted: Vec<ClassName<'buf>>,
 }
 
 pub(super) struct ClassResolver<'dia, 'emt, 'buf, 'cls> {
@@ -259,12 +260,13 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
         let indexes = self
             .check_duplicate_classes(indexes, &mut excluded)
             .collect();
-        self.add_to_ctx(indexes, &mut excluded);
+        let sorted = self.add_to_ctx(indexes, &mut excluded);
 
         ClassResolverResult {
             unrecognized_tys: self.unrecognized_tys,
             ctx: self.ctx,
             excluded,
+            sorted,
         }
     }
 
@@ -306,7 +308,7 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
         &mut self,
         ty_indexes: HashMap<&'cls TyName<'buf>, ClassIndex<'buf>>,
         ignored: &mut HashSet<&'cls TyName<'buf>>,
-    ) {
+    ) -> Vec<ClassName<'buf>> {
         // perform a toposort on the indexes;
         // if a cycle is detected, remove the offending nodes and repeat
 
@@ -479,7 +481,7 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
             break sorted;
         };
 
-        for name in sorted {
+        for name in &sorted {
             let ty_name = indexes
                 .name_map
                 .get(&name)
@@ -490,6 +492,8 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
                 .expect("toposort does not add new names");
             self.ctx.add_class(name, index);
         }
+
+        sorted
     }
 
     /// Resolves a type name using the list of available classes.
