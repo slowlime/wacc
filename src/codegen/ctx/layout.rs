@@ -4,14 +4,18 @@ use crate::util::slice_formatter;
 
 use super::{CompleteWasmTy, TyId, TyIndex, Vtable, WasmTy};
 
-pub fn create_storage_type<'buf>(ty_id: TyId, nullable: bool) -> wast::core::StorageType<'static> {
+pub fn create_ref_value_type<'buf>(ty_id: TyId, nullable: bool) -> wast::core::ValType<'static> {
     use wast::core::*;
     use wast::token::{Index, Span};
 
-    StorageType::Val(ValType::Ref(RefType {
+    ValType::Ref(RefType {
         nullable,
         heap: HeapType::Index(Index::Num(ty_id.index() as _, Span::from_offset(0))),
-    }))
+    })
+}
+
+pub fn create_storage_type<'buf>(ty_id: TyId, nullable: bool) -> wast::core::StorageType<'static> {
+    wast::core::StorageType::Val(create_ref_value_type(ty_id, nullable))
 }
 
 pub fn class_span<'buf>(ty_ctx: &TypeCtx<'buf>, class_name: &ClassName<'buf>) -> wast::token::Span {
@@ -30,7 +34,6 @@ pub fn class_span<'buf>(ty_ctx: &TypeCtx<'buf>, class_name: &ClassName<'buf>) ->
 fn complete_class<'buf>(
     ty_ctx: &TypeCtx<'buf>,
     ty_index: &TyIndex<'buf, WasmTy<'buf>>,
-    vtable: &Vtable,
     ty_id: TyId,
 ) -> wast::core::Type<'static> {
     use wast::core::*;
@@ -53,7 +56,6 @@ fn complete_class<'buf>(
     let Some(class_index) = ty_ctx.get_class(class_name) else {
         panic!("The class {} was not found in the type context", class_name);
     };
-    let location = class_index.location();
 
     match class_name {
         ClassName::Builtin(BuiltinClass::Int | BuiltinClass::Bool) => {
@@ -122,13 +124,39 @@ fn complete_class<'buf>(
 }
 
 fn complete_func<'buf>(
-    ty_ctx: &TypeCtx<'buf>,
     ty_index: &TyIndex<'buf, WasmTy<'buf>>,
-    vtable: &Vtable,
     params: &[ClassName<'buf>],
     ret: &ClassName<'buf>,
 ) -> wast::core::Type<'static> {
-    todo!()
+    use wast::core::*;
+    use wast::token::Span;
+
+    let param_ty_ids = params
+        .into_iter()
+        .map(|class_name| {
+            let wasm_ty = class_name.clone().into();
+            let Some(ty_id) = ty_index.get_by_ty(&wasm_ty) else {
+                panic!("The type {} was not found in the type index", class_name);
+            };
+
+            create_ref_value_type(ty_id, true)
+        });
+
+    let wasm_ret_ty = ret.clone().into();
+    let Some(ret_ty_id) = ty_index.get_by_ty(&wasm_ret_ty) else {
+        panic!("The type {} was not found in the type index", ret);
+    };
+
+    Type {
+        span: Span::from_offset(0),
+        id: None,
+        name: None,
+        def: TypeDef::Func(FunctionType {
+            params: param_ty_ids.map(|ty| (None, None, ty)).collect(),
+            results: Box::new([create_ref_value_type(ret_ty_id, true)]),
+        }),
+        parent: None,
+    }
 }
 
 fn complete_byte_array() -> wast::core::Type<'static> {
@@ -150,13 +178,12 @@ fn complete_byte_array() -> wast::core::Type<'static> {
 fn complete_wasm_ty<'buf>(
     ty_ctx: &TypeCtx<'buf>,
     ty_index: &TyIndex<'buf, WasmTy<'buf>>,
-    vtable: &Vtable,
     ty_id: TyId,
     wasm_ty: &WasmTy<'buf>,
 ) -> wast::core::Type<'static> {
     match wasm_ty {
-        WasmTy::Class(_) => complete_class(ty_ctx, ty_index, vtable, ty_id),
-        WasmTy::Func { params, ret } => complete_func(ty_ctx, ty_index, vtable, params, ret),
+        WasmTy::Class(_) => complete_class(ty_ctx, ty_index, ty_id),
+        WasmTy::Func { params, ret } => complete_func(ty_index, params, ret),
         WasmTy::ByteArray => complete_byte_array(),
     }
 }
@@ -169,7 +196,7 @@ pub fn compute_layout<'buf>(
     let mut result = TyIndex::<CompleteWasmTy>::new();
 
     for (ty_id, wasm_ty) in ty_index.iter() {
-        let complete_ty = super::layout::complete_wasm_ty(ty_ctx, ty_index, vtable, ty_id, wasm_ty);
+        let complete_ty = super::layout::complete_wasm_ty(ty_ctx, ty_index, ty_id, wasm_ty);
         let vtable_base = vtable.base_offset(ty_id);
         result.insert(complete_ty, wasm_ty.clone(), vtable_base);
     }
