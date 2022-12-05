@@ -17,3 +17,4 @@ byte_string = "1.0"
 take_mut = "0.2"
 indexmap = "1.9"
 owo-colors = { version = "3.5.0", features = ["supports-colors"] }
+wast = "50.0.0"

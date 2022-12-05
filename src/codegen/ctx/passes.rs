@@ -3,46 +3,20 @@
 use std::borrow::Cow;
 
 use crate::analysis::{ClassName, TypeCtx};
-use crate::ast::ty::BuiltinClass;
 use crate::util::slice_formatter;
 
-use super::{MethodDefinition, MethodIndex, MethodTable, TyIndex, Vtable, WasmTy};
+use super::ty::{constructor_ty, get_method_ty, WasmTy, CONSTRUCTOR_NAME};
+use super::{MethodDefinition, MethodIndex, MethodTable, TyIndex, Vtable};
 
-pub const CONSTRUCTOR_NAME: &[u8] = b"{new}";
-
-pub fn constructor_ty<'buf>() -> WasmTy<'buf> {
-    WasmTy::Func {
-        params: vec![],
-        ret: BuiltinClass::Object.into(),
-    }
-}
-
-pub fn get_method_ty<'buf>(
-    ty_ctx: &TypeCtx<'buf>,
-    class_name: &ClassName<'buf>,
-    method_name: &[u8],
-) -> WasmTy<'buf> {
-    let chain = ty_ctx.inheritance_chain(class_name).collect::<Vec<_>>();
-    let method = chain
-        .into_iter()
-        .rev()
-        .find_map(|(name, index)| index.get_method_ty(method_name).map(|(_, ty)| (name, ty)));
-    let Some((def_class_name, method_ty)) = method else {
-        panic!("Class {} does not have method {}", class_name, slice_formatter(method_name));
-    };
-    let mut method_ty = method_ty.clone();
-    method_ty
-        .params
-        .insert(0, def_class_name.clone().try_into().unwrap());
-
-    method_ty.into()
-}
+pub use super::layout::compute_layout;
 
 pub fn collect_types<'buf>(
     sorted: &[ClassName<'buf>],
     ty_ctx: &TypeCtx<'buf>,
 ) -> TyIndex<'buf, WasmTy<'buf>> {
-    let mut ty_index = TyIndex::new();
+    let mut ty_index = TyIndex::<WasmTy>::new();
+
+    ty_index.insert(WasmTy::ByteArray);
 
     for name in sorted {
         ty_index.insert(WasmTy::Class(name.clone()));
@@ -167,7 +141,11 @@ pub fn create_vtable<'buf>(
         let mut method_table_ids = vec![];
 
         for (method_name, def) in methods {
-            let &MethodDefinition { method_ty_id, first_def_id: _, last_def_id } = def;
+            let &MethodDefinition {
+                method_ty_id,
+                first_def_id: _,
+                last_def_id,
+            } = def;
             let Some(table_id) = method_table.get_by_method_id(method_ty_id, last_def_id) else {
                 panic!("The last definition of the method {} of the class {} was not found in the method table",
                     slice_formatter(method_name), class_name);

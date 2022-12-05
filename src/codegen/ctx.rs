@@ -1,100 +1,133 @@
+mod layout;
 pub mod passes;
+pub mod ty;
 
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::hash::Hash;
 use std::marker::PhantomData;
 use std::ops::Deref;
 
-use crate::analysis::ClassName;
-use crate::ast::ty::{FunctionTy, ResolvedTy};
+use indexmap::{Equivalent, IndexMap, IndexSet};
 
-use indexmap::{IndexMap, IndexSet};
-pub use passes::collect_types;
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum WasmTy<'buf> {
-    Class(ClassName<'buf>),
-
-    Func {
-        params: Vec<WasmTy<'buf>>,
-        ret: ClassName<'buf>,
-    },
-}
-
-impl<'buf> From<FunctionTy<'buf>> for WasmTy<'buf> {
-    fn from(FunctionTy { params, ret }: FunctionTy<'buf>) -> Self {
-        Self::Func {
-            params: params.into_iter().map(Into::into).collect(),
-            ret: (*ret).try_into().unwrap(),
-        }
-    }
-}
-
-impl<'buf> From<ClassName<'buf>> for WasmTy<'buf> {
-    fn from(class_name: ClassName<'buf>) -> Self {
-        assert_ne!(class_name, ClassName::SelfType);
-
-        Self::Class(class_name)
-    }
-}
-
-impl<'buf> From<ResolvedTy<'buf>> for WasmTy<'buf> {
-    fn from(ty: ResolvedTy<'buf>) -> WasmTy<'buf> {
-        match ty {
-            ResolvedTy::Builtin(builtin) => Self::Class(builtin.into()),
-            ResolvedTy::SelfType { enclosed } => (*enclosed).into(),
-            ResolvedTy::Class(name) => Self::Class(name.into()),
-            ResolvedTy::Function(ty) => ty.into(),
-
-            ResolvedTy::Bottom | ResolvedTy::Untyped => {
-                unreachable!("the ast must have passed typeck");
-            }
-        }
-    }
-}
+use ty::WasmTy;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct TyId(usize);
+
+impl TyId {
+    pub fn index(&self) -> usize {
+        self.0
+    }
+}
 
 pub trait TyIndexEntry<'buf>: private::Sealed + 'buf {}
 
 #[derive(Debug, Clone)]
 pub struct TyIndex<'buf, T: TyIndexEntry<'buf>> {
-    types: Vec<T>,
-    indices: HashMap<T, usize>,
+    types: IndexSet<T>,
     _marker: PhantomData<&'buf mut ()>,
 }
 
 impl private::Sealed for WasmTy<'_> {}
 impl<'buf> TyIndexEntry<'buf> for WasmTy<'buf> {}
 
+#[derive(Debug)]
+pub struct CompleteWasmTy<'buf> {
+    pub complete_ty: wast::core::Type<'static>,
+    pub wasm_ty: WasmTy<'buf>,
+    pub vtable_base: Option<VtableId>,
+    _private: PhantomData<()>,
+}
+
+impl PartialEq for CompleteWasmTy<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.wasm_ty == other.wasm_ty
+    }
+}
+
+impl Eq for CompleteWasmTy<'_> {}
+
+impl Hash for CompleteWasmTy<'_> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.wasm_ty.hash(state);
+    }
+}
+
+impl<'buf> Equivalent<CompleteWasmTy<'buf>> for WasmTy<'buf> {
+    fn equivalent(&self, key: &CompleteWasmTy<'buf>) -> bool {
+        self == &key.wasm_ty
+    }
+}
+
+impl private::Sealed for CompleteWasmTy<'_> {}
+impl<'buf> TyIndexEntry<'buf> for CompleteWasmTy<'buf> {}
+
 impl<'buf> TyIndex<'buf, WasmTy<'buf>> {
     pub fn new() -> Self {
         Self {
-            types: Vec::new(),
-            indices: HashMap::new(),
+            types: IndexSet::new(),
             _marker: Default::default(),
         }
     }
 
     pub fn insert(&mut self, ty: WasmTy<'buf>) -> TyId {
-        if let Some(&idx) = self.indices.get(&ty) {
+        if let Some(idx) = self.types.get_index_of(&ty) {
             return TyId(idx);
         }
 
-        let idx = self.types.len();
-        self.types.push(ty.clone());
-        self.indices.insert(ty, idx);
+        let (idx, _) = self.types.insert_full(ty);
 
         TyId(idx)
     }
 
     pub fn get_by_ty(&self, ty: &WasmTy<'buf>) -> Option<TyId> {
-        self.indices.get(ty).copied().map(TyId)
+        self.types.get_index_of(ty).map(TyId)
     }
 
     pub fn get_by_id(&self, id: TyId) -> Option<&WasmTy<'buf>> {
-        self.types.get(id.0)
+        self.types.get_index(id.0)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (TyId, &WasmTy<'buf>)> {
+        self.types.iter().enumerate().map(|(idx, ty)| (TyId(idx), ty))
+    }
+}
+
+impl<'buf> TyIndex<'buf, CompleteWasmTy<'buf>> {
+    pub fn new() -> Self {
+        Self {
+            types: IndexSet::new(),
+            _marker: Default::default(),
+        }
+    }
+
+    pub(super) fn insert(
+        &mut self,
+        complete_ty: wast::core::Type<'static>,
+        wasm_ty: WasmTy<'buf>,
+        vtable_base: Option<VtableId>,
+    ) -> TyId {
+        if let Some(idx) = self.types.get_index_of(&wasm_ty) {
+            return TyId(idx);
+        }
+
+        let (idx, _) = self.types.insert_full(CompleteWasmTy {
+            complete_ty,
+            wasm_ty,
+            vtable_base,
+            _private: Default::default(),
+        });
+
+        TyId(idx)
+    }
+
+    pub fn get_by_wasm_ty(&self, ty: &WasmTy<'buf>) -> Option<TyId> {
+        self.types.get_index_of(ty).map(TyId)
+    }
+
+    pub fn get_by_id(&self, id: TyId) -> Option<&CompleteWasmTy<'buf>> {
+        self.types.get_index(id.0)
     }
 }
 
@@ -278,6 +311,7 @@ impl MethodTable {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct VtableId(usize);
 
 impl VtableId {
@@ -332,6 +366,43 @@ impl Vtable {
 
     pub fn base_offset(&self, ty_id: TyId) -> Option<VtableId> {
         self.base_offsets.get(&ty_id).copied().map(VtableId)
+    }
+}
+
+pub struct StringId(usize);
+
+impl StringId {
+    pub fn index(&self) -> usize {
+        self.0
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct StringTable<'buf> {
+    strings: IndexSet<Cow<'buf, [u8]>>,
+}
+
+impl<'buf> StringTable<'buf> {
+    pub fn new() -> Self {
+        Self {
+            strings: IndexSet::new(),
+        }
+    }
+
+    pub fn insert(&mut self, bytes: Cow<'buf, [u8]>) -> StringId {
+        let (idx, _) = self.strings.insert_full(bytes);
+
+        StringId(idx)
+    }
+
+    pub fn get_by_str(&self, bytes: &[u8]) -> Option<StringId> {
+        self.strings
+            .get_index_of(bytes)
+            .map(StringId)
+    }
+
+    pub fn get_by_id(&self, id: StringId) -> Option<&[u8]> {
+        self.strings.get_index(id.0).map(Deref::deref)
     }
 }
 
