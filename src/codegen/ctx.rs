@@ -1,4 +1,5 @@
 mod layout;
+mod locals;
 pub mod passes;
 pub mod ty;
 
@@ -11,6 +12,8 @@ use std::ops::Deref;
 use indexmap::{Equivalent, IndexMap, IndexSet};
 
 use ty::WasmTy;
+
+pub use locals::LocalCtx;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct TyId(usize);
