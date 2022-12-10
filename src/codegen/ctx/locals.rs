@@ -45,6 +45,10 @@ pub struct LocalId<'a, 'buf> {
 }
 
 impl LocalId<'_, '_> {
+    pub fn to_wasm_index(&self, pos: usize) -> wast::token::Index<'static> {
+        wast::token::Index::Num(self.idx as _, wast::token::Span::from_offset(pos))
+    }
+
     fn make_ref(&self) -> LocalRef {
         let locals = self.ctx.locals.borrow();
 

@@ -13,7 +13,7 @@ use indexmap::{Equivalent, IndexMap, IndexSet};
 
 use ty::WasmTy;
 
-pub use locals::LocalCtx;
+pub use locals::{LocalCtx, LocalId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct TyId(usize);
@@ -21,6 +21,13 @@ pub struct TyId(usize);
 impl TyId {
     pub fn index(&self) -> usize {
         self.0
+    }
+
+    pub fn to_wasm_index(&self, pos: usize) -> wast::token::Index<'static> {
+        wast::token::Index::Num(
+            self.0.try_into().unwrap(),
+            wast::token::Span::from_offset(pos),
+        )
     }
 }
 
@@ -93,7 +100,10 @@ impl<'buf> TyIndex<'buf, WasmTy<'buf>> {
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (TyId, &WasmTy<'buf>)> {
-        self.types.iter().enumerate().map(|(idx, ty)| (TyId(idx), ty))
+        self.types
+            .iter()
+            .enumerate()
+            .map(|(idx, ty)| (TyId(idx), ty))
     }
 }
 
@@ -139,6 +149,16 @@ pub struct MethodId {
     /// The type id of the class defining the method.
     ty_id: TyId,
     idx: usize,
+}
+
+impl MethodId {
+    pub fn ty_id(&self) -> TyId {
+        self.ty_id
+    }
+
+    pub fn index(&self) -> usize {
+        self.idx
+    }
 }
 
 impl PartialOrd for MethodId {
@@ -255,8 +275,21 @@ impl MethodTableId {
         self.table_idx
     }
 
+    pub fn to_table_arg(&self, pos: usize) -> wast::core::TableArg<'static> {
+        wast::core::TableArg {
+            dst: wast::token::Index::Num(
+                self.table_idx.try_into().unwrap(),
+                wast::token::Span::from_offset(pos),
+            ),
+        }
+    }
+
     pub fn method_idx(&self) -> usize {
         self.method_idx
+    }
+
+    pub fn to_i32_const(&self) -> wast::core::Instruction<'static> {
+        wast::core::Instruction::I32Const(self.method_idx.try_into().unwrap())
     }
 }
 
@@ -399,9 +432,7 @@ impl<'buf> StringTable<'buf> {
     }
 
     pub fn get_by_str(&self, bytes: &[u8]) -> Option<StringId> {
-        self.strings
-            .get_index_of(bytes)
-            .map(StringId)
+        self.strings.get_index_of(bytes).map(StringId)
     }
 
     pub fn get_by_id(&self, id: StringId) -> Option<&[u8]> {
