@@ -3,14 +3,11 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use wast::core::FunctionType;
 use wast::core::HeapType;
 use wast::core::Instruction;
-use wast::core::TypeDef;
 use wast::token::Index as WasmIndex;
 
 use crate::analysis::ClassName;
-use crate::analysis::TypeCtx;
 use crate::ast;
 use crate::ast::ty::BuiltinClass;
 use crate::ast::ty::ResolvedTy;
@@ -21,6 +18,8 @@ use crate::position::HasSpan;
 use crate::try_match;
 use crate::util::slice_formatter;
 
+use super::ctx::FieldId;
+use super::ctx::FieldTable;
 use super::ctx::TyKind;
 use super::ctx::ty::constructor_ty;
 use super::ctx::ty::WasmTy;
@@ -67,6 +66,11 @@ impl PositionOffset for crate::position::Span {
     }
 }
 
+enum NameKind<'ctx, 'buf> {
+    Local(LocalId<'ctx, 'buf>),
+    Field(FieldId),
+}
+
 pub struct CodegenOutput {
     pub module: wast::core::Module<'static>,
 }
@@ -79,6 +83,7 @@ pub struct Codegen<'a, 'buf> {
     vtable_table_id: TableId,
     string_table: RefCell<StringTable<'buf>>,
     string_table_id: TableId,
+    field_table: FieldTable<'buf>,
     func_registry: FuncRegistry<'buf>,
     classes: &'a [Class<'buf>],
     funcs: HashMap<MethodId, wast::core::Func<'static>>,
@@ -91,6 +96,7 @@ impl<'a, 'buf> Codegen<'a, 'buf> {
         method_table: MethodTable,
         vtable: Vtable,
         string_table: StringTable<'buf>,
+        field_table: FieldTable<'buf>,
         classes: &'a [Class<'buf>],
     ) -> Self {
         let vtable_table_id = Self::compute_vtable_id(&method_table);
@@ -104,6 +110,7 @@ impl<'a, 'buf> Codegen<'a, 'buf> {
             vtable_table_id,
             string_table: RefCell::new(string_table),
             string_table_id,
+            field_table,
             func_registry: FuncRegistry::new(),
             classes,
             funcs: HashMap::new(),
@@ -306,6 +313,26 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
         }
 
         result
+    }
+
+    fn get_field_id(&self, ty_id: TyId, field_name: &[u8]) -> FieldId {
+        match self.cg.field_table.get_by_name(ty_id, field_name) {
+            Some(field_id) => field_id,
+
+            None => panic!(
+                "The field {} (ty id {:?}) was not found in the field table",
+                slice_formatter(field_name),
+                ty_id,
+            ),
+        }
+    }
+
+    fn get_name(&self, name: &[u8]) -> NameKind<'cg, 'buf> {
+        if let Some(local_id) = self.locals.get(name) {
+            NameKind::Local(local_id)
+        } else {
+            NameKind::Field(self.get_field_id(self.self_ty_id(), name))
+        }
     }
 
     fn self_ty_id(&self) -> TyId {
@@ -625,16 +652,23 @@ impl<'buf> AstVisitor<'buf> for CodegenVisitor<'_, '_, 'buf> {
     }
 
     fn visit_assignment(&mut self, expr: &ast::Assignment<'buf>) -> Self::Output {
-        // TODO: determine if expr.name is a field
         let mut result = vec![];
 
-        result.extend(self.visit_expr(&expr.expr));
+        let name_kind = self.get_name(expr.name.as_slice());
 
-        let Some(local_id) = self.locals.get(expr.name.as_slice()) else {
-            panic!("Local `{}` was not bound in method {:?}", &expr.name, self.method_id);
-        };
+        match name_kind {
+            NameKind::Local(local_id) => {
+                result.extend(self.visit_expr(&expr.expr));
+                result.push(local_id.wasm_tee(expr.pos()));
+            }
 
-        result.push(local_id.wasm_tee(expr.pos()));
+            NameKind::Field(field_id) => {
+                result.extend(self.push_self(expr.pos()));
+                result.extend(self.visit_expr(&expr.expr));
+                result.push(field_id.wasm_set(expr.pos()));
+                result.push(field_id.wasm_get(expr.pos()));
+            }
+        }
 
         result
     }
@@ -916,30 +950,48 @@ impl<'buf> AstVisitor<'buf> for CodegenVisitor<'_, '_, 'buf> {
     }
 
     fn visit_name_expr(&mut self, expr: &ast::NameExpr<'buf>) -> Self::Output {
-        todo!()
+        if matches!(*expr.unwrap_res_ty(), ResolvedTy::SelfType { .. }) {
+            self.push_self(expr.pos())
+        } else {
+            let name_kind = self.get_name(expr.name.as_slice());
+            let mut result = vec![];
+
+            match name_kind {
+                NameKind::Local(local_id) => {
+                    result.push(local_id.wasm_get(expr.pos()));
+                }
+
+                NameKind::Field(field_id) => {
+                    result.extend(self.push_self(expr.pos()));
+                    result.push(field_id.wasm_get(expr.pos()));
+                }
+            }
+
+            result
+        }
     }
 
-    fn visit_formal(&mut self, formal: &ast::Formal<'buf>) -> Self::Output {
+    fn visit_formal(&mut self, _formal: &ast::Formal<'buf>) -> Self::Output {
         unreachable!()
     }
 
-    fn visit_receiver(&mut self, recv: &ast::Receiver<'buf>) -> Self::Output {
+    fn visit_receiver(&mut self, _recv: &ast::Receiver<'buf>) -> Self::Output {
         unreachable!()
     }
 
-    fn visit_case_arm(&mut self, arm: &ast::CaseArm<'buf>) -> Self::Output {
+    fn visit_case_arm(&mut self, _arm: &ast::CaseArm<'buf>) -> Self::Output {
         unreachable!()
     }
 
-    fn visit_ty_name(&mut self, ty_name: &ast::TyName<'buf>) -> Self::Output {
+    fn visit_ty_name(&mut self, _ty_name: &ast::TyName<'buf>) -> Self::Output {
         unreachable!()
     }
 
-    fn visit_binding(&mut self, binding: &ast::Binding<'buf>) -> Self::Output {
+    fn visit_binding(&mut self, _binding: &ast::Binding<'buf>) -> Self::Output {
         unreachable!()
     }
 
-    fn visit_name(&mut self, name: &ast::Name<'buf>) -> Self::Output {
+    fn visit_name(&mut self, _name: &ast::Name<'buf>) -> Self::Output {
         unreachable!()
     }
 

@@ -1,8 +1,14 @@
+use std::borrow::Cow;
+
 use crate::analysis::{ClassName, DefinitionLocation, TypeCtx};
 use crate::ast::ty::BuiltinClass;
+use crate::codegen::ctx::TyKind;
 use crate::util::slice_formatter;
 
-use super::{CompleteWasmTy, TyId, TyIndex, Vtable, WasmTy};
+use super::{CompleteWasmTy, TyId, TyIndex, Vtable, WasmTy, FieldTable};
+
+pub const VTABLE_FIELD_NAME: &[u8] = b"{vtable}";
+pub const VALUE_FIELD_NAME: &[u8] = b"{value}";
 
 pub fn create_ref_value_type<'buf>(ty_id: TyId, nullable: bool) -> wast::core::ValType<'static> {
     use wast::core::*;
@@ -34,6 +40,7 @@ pub fn class_span<'buf>(ty_ctx: &TypeCtx<'buf>, class_name: &ClassName<'buf>) ->
 fn complete_class<'buf>(
     ty_ctx: &TypeCtx<'buf>,
     ty_index: &TyIndex<'buf, WasmTy<'buf>>,
+    field_table: &mut FieldTable<'buf>,
     ty_id: TyId,
 ) -> wast::core::Type<'static> {
     use wast::core::*;
@@ -45,6 +52,7 @@ fn complete_class<'buf>(
         mutable: false,
         ty: StorageType::Val(ValType::I32),
     }];
+    field_table.insert(ty_id, Cow::Borrowed(VTABLE_FIELD_NAME), TyKind::I32);
 
     let Some(&WasmTy::Class(ref class_name)) = ty_index.get_by_id(ty_id) else {
         panic!("complete_class was called for a non-class type");
@@ -59,6 +67,7 @@ fn complete_class<'buf>(
 
     match class_name {
         ClassName::Builtin(BuiltinClass::Int | BuiltinClass::Bool) => {
+            field_table.insert(ty_id, Cow::Borrowed(VALUE_FIELD_NAME), TyKind::I32);
             fields.push(StructField {
                 id: None,
                 mutable: false,
@@ -67,6 +76,7 @@ fn complete_class<'buf>(
         }
 
         ClassName::Builtin(BuiltinClass::String) => {
+            field_table.insert(ty_id, Cow::Borrowed(VALUE_FIELD_NAME), byte_array_id);
             fields.push(StructField {
                 id: None,
                 mutable: false,
@@ -93,6 +103,8 @@ fn complete_class<'buf>(
                     panic!("The type of the field {} of the class {} was not found in the type index",
                         slice_formatter(field_name), class_name);
                 };
+
+                field_table.insert(ty_id, field_name.clone(), field_ty_id);
                 fields.push(StructField {
                     id: None,
                     mutable: true,
@@ -213,11 +225,12 @@ fn complete_string_eq_ty<'buf>(
 fn complete_wasm_ty<'buf>(
     ty_ctx: &TypeCtx<'buf>,
     ty_index: &TyIndex<'buf, WasmTy<'buf>>,
+    field_table: &mut FieldTable<'buf>,
     ty_id: TyId,
     wasm_ty: &WasmTy<'buf>,
 ) -> wast::core::Type<'static> {
     match wasm_ty {
-        WasmTy::Class(_) => complete_class(ty_ctx, ty_index, ty_id),
+        WasmTy::Class(_) => complete_class(ty_ctx, ty_index, field_table, ty_id),
         WasmTy::Func { params, ret } => complete_func(ty_index, params, ret),
         WasmTy::ByteArray => complete_byte_array(),
         WasmTy::StringEqTy => complete_string_eq_ty(ty_index),
@@ -228,12 +241,13 @@ fn complete_wasm_ty<'buf>(
 pub fn compute_layout<'buf>(
     ty_ctx: &TypeCtx<'buf>,
     ty_index: &TyIndex<'buf, WasmTy<'buf>>,
+    field_table: &mut FieldTable<'buf>,
     vtable: &Vtable,
 ) -> TyIndex<'buf, CompleteWasmTy<'buf>> {
     let mut result = TyIndex::<CompleteWasmTy>::new();
 
     for (ty_id, wasm_ty) in ty_index.iter() {
-        let complete_ty = super::layout::complete_wasm_ty(ty_ctx, ty_index, ty_id, wasm_ty);
+        let complete_ty = super::layout::complete_wasm_ty(ty_ctx, ty_index, field_table, ty_id, wasm_ty);
         let vtable_base = vtable.base_offset(ty_id);
         result.insert(complete_ty, wasm_ty.clone(), vtable_base);
     }

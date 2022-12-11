@@ -383,14 +383,106 @@ impl MethodTable {
         self.method_tys.get_index_of(&method_ty_id).map(TableId)
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (TableId, TyId, impl Iterator<Item = MethodId> + '_)> + '_ {
-        self.method_tys
-            .iter()
-            .map(|(&ty_id, methods)| (
+    pub fn iter(
+        &self,
+    ) -> impl Iterator<Item = (TableId, TyId, impl Iterator<Item = MethodId> + '_)> + '_ {
+        self.method_tys.iter().map(|(&ty_id, methods)| {
+            (
                 TableId(self.method_tys.get_index_of(&ty_id).unwrap()),
                 ty_id,
                 methods.iter().copied(),
-            ))
+            )
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct FieldId {
+    ty_id: TyId,
+    idx: usize,
+}
+
+impl FieldId {
+    pub fn wasm_set(&self, pos: usize) -> wast::core::Instruction<'static> {
+        use wast::core::*;
+        use wast::token::Index as WasmIndex;
+        use wast::token::Span as WasmSpan;
+
+        Instruction::StructSet(StructAccess {
+            r#struct: self.ty_id.to_wasm_index(pos),
+            field: WasmIndex::Num(
+                self.idx.try_into().unwrap(),
+                WasmSpan::from_offset(pos),
+            ),
+        })
+    }
+
+    pub fn wasm_get(&self, pos: usize) -> wast::core::Instruction<'static> {
+        use wast::core::*;
+        use wast::token::Index as WasmIndex;
+        use wast::token::Span as WasmSpan;
+
+        Instruction::StructSet(StructAccess {
+            r#struct: self.ty_id.to_wasm_index(pos),
+            field: WasmIndex::Num(
+                self.idx.try_into().unwrap(),
+                WasmSpan::from_offset(pos),
+            ),
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FieldTable<'buf> {
+    classes: HashMap<TyId, IndexMap<Cow<'buf, [u8]>, TyKind>>,
+}
+
+impl<'buf> FieldTable<'buf> {
+    pub fn new() -> Self {
+        Self {
+            classes: HashMap::new(),
+        }
+    }
+
+    pub fn insert(
+        &mut self,
+        ty_id: TyId,
+        field_name: Cow<'buf, [u8]>,
+        field_ty_kind: impl Into<TyKind>,
+    ) -> FieldId {
+        use indexmap::map::Entry;
+
+        let class_map = self.classes.entry(ty_id).or_default();
+        let entry = class_map.entry(field_name);
+        let idx = entry.index();
+
+        match entry {
+            Entry::Occupied(mut entry) => {
+                entry.insert(field_ty_kind.into());
+            }
+
+            Entry::Vacant(entry) => panic!(
+                "Field `{}` (ty id = {:?}) is defined twice",
+                slice_formatter(entry.key()),
+                ty_id
+            ),
+        }
+
+        FieldId { ty_id, idx }
+    }
+
+    pub fn get_by_name(&self, ty_id: TyId, field_name: &[u8]) -> Option<FieldId> {
+        let class_map = self.classes.get(&ty_id)?;
+        let idx = class_map.get_index_of(field_name)?;
+
+        Some(FieldId { ty_id, idx })
+    }
+
+    pub fn get_by_id(&self, field_id: FieldId) -> Option<(&[u8], TyKind)> {
+        let class_map = self.classes.get(&field_id.ty_id)?;
+        let (name, &ty_kind) = class_map.get_index(field_id.idx)?;
+
+        Some((name, ty_kind))
     }
 }
 
@@ -429,7 +521,7 @@ impl Vtable {
         let base_offset = self.table.len();
 
         match self.base_offsets.entry(ty_id) {
-            Entry::Occupied(entry) => {
+            Entry::Occupied(_) => {
                 panic!("The type {:?} was already added to the vtable", ty_id);
             }
 
@@ -452,6 +544,7 @@ impl Vtable {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct StringId(usize);
 
 impl StringId {
@@ -504,7 +597,10 @@ impl Display for FuncName<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Plain(name) => name.fmt(f),
-            Self::Method { class_name, method_name } => {
+            Self::Method {
+                class_name,
+                method_name,
+            } => {
                 write!(f, "{}::{}", class_name, slice_formatter(method_name))
             }
         }
@@ -529,7 +625,7 @@ pub struct FuncDef {
     pub method_ty_id: TyId,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FuncId(usize);
 
 impl FuncId {
@@ -538,10 +634,7 @@ impl FuncId {
     }
 
     pub fn to_wasm_index(&self, pos: usize) -> wast::token::Index<'static> {
-        wast::token::Index::Num(
-            pos.try_into().unwrap(),
-            wast::token::Span::from_offset(pos),
-        )
+        wast::token::Index::Num(pos.try_into().unwrap(), wast::token::Span::from_offset(pos))
     }
 }
 
