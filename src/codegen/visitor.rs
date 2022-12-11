@@ -1,5 +1,6 @@
 use std::borrow::Borrow;
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::collections::HashMap;
 
 use wast::core::FunctionType;
@@ -11,6 +12,7 @@ use wast::token::Index as WasmIndex;
 use crate::analysis::ClassName;
 use crate::analysis::TypeCtx;
 use crate::ast;
+use crate::ast::ty::BuiltinClass;
 use crate::ast::ty::ResolvedTy;
 use crate::ast::ty::UnwrapResolvedTy;
 use crate::ast::Class;
@@ -19,6 +21,8 @@ use crate::position::HasSpan;
 use crate::try_match;
 use crate::util::slice_formatter;
 
+use super::ctx::VtableId;
+use super::ctx::ty::CONSTRUCTOR_NAME;
 use super::ctx::ty::WasmTy;
 use super::ctx::CompleteWasmTy;
 use super::ctx::LocalCtx;
@@ -28,8 +32,10 @@ use super::ctx::MethodIndex;
 use super::ctx::MethodTable;
 use super::ctx::MethodTableId;
 use super::ctx::StringTable;
+use super::ctx::TableId;
 use super::ctx::TyIndex;
 use super::ctx::Vtable;
+use super::ctx::ty::constructor_ty;
 use super::ctx::{MethodId, TyId};
 
 trait PositionOffset {
@@ -42,6 +48,12 @@ impl<T: HasSpan> PositionOffset for T {
     }
 }
 
+impl PositionOffset for crate::position::Span {
+    fn pos(&self) -> usize {
+        self.start.byte
+    }
+}
+
 pub struct CodegenOutput {
     pub module: wast::core::Module<'static>,
 }
@@ -51,7 +63,9 @@ pub struct Codegen<'a, 'buf> {
     method_index: MethodIndex<'buf>,
     method_table: MethodTable,
     vtable: Vtable,
-    string_table: StringTable<'buf>,
+    vtable_table_id: TableId,
+    string_table: RefCell<StringTable<'buf>>,
+    string_table_id: TableId,
     classes: &'a [Class<'buf>],
     funcs: HashMap<MethodId, wast::core::Func<'static>>,
 }
@@ -65,15 +79,31 @@ impl<'a, 'buf> Codegen<'a, 'buf> {
         string_table: StringTable<'buf>,
         classes: &'a [Class<'buf>],
     ) -> Self {
+        let vtable_table_id = Self::compute_vtable_id(&method_table);
+        let string_table_id = TableId::new(vtable_table_id.index() + 1);
+
         Self {
             ty_index,
             method_index,
             method_table,
             vtable,
-            string_table,
+            vtable_table_id,
+            string_table: RefCell::new(string_table),
+            string_table_id,
             classes,
             funcs: HashMap::new(),
         }
+    }
+
+    fn compute_vtable_id(method_table: &MethodTable) -> TableId {
+        TableId::new(
+            method_table
+                .iter()
+                .map(|(table_id, _, _)| table_id)
+                .max()
+                .map(|table_id| table_id.index() + 1)
+                .unwrap_or(0),
+        )
     }
 
     pub fn lower(mut self) -> CodegenOutput {
@@ -218,6 +248,16 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
         }
     }
 
+    fn table_id_for_method_ty(&self, method_ty_id: TyId) -> TableId {
+        match self.cg.method_table.get_table_id(method_ty_id) {
+            Some(table_id) => table_id,
+            None => panic!(
+                "The method type {:?} has no associated method table",
+                method_ty_id
+            ),
+        }
+    }
+
     fn bind_params(&self, params: &[ast::Formal<'buf>]) -> Vec<LocalId<'cg, 'buf>> {
         let mut result = vec![];
         let wasm_params = match &self.method_complete_ty().wasm_ty {
@@ -230,7 +270,7 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
 
             let name = match i {
                 0 => Cow::Borrowed(b"self".as_slice()),
-                _ => Cow::Owned(params[i - 1].name.as_slice().to_owned()),
+                _ => params[i - 1].name.0.value.clone(),
             };
 
             result.push(self.locals.bind(Some(name), param_ty_id));
@@ -243,6 +283,18 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
         self.method_id.ty_id()
     }
 
+    fn builtin_ty_id(&self, builtin: BuiltinClass) -> TyId {
+        self.ty_id_for_wasm_ty(&WasmTy::Class(ClassName::Builtin(builtin)))
+    }
+
+    fn object_ty_id(&self) -> TyId {
+        self.builtin_ty_id(BuiltinClass::Object)
+    }
+
+    fn vtable_base_field(&self, pos: usize) -> WasmIndex<'static> {
+        WasmIndex::Num(0, wast::token::Span::from_offset(pos))
+    }
+
     fn make_method_ref(&self, method_id: MethodId, pos: usize) -> HeapType<'static> {
         HeapType::Index(
             self.method_by_id(method_id)
@@ -252,17 +304,108 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
         )
     }
 
-    fn reify_self_ty(
-        &self,
-        ty: &ResolvedTy<'buf>,
-        pos: usize,
-    ) -> Option<Instruction<'static>> {
+    fn make_ty_ref(&self, ty_id: TyId, pos: usize) -> HeapType<'static> {
+        HeapType::Index(ty_id.to_wasm_index(pos))
+    }
+
+    fn reify_self_ty(&self, ty: &ResolvedTy<'buf>, pos: usize) -> Option<Instruction<'static>> {
         match ty {
             ResolvedTy::SelfType { .. } => {
                 Some(Instruction::RefCast(self.self_ty_id().to_wasm_index(pos)))
             }
             _ => None,
         }
+    }
+
+    fn unbox(&self, ty: &ResolvedTy<'buf>, pos: usize) -> Option<Instruction<'static>> {
+        use wast::core::*;
+
+        let ty_id = match ty {
+            &ResolvedTy::Builtin(builtin @ (BuiltinClass::Int | BuiltinClass::Bool | BuiltinClass::String)) => {
+                self.builtin_ty_id(builtin)
+            }
+
+            _ => return None,
+        };
+
+        Some(Instruction::StructGet(StructAccess {
+            r#struct: ty_id.to_wasm_index(pos),
+            field: WasmIndex::Num(1, wast::token::Span::from_offset(pos)),
+        }))
+    }
+
+    fn r#box(&self, ty: &ResolvedTy<'buf>, pos: usize) -> Vec<Instruction<'static>> {
+        todo!()
+    }
+
+    fn constructor_ty_id(&self) -> TyId {
+        self.ty_id_for_wasm_ty(&constructor_ty())
+    }
+
+    fn constructor_table_id(&self) -> TableId {
+        self.table_id_for_method_ty(self.constructor_ty_id())
+    }
+
+    fn constructor_method_id(&self) -> MethodId {
+        self.method_id_by_name(self.self_ty_id(), CONSTRUCTOR_NAME)
+    }
+
+    fn construct_self(&self, pos: usize) -> Vec<Instruction<'static>> {
+        use wast::core::*;
+
+        // `new SELF_TYPE` is basically the same as `self.{new}()`
+        let mut result = vec![];
+
+        result.extend(self.push_self(pos));
+        result.push(Instruction::StructGet(StructAccess {
+            r#struct: self.self_ty_id().to_wasm_index(pos),
+            field: self.vtable_base_field(pos),
+        }));
+        result.push(Instruction::TableGet(self.vtable_table_arg(pos)));
+        let constructor_table_id = self.constructor_table_id();
+        result.push(Instruction::TableGet(
+            constructor_table_id.to_table_arg(pos),
+        ));
+        result.push(Instruction::CallRef(
+            self.make_method_ref(self.constructor_method_id(), pos),
+        ));
+        result.push(Instruction::RefCast(
+            self.self_ty_id().to_wasm_index(pos),
+        ));
+
+        result
+    }
+
+    fn base_offset(&self, ty_id: TyId) -> VtableId {
+        match self.cg.vtable.base_offset(ty_id) {
+            Some(vtable_id) => vtable_id,
+
+            None => panic!(
+                "The type id {:?} was not found in the vtable",
+                ty_id,
+            ),
+        }
+    }
+
+    fn construct_new(&self, ty_id: TyId, pos: usize) -> Vec<Instruction<'static>> {
+        use wast::core::*;
+
+        let mut result = vec![];
+
+        let vtable_id = self.base_offset(ty_id);
+        let method_table_id = self.cg.vtable.get(vtable_id).unwrap();
+
+        result.push(method_table_id.to_i32_const());
+        result.push(Instruction::TableGet(method_table_id.table_id().to_table_arg(pos)));
+        result.push(Instruction::CallRef(
+            self.make_method_ref(self.constructor_method_id(), pos),
+        ));
+
+        result
+    }
+
+    fn string_eq(&self, pos: usize) -> Vec<Instruction<'static>> {
+        todo!("Call string_eq by its id; will need to make a function registry first")
     }
 
     fn visit_static_call(&mut self, expr: &ast::Call<'buf>) -> Vec<Instruction<'static>> {
@@ -283,7 +426,7 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
 
         result.push(method_table_id.to_i32_const());
         result.push(Instruction::TableGet(
-            method_table_id.to_table_arg(expr.method.pos()),
+            method_table_id.table_id().to_table_arg(expr.method.pos()),
         ));
         result.push(Instruction::CallRef(
             self.make_method_ref(method_id, expr.method.pos()),
@@ -293,8 +436,87 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
         result
     }
 
+    fn push_self(&self, pos: usize) -> Vec<Instruction<'static>> {
+        vec![
+            self.params[0].wasm_get(pos),
+            Instruction::RefCast(self.self_ty_id().to_wasm_index(pos)),
+        ]
+    }
+
+    fn vtable_table_arg(&self, pos: usize) -> wast::core::TableArg<'static> {
+        self.cg.vtable_table_id.to_table_arg(pos)
+    }
+
+    fn string_table_arg(&self, pos: usize) -> wast::core::TableArg<'static> {
+        self.cg.string_table_id.to_table_arg(pos)
+    }
+
     fn visit_dynamic_call(&mut self, expr: &ast::Call<'buf>) -> Vec<Instruction<'static>> {
-        todo!()
+        use wast::core::*;
+
+        let mut result = vec![];
+
+        let recv_ty_id = match expr.receiver {
+            ast::Receiver::SelfType {
+                ref method_name_span,
+                ..
+            } => {
+                result.extend(self.push_self(method_name_span.pos()));
+
+                self.self_ty_id()
+            }
+
+            ast::Receiver::Dynamic(ref expr) => {
+                result.extend(self.visit_expr(expr));
+
+                self.ty_id_for_resolved_ty(expr.unwrap_res_ty().into_owned())
+            }
+
+            ast::Receiver::Static { .. } => unreachable!(),
+        };
+
+        let receiver_temp = self.locals.bind(None, recv_ty_id);
+        result.push(receiver_temp.wasm_tee(expr.receiver.pos()));
+
+        for arg in &expr.args {
+            result.extend(self.visit_expr(arg));
+        }
+
+        result.push(receiver_temp.wasm_get(expr.receiver.pos()));
+        // stack: <receiver> <args...> <receiver>
+        // local receiver_temp = <receiver>
+
+        result.push(Instruction::RefCast(
+            self.object_ty_id().to_wasm_index(expr.method.pos()),
+        ));
+        result.push(Instruction::StructGet(StructAccess {
+            r#struct: self.object_ty_id().to_wasm_index(expr.method.pos()),
+            field: self.vtable_base_field(expr.method.pos()),
+        }));
+        // stack: <receiver> <args...> <receiver.vtable_base>
+
+        let method_id = self.method_id_by_name(recv_ty_id, expr.method.as_slice());
+        let (_, def) = self.method_by_id(method_id);
+        let method_ty_id = def.method_ty_id;
+        let method_table_id = self.table_id_for_method_ty(method_ty_id);
+        let offset = method_id.index().try_into().unwrap();
+        result.push(Instruction::I32Const(offset));
+        result.push(Instruction::I32Add);
+        // stack: <receiver> <args...> <receiver.vtable_base + offset>
+        result.push(Instruction::TableGet(
+            self.vtable_table_arg(expr.method.pos()),
+        ));
+        // stack: <receiver> <args...> <method_table_method_idx>
+        result.push(Instruction::TableGet(
+            method_table_id.to_table_arg(expr.method.pos()),
+        ));
+        // stack: <receiver> <args...> <method_ref>
+        result.push(Instruction::CallRef(
+            self.make_method_ref(method_id, expr.method.pos()),
+        ));
+        result.extend(self.reify_self_ty(&expr.unwrap_res_ty(), expr.method.pos()));
+
+        result
     }
 }
 
@@ -342,13 +564,15 @@ impl<'buf> AstVisitor<'buf> for CodegenVisitor<'_, '_, 'buf> {
 
     fn visit_assignment(&mut self, expr: &ast::Assignment<'buf>) -> Self::Output {
         // TODO: determine if expr.name is a field
-        let value = self.visit_expr(&expr.expr);
+        let mut result = vec![];
+
+        result.extend(self.visit_expr(&expr.expr));
+
         let Some(local_id) = self.locals.get(expr.name.as_slice()) else {
             panic!("Local `{}` was not bound in method {:?}", &expr.name, self.method_id);
         };
 
-        let mut result = value;
-        result.push(Instruction::LocalTee(local_id.to_wasm_index(expr.pos())));
+        result.push(local_id.wasm_tee(expr.pos()));
 
         result
     }
@@ -361,35 +585,257 @@ impl<'buf> AstVisitor<'buf> for CodegenVisitor<'_, '_, 'buf> {
     }
 
     fn visit_if(&mut self, expr: &ast::If<'buf>) -> Self::Output {
-        todo!()
+        use wast::core::*;
+
+        let mut result = vec![];
+        let ty_id = self.ty_id_for_resolved_ty(expr.unwrap_res_ty().into_owned());
+
+        result.extend(self.visit_expr(&expr.antecedent));
+        result.extend(self.unbox(&BuiltinClass::Bool.into(), expr.antecedent.pos()));
+        // stack: <antecedent: i32>
+
+        result.push(Instruction::If(BlockType {
+            label: None,
+            label_name: None,
+            ty: TypeUse {
+                index: None,
+                inline: Some(FunctionType {
+                    params: Box::new([]),
+                    results: Box::new([ValType::Ref(RefType {
+                        nullable: true,
+                        heap: self.make_ty_ref(ty_id, expr.antecedent.pos()),
+                    })]),
+                }),
+            },
+        }));
+
+        result.extend(self.visit_expr(&expr.consequent));
+        result.push(Instruction::Else(None));
+        result.extend(self.visit_expr(&expr.alternative));
+        result.push(Instruction::End(None));
+
+        result
     }
 
     fn visit_while(&mut self, expr: &ast::While<'buf>) -> Self::Output {
-        todo!()
+        use wast::core::*;
+
+        let mut result = vec![];
+
+        result.push(Instruction::Block(BlockType {
+            label: None,
+            label_name: None,
+            ty: TypeUse {
+                index: None,
+                inline: None,
+            },
+        }));
+
+        result.push(Instruction::Loop(BlockType {
+            label: None,
+            label_name: None,
+            ty: TypeUse {
+                index: None,
+                inline: None,
+            },
+        }));
+
+        result.extend(self.visit_expr(&expr.condition));
+        result.extend(self.unbox(&BuiltinClass::Bool.into(), expr.condition.pos()));
+        result.push(Instruction::I32Eqz);
+        // stack: [block:1] [loop:0] <!antecedent: i32>
+        result.push(Instruction::BrIf(WasmIndex::Num(1, wast::token::Span::from_offset(expr.condition.pos()))));
+        result.extend(self.visit_expr(&expr.body));
+        result.push(Instruction::Drop);
+        // stack: [block:1] [loop:0]
+        result.push(Instruction::Br(WasmIndex::Num(0, wast::token::Span::from_offset(expr.pos()))));
+        result.push(Instruction::End(None));
+        result.push(Instruction::End(None));
+
+        // push a dummy Object
+        result.push(Instruction::RefNull(self.make_ty_ref(self.object_ty_id(), expr.pos())));
+
+        result
     }
 
     fn visit_block(&mut self, expr: &ast::Block<'buf>) -> Self::Output {
-        todo!()
+        let mut result = vec![];
+
+        for (idx, inner_expr) in expr.body.iter().enumerate() {
+            result.extend(self.visit_expr(inner_expr));
+
+            if idx + 1 < expr.body.len() {
+                result.push(Instruction::Drop);
+            }
+        }
+
+        result
     }
 
     fn visit_let(&mut self, expr: &ast::Let<'buf>) -> Self::Output {
-        todo!()
+        let mut result = vec![];
+        let local_ty_id = self.ty_id_for_resolved_ty(expr.binding.unwrap_res_ty().into_owned());
+
+        if let Some(init) = &expr.binding.init {
+            result.extend(self.visit_expr(init));
+        } else {
+            result.push(Instruction::RefNull(self.make_ty_ref(local_ty_id, expr.binding.pos())));
+        }
+
+        let local_id = self.locals.bind(Some(expr.binding.name.0.value.clone()), local_ty_id);
+        result.push(local_id.wasm_set(expr.binding.pos()));
+        result.extend(self.visit_expr(&expr.expr));
+
+        result
     }
 
     fn visit_case(&mut self, expr: &ast::Case<'buf>) -> Self::Output {
-        todo!()
+        use wast::core::*;
+
+        let mut result = vec![];
+        let ty_id = self.ty_id_for_resolved_ty(expr.unwrap_res_ty().into_owned());
+
+        result.push(Instruction::Block(BlockType {
+            label: None,
+            label_name: None,
+            ty: TypeUse {
+                index: None,
+                inline: Some(FunctionType {
+                    params: Box::new([]),
+                    results: Box::new([ValType::Ref(RefType {
+                        nullable: true,
+                        heap: self.make_ty_ref(ty_id, expr.pos()),
+                    })]),
+                }),
+            },
+        }));
+        result.extend(self.visit_expr(&expr.scrutinee));
+        // stack: [block:0 -> ty_id] <scrutinee>
+
+        for (idx, arm) in expr.arms.iter().enumerate() {
+            let arm_ty_id = self.ty_id_for_resolved_ty(arm.binding_ty.unwrap_res_ty().into_owned());
+
+            if idx + 1 < expr.arms.len() {
+                result.push(Instruction::Block(BlockType {
+                    label: None,
+                    label_name: None,
+                    ty: TypeUse {
+                        index: None,
+                        inline: Some(FunctionType {
+                            params: Box::new([]),
+                            results: Box::new([ValType::Ref(RefType {
+                                nullable: true,
+                                heap: self.make_ty_ref(ty_id, arm.pos()),
+                            })]),
+                        }),
+                    },
+                }));
+
+                // stack: [block:1 -> ty_id] <scrutinee> [block:0 scrutinee_ty_id -> ty_id]
+                result.push(Instruction::BrOnCastFail(BrOnCast {
+                    label: WasmIndex::Num(0, wast::token::Span::from_offset(arm.pos())),
+                    r#type: arm_ty_id.to_wasm_index(arm.binding_ty_name.pos()),
+                }));
+                // stack: [block:1 -> ty_id] [block:0 scrutinee_ty_id -> ty_id] <scrutinee: arm_ty_id>
+            } else {
+                result.push(Instruction::RefCast(arm_ty_id.to_wasm_index(arm.binding_ty_name.pos())));
+            }
+
+            let arm_local_id = self.locals.bind(Some(arm.name.0.value.clone()), arm_ty_id);
+            result.extend(self.visit_expr(&arm.expr));
+            drop(arm_local_id);
+            result.push(Instruction::RefCast(ty_id.to_wasm_index(arm.expr.pos())));
+
+            if idx + 1 < expr.arms.len() {
+                result.push(Instruction::Br(WasmIndex::Num(1, wast::token::Span::from_offset(arm.pos()))));
+                result.push(Instruction::End(None));
+            }
+        }
+
+        result.push(Instruction::End(None));
+
+        result
     }
 
     fn visit_new(&mut self, expr: &ast::New<'buf>) -> Self::Output {
-        todo!()
+        let ty = expr.unwrap_res_ty();
+
+        match *ty {
+            ResolvedTy::SelfType { .. } => self.construct_self(expr.pos()),
+            _ => self.construct_new(self.ty_id_for_resolved_ty(ty.into_owned()), expr.pos())
+        }
     }
 
     fn visit_bin_op(&mut self, expr: &ast::BinOpExpr<'buf>) -> Self::Output {
-        todo!()
+        use ast::BinOpKind;
+
+        let mut result = vec![];
+
+        result.extend(self.visit_expr(&expr.lhs));
+        result.extend(self.unbox(&expr.lhs.unwrap_res_ty(), expr.lhs.pos()));
+        result.extend(self.visit_expr(&expr.rhs));
+        result.extend(self.unbox(&expr.rhs.unwrap_res_ty(), expr.rhs.pos()));
+
+        match expr.op {
+            BinOpKind::Add => result.push(Instruction::I32Add),
+            BinOpKind::Subtract => result.push(Instruction::I32Sub),
+            BinOpKind::Multiply => result.push(Instruction::I32Mul),
+            BinOpKind::Divide => result.push(Instruction::I32DivS),
+            BinOpKind::LessThan => result.push(Instruction::I32LtS),
+            BinOpKind::LessEquals => result.push(Instruction::I32LeS),
+
+            BinOpKind::Equals => {
+                match *expr.lhs.unwrap_res_ty() {
+                    ResolvedTy::Builtin(BuiltinClass::Int) => {
+                        result.push(Instruction::I32Eq);
+                    }
+
+                    ResolvedTy::Builtin(BuiltinClass::String) => {
+                        result.extend(self.string_eq(expr.pos()));
+                    }
+
+                    ResolvedTy::Builtin(BuiltinClass::Bool) => {
+                        result.push(Instruction::I32Eq);
+                    }
+
+                    _ => {
+                        result.push(Instruction::RefEq);
+                    }
+                }
+            }
+        }
+
+        result.extend(self.r#box(&expr.unwrap_res_ty(), expr.pos()));
+
+        result
     }
 
     fn visit_un_op(&mut self, expr: &ast::UnOpExpr<'buf>) -> Self::Output {
-        todo!()
+        use ast::UnOpKind;
+
+        let mut result = vec![];
+        result.extend(self.visit_expr(&expr.expr));
+
+        match expr.op {
+            UnOpKind::IsVoid => {
+                result.push(Instruction::RefIsNull);
+            }
+
+            UnOpKind::Complement => {
+                result.extend(self.unbox(&BuiltinClass::Int.into(), expr.expr.pos()));
+                result.push(Instruction::I32Const(-1i32));
+                result.push(Instruction::I32Xor);
+            }
+
+            UnOpKind::Not => {
+                result.extend(self.unbox(&BuiltinClass::Bool.into(), expr.expr.pos()));
+                result.push(Instruction::I32Eqz);
+            }
+        }
+
+        result.extend(self.r#box(&expr.unwrap_res_ty(), expr.pos()));
+
+        result
     }
 
     fn visit_name_expr(&mut self, expr: &ast::NameExpr<'buf>) -> Self::Output {
@@ -397,38 +843,52 @@ impl<'buf> AstVisitor<'buf> for CodegenVisitor<'_, '_, 'buf> {
     }
 
     fn visit_formal(&mut self, formal: &ast::Formal<'buf>) -> Self::Output {
-        todo!()
+        unreachable!()
     }
 
     fn visit_receiver(&mut self, recv: &ast::Receiver<'buf>) -> Self::Output {
-        todo!()
+        unreachable!()
     }
 
     fn visit_case_arm(&mut self, arm: &ast::CaseArm<'buf>) -> Self::Output {
-        todo!()
+        unreachable!()
     }
 
     fn visit_ty_name(&mut self, ty_name: &ast::TyName<'buf>) -> Self::Output {
-        todo!()
+        unreachable!()
     }
 
     fn visit_binding(&mut self, binding: &ast::Binding<'buf>) -> Self::Output {
-        todo!()
+        unreachable!()
     }
 
     fn visit_name(&mut self, name: &ast::Name<'buf>) -> Self::Output {
-        todo!()
+        unreachable!()
     }
 
     fn visit_int_lit(&mut self, expr: &ast::IntLit) -> Self::Output {
-        todo!()
+        let mut result = vec![];
+        result.push(Instruction::I32Const(expr.0.value));
+        result.extend(self.r#box(&expr.unwrap_res_ty(), expr.pos()));
+
+        result
     }
 
     fn visit_string_lit(&mut self, expr: &ast::StringLit<'buf>) -> Self::Output {
-        todo!()
+        let mut result = vec![];
+        let string_id = self.cg.string_table.borrow_mut().insert(expr.0.value.clone());
+        result.push(string_id.to_i32_const());
+        result.push(Instruction::TableGet(self.string_table_arg(expr.pos())));
+        result.extend(self.r#box(&BuiltinClass::String.into(), expr.pos()));
+
+        result
     }
 
     fn visit_bool_lit(&mut self, expr: &ast::BoolLit) -> Self::Output {
-        todo!()
+        let mut result = vec![];
+        result.push(Instruction::I32Const(expr.0.value as i32));
+        result.extend(self.r#box(&BuiltinClass::Bool.into(), expr.pos()));
+
+        result
     }
 }

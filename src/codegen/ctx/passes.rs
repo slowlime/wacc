@@ -17,6 +17,7 @@ pub fn collect_types<'buf>(
     let mut ty_index = TyIndex::<WasmTy>::new();
 
     ty_index.insert(WasmTy::ByteArray);
+    ty_index.insert(WasmTy::StringEqTy);
 
     for name in sorted {
         ty_index.insert(WasmTy::Class(name.clone()));

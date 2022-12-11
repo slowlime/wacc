@@ -131,16 +131,14 @@ fn complete_func<'buf>(
     use wast::core::*;
     use wast::token::Span;
 
-    let param_ty_ids = params
-        .into_iter()
-        .map(|class_name| {
-            let wasm_ty = class_name.clone().into();
-            let Some(ty_id) = ty_index.get_by_ty(&wasm_ty) else {
+    let param_ty_ids = params.into_iter().map(|class_name| {
+        let wasm_ty = class_name.clone().into();
+        let Some(ty_id) = ty_index.get_by_ty(&wasm_ty) else {
                 panic!("The type {} was not found in the type index", class_name);
             };
 
-            create_ref_value_type(ty_id, true)
-        });
+        create_ref_value_type(ty_id, true)
+    });
 
     let wasm_ret_ty = ret.clone().into();
     let Some(ret_ty_id) = ty_index.get_by_ty(&wasm_ret_ty) else {
@@ -175,6 +173,43 @@ fn complete_byte_array() -> wast::core::Type<'static> {
     }
 }
 
+fn complete_string_eq_ty<'buf>(
+    ty_index: &TyIndex<'buf, WasmTy<'buf>>,
+) -> wast::core::Type<'static> {
+    use wast::core::*;
+    use wast::token::Span;
+
+    let byte_array_id = ty_index.get_by_ty(&WasmTy::ByteArray).unwrap();
+
+    wast::core::Type {
+        span: Span::from_offset(0),
+        id: None,
+        name: None,
+        def: TypeDef::Func(FunctionType {
+            params: Box::new([
+                (
+                    None,
+                    None,
+                    ValType::Ref(RefType {
+                        nullable: true,
+                        heap: HeapType::Index(byte_array_id.to_wasm_index(0)),
+                    }),
+                ),
+                (
+                    None,
+                    None,
+                    ValType::Ref(RefType {
+                        nullable: true,
+                        heap: HeapType::Index(byte_array_id.to_wasm_index(0)),
+                    }),
+                ),
+            ]),
+            results: Box::new([ValType::I32]),
+        }),
+        parent: None,
+    }
+}
+
 fn complete_wasm_ty<'buf>(
     ty_ctx: &TypeCtx<'buf>,
     ty_index: &TyIndex<'buf, WasmTy<'buf>>,
@@ -185,6 +220,7 @@ fn complete_wasm_ty<'buf>(
         WasmTy::Class(_) => complete_class(ty_ctx, ty_index, ty_id),
         WasmTy::Func { params, ret } => complete_func(ty_index, params, ret),
         WasmTy::ByteArray => complete_byte_array(),
+        WasmTy::StringEqTy => complete_string_eq_ty(ty_index),
     }
 }
 

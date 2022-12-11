@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::marker::PhantomData;
 
 use super::TyId;
 
@@ -9,7 +10,9 @@ struct LocalDef {
     idx: usize,
     gen: usize,
     ty_id: TyId,
-    allocated: bool,
+    ref_count: usize,
+    // prevent inferring Send and Sync
+    _marker: PhantomData<*mut ()>,
 }
 
 impl LocalDef {
@@ -19,10 +22,16 @@ impl LocalDef {
         LocalRef { gen, idx }
     }
 
+    fn make_id<'ctx, 'buf>(&mut self, ctx: &'ctx LocalCtx<'buf>) -> LocalId<'ctx, 'buf> {
+        self.ref_count += 1;
+
+        LocalId { ctx, idx: self.idx }
+    }
+
     fn is_ref_valid(&self, local_ref: &LocalRef) -> bool {
         assert!(local_ref.gen <= self.gen);
 
-        local_ref.gen == self.gen && local_ref.idx == self.idx && self.allocated
+        local_ref.gen == self.gen && local_ref.idx == self.idx && self.ref_count > 0
     }
 }
 
@@ -49,6 +58,18 @@ impl LocalId<'_, '_> {
         wast::token::Index::Num(self.idx as _, wast::token::Span::from_offset(pos))
     }
 
+    pub fn wasm_get(&self, pos: usize) -> wast::core::Instruction<'static> {
+        wast::core::Instruction::LocalGet(self.to_wasm_index(pos))
+    }
+
+    pub fn wasm_set(&self, pos: usize) -> wast::core::Instruction<'static> {
+        wast::core::Instruction::LocalSet(self.to_wasm_index(pos))
+    }
+
+    pub fn wasm_tee(&self, pos: usize) -> wast::core::Instruction<'static> {
+        wast::core::Instruction::LocalTee(self.to_wasm_index(pos))
+    }
+
     fn make_ref(&self) -> LocalRef {
         let locals = self.ctx.locals.borrow();
 
@@ -60,8 +81,12 @@ impl Drop for LocalId<'_, '_> {
     fn drop(&mut self) {
         let locals = &mut *self.ctx.locals.borrow_mut();
         let def = &mut locals[self.idx];
-        def.allocated = false;
-        def.gen += 1;
+
+        def.ref_count -= 1;
+
+        if def.ref_count == 0 {
+            def.gen += 1;
+        }
     }
 }
 
@@ -99,17 +124,12 @@ impl<'buf> LocalCtx<'buf> {
 
     fn allocate(&self, ty_id: TyId) -> LocalId<'_, 'buf> {
         let locals = &mut *self.locals.borrow_mut();
-        let def = locals.iter_mut().find(|local| !local.allocated && local.ty_id == ty_id);
+        let def = locals
+            .iter_mut()
+            .find(|local| local.ref_count == 0 && local.ty_id == ty_id);
 
         match def {
-            Some(def) => {
-                def.allocated = true;
-
-                LocalId {
-                    ctx: self,
-                    idx: def.idx,
-                }
-            }
+            Some(def) => def.make_id(self),
 
             None => {
                 let idx = locals.len();
@@ -118,13 +138,11 @@ impl<'buf> LocalCtx<'buf> {
                     idx,
                     gen: 0,
                     ty_id,
-                    allocated: true,
+                    ref_count: 0,
+                    _marker: Default::default(),
                 });
 
-                LocalId {
-                    ctx: self,
-                    idx,
-                }
+                locals[idx].make_id(self)
             }
         }
     }

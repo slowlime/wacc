@@ -8,6 +8,9 @@ pub const CONSTRUCTOR_NAME: &[u8] = b"{new}";
 pub enum WasmTy<'buf> {
     ByteArray,
 
+    /// The type of the `string_eq` runtime function.
+    StringEqTy,
+
     Class(ClassName<'buf>),
 
     Func {

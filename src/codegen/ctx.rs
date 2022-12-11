@@ -265,23 +265,36 @@ impl<'buf> MethodIndex<'buf> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct MethodTableId {
-    table_idx: usize,
-    method_idx: usize,
-}
+pub struct TableId(usize);
 
-impl MethodTableId {
-    pub fn table_idx(&self) -> usize {
-        self.table_idx
+impl TableId {
+    pub fn new(idx: usize) -> Self {
+        Self(idx)
+    }
+
+    pub fn index(&self) -> usize {
+        self.0
     }
 
     pub fn to_table_arg(&self, pos: usize) -> wast::core::TableArg<'static> {
         wast::core::TableArg {
             dst: wast::token::Index::Num(
-                self.table_idx.try_into().unwrap(),
+                self.0.try_into().unwrap(),
                 wast::token::Span::from_offset(pos),
             ),
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct MethodTableId {
+    table_id: TableId,
+    method_idx: usize,
+}
+
+impl MethodTableId {
+    pub fn table_id(&self) -> TableId {
+        self.table_id
     }
 
     pub fn method_idx(&self) -> usize {
@@ -317,7 +330,7 @@ impl MethodTable {
         );
 
         MethodTableId {
-            table_idx,
+            table_id: TableId(table_idx),
             method_idx,
         }
     }
@@ -331,19 +344,33 @@ impl MethodTable {
         let method_idx = method_set.get_index_of(&method_id)?;
 
         Some(MethodTableId {
-            table_idx,
+            table_id: TableId(table_idx),
             method_idx,
         })
     }
 
     pub fn get_by_table_id(&self, table_id: MethodTableId) -> Option<(TyId, MethodId)> {
         self.method_tys
-            .get_index(table_id.table_idx)
+            .get_index(table_id.table_id.0)
             .and_then(|(&ty_id, method_set)| {
                 method_set
                     .get_index(table_id.method_idx)
                     .map(|&method_id| (ty_id, method_id))
             })
+    }
+
+    pub fn get_table_id(&self, method_ty_id: TyId) -> Option<TableId> {
+        self.method_tys.get_index_of(&method_ty_id).map(TableId)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (TableId, TyId, impl Iterator<Item = MethodId> + '_)> + '_ {
+        self.method_tys
+            .iter()
+            .map(|(&ty_id, methods)| (
+                TableId(self.method_tys.get_index_of(&ty_id).unwrap()),
+                ty_id,
+                methods.iter().copied(),
+            ))
     }
 }
 
@@ -410,6 +437,10 @@ pub struct StringId(usize);
 impl StringId {
     pub fn index(&self) -> usize {
         self.0
+    }
+
+    pub fn to_i32_const(&self) -> wast::core::Instruction<'static> {
+        wast::core::Instruction::I32Const(self.0.try_into().unwrap())
     }
 }
 
