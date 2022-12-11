@@ -6,6 +6,9 @@ pub const CONSTRUCTOR_NAME: &[u8] = b"{new}";
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum WasmTy<'buf> {
+    /// The unboxed i32 type.
+    I32,
+
     ByteArray,
 
     /// The type of the `string_eq` runtime function.
@@ -17,6 +20,12 @@ pub enum WasmTy<'buf> {
         params: Vec<ClassName<'buf>>,
         ret: ClassName<'buf>,
     },
+}
+
+impl WasmTy<'_> {
+    pub fn is_boxed(&self) -> bool {
+        !matches!(self, Self::I32)
+    }
 }
 
 impl<'buf> From<FunctionTy<'buf>> for WasmTy<'buf> {

@@ -221,6 +221,7 @@ fn complete_wasm_ty<'buf>(
         WasmTy::Func { params, ret } => complete_func(ty_index, params, ret),
         WasmTy::ByteArray => complete_byte_array(),
         WasmTy::StringEqTy => complete_string_eq_ty(ty_index),
+        WasmTy::I32 => unreachable!(),
     }
 }
 

@@ -3,13 +3,13 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
-use super::TyId;
+use super::TyKind;
 
 #[derive(Debug, Clone)]
 struct LocalDef {
     idx: usize,
     gen: usize,
-    ty_id: TyId,
+    ty_kind: TyKind,
     ref_count: usize,
     // prevent inferring Send and Sync
     _marker: PhantomData<*mut ()>,
@@ -95,8 +95,8 @@ impl<'buf> LocalCtx<'buf> {
         Default::default()
     }
 
-    pub fn bind(&self, name: Option<Cow<'buf, [u8]>>, ty_id: TyId) -> LocalId<'_, 'buf> {
-        let id = self.allocate(ty_id);
+    pub fn bind(&self, name: Option<Cow<'buf, [u8]>>, ty_kind: impl Into<TyKind>) -> LocalId<'_, 'buf> {
+        let id = self.allocate(ty_kind.into());
 
         if let Some(name) = name {
             self.bindings.borrow_mut().insert(name, id.make_ref());
@@ -107,14 +107,11 @@ impl<'buf> LocalCtx<'buf> {
 
     pub fn get(&self, name: &[u8]) -> Option<LocalId<'_, 'buf>> {
         let &local_ref = self.bindings.borrow().get(name)?;
-        let locals = self.locals.borrow();
-        let def = locals.get(local_ref.idx).unwrap();
+        let mut locals = self.locals.borrow_mut();
+        let def = locals.get_mut(local_ref.idx).unwrap();
 
         if def.is_ref_valid(&local_ref) {
-            Some(LocalId {
-                ctx: self,
-                idx: def.idx,
-            })
+            Some(def.make_id(self))
         } else {
             self.bindings.borrow_mut().remove(name);
 
@@ -122,11 +119,11 @@ impl<'buf> LocalCtx<'buf> {
         }
     }
 
-    fn allocate(&self, ty_id: TyId) -> LocalId<'_, 'buf> {
+    fn allocate(&self, ty_kind: TyKind) -> LocalId<'_, 'buf> {
         let locals = &mut *self.locals.borrow_mut();
         let def = locals
             .iter_mut()
-            .find(|local| local.ref_count == 0 && local.ty_id == ty_id);
+            .find(|local| local.ref_count == 0 && local.ty_kind == ty_kind);
 
         match def {
             Some(def) => def.make_id(self),
@@ -137,7 +134,7 @@ impl<'buf> LocalCtx<'buf> {
                 locals.push(LocalDef {
                     idx,
                     gen: 0,
-                    ty_id,
+                    ty_kind,
                     ref_count: 0,
                     _marker: Default::default(),
                 });
@@ -149,7 +146,7 @@ impl<'buf> LocalCtx<'buf> {
 }
 
 impl IntoIterator for LocalCtx<'_> {
-    type Item = TyId;
+    type Item = TyKind;
     type IntoIter = LocalCtxIter;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -160,9 +157,9 @@ impl IntoIterator for LocalCtx<'_> {
 pub struct LocalCtxIter(<Vec<LocalDef> as IntoIterator>::IntoIter);
 
 impl Iterator for LocalCtxIter {
-    type Item = TyId;
+    type Item = TyKind;
 
-    fn next(&mut self) -> Option<TyId> {
-        self.0.next().map(|def| def.ty_id)
+    fn next(&mut self) -> Option<TyKind> {
+        self.0.next().map(|def| def.ty_kind)
     }
 }
