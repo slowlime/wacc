@@ -3,7 +3,7 @@
 use std::borrow::Cow;
 
 use crate::analysis::{ClassName, TypeCtx};
-use crate::codegen::builtin::BUILTIN_FUNCS;
+use crate::codegen::funcs::specials;
 use crate::util::slice_formatter;
 
 use super::ty::{
@@ -28,7 +28,10 @@ pub fn collect_types<'buf>(
 
     ty_index.insert(constructor_ty());
     ty_index.insert(initializer_ty());
-    ty_index.insert(BUILTIN_FUNCS.string_eq.ty.clone());
+
+    for (_, func) in specials() {
+        ty_index.insert(func.ty.clone());
+    }
 
     for name in sorted {
         let Some(class_index) = ty_ctx.get_class(name) else {

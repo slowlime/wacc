@@ -15,7 +15,8 @@ use crate::ast::Visitor as AstVisitor;
 use crate::codegen::PositionOffset;
 use crate::util::slice_formatter;
 
-use super::builtin::BUILTIN_FUNCS;
+use super::funcs::BUILTIN_FUNCS;
+use super::funcs::BuiltinFuncKey;
 use super::ctx::ty::constructor_ty;
 use super::ctx::ty::RegularTy;
 use super::ctx::ty::WasmTy;
@@ -336,11 +337,12 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
         result
     }
 
-    fn call_string_eq(&self, pos: usize) -> Instruction<'static> {
-        let Some(func_id) = self.cg.func_registry.get_by_name(&BUILTIN_FUNCS.string_eq.name) else {
+    fn call_builtin(&self, builtin_key: BuiltinFuncKey, pos: usize) -> Instruction<'static> {
+        let builtin = BUILTIN_FUNCS.get(builtin_key);
+        let Some(func_id) = self.cg.func_registry.get_by_name(&builtin.name) else {
             panic!(
                 "The function {} was not defined in the function registry",
-                &BUILTIN_FUNCS.string_eq.name
+                &builtin.name
             );
         };
 
@@ -754,7 +756,7 @@ impl<'buf> AstVisitor<'buf> for CodegenVisitor<'_, '_, 'buf> {
                 }
 
                 ResolvedTy::Builtin(BuiltinClass::String) => {
-                    result.push(self.call_string_eq(expr.pos()));
+                    result.push(self.call_builtin(BuiltinFuncKey::StringEq, expr.pos()));
                 }
 
                 ResolvedTy::Builtin(BuiltinClass::Bool) => {

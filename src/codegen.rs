@@ -1,5 +1,5 @@
-mod builtin;
 pub mod ctx;
+mod funcs;
 pub mod passes;
 mod string_collector;
 mod visitor;
@@ -32,7 +32,6 @@ use ctx::CompleteWasmTy;
 use ctx::FieldTable;
 use ctx::FuncDef;
 use ctx::FuncDefKind;
-use ctx::FuncId;
 use ctx::FuncName;
 use ctx::FuncRegistry;
 use ctx::LocalCtx;
@@ -47,7 +46,9 @@ use ctx::Vtable;
 use ctx::{MethodId, TyId};
 use visitor::CodegenVisitor;
 
-use self::builtin::BUILTIN_FUNCS;
+use self::funcs::specials;
+use self::funcs::BuiltinFuncKey;
+use self::funcs::SpecialFuncKey;
 
 trait PositionOffset {
     fn pos(&self) -> usize;
@@ -113,23 +114,25 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
             funcs: HashMap::new(),
         };
 
-        this.register_builtin_funcs();
+        this.register_special_funcs();
         this.register_methods();
 
         this
     }
 
-    fn register_builtin_funcs(&mut self) {
-        self.func_registry.insert(
-            BUILTIN_FUNCS.string_eq.name.clone(),
-            FuncDef {
-                kind: FuncDefKind::Runtime,
-                method_ty_id: self
-                    .ty_index
-                    .get_by_wasm_ty(&BUILTIN_FUNCS.string_eq.ty)
-                    .unwrap(),
-            },
-        );
+    fn register_special_funcs(&mut self) {
+        for (key, func) in specials() {
+            self.func_registry.insert(
+                func.name.clone(),
+                FuncDef {
+                    kind: match key {
+                        SpecialFuncKey::Builtin(key) => FuncDefKind::Builtin(key),
+                        SpecialFuncKey::Imported(key) => FuncDefKind::Imported(key),
+                    },
+                    method_ty_id: self.ty_index.get_by_wasm_ty(&func.ty).unwrap(),
+                },
+            );
+        }
     }
 
     fn register_methods(&mut self) {
@@ -492,25 +495,30 @@ impl<'a, 'buf> Codegen<'a, 'buf, WasmTy<'buf>> {
     fn generate_imports(&self) -> Vec<wast::core::Import<'static>> {
         use wast::core::*;
 
-        vec![Import {
-            span: WasmSpan::from_offset(0),
-            module: "cool-runtime",
-            field: BUILTIN_FUNCS.string_eq.name.as_plain().unwrap(),
-            item: ItemSig {
-                span: WasmSpan::from_offset(0),
-                id: None,
-                name: None,
-                kind: ItemKind::Func(TypeUse {
-                    index: Some(
-                        self.ty_index
-                            .get_by_ty(&BUILTIN_FUNCS.string_eq.ty)
-                            .unwrap()
-                            .to_wasm_index(0),
-                    ),
-                    inline: None,
-                }),
-            },
-        }]
+        self.func_registry
+            .iter()
+            .filter_map(|(_, _, func_def)| {
+                try_match!(func_def.kind, FuncDefKind::Imported(key) => {
+                    (func_def.method_ty_id, key)
+                })
+            })
+            .map(|(func_ty_id, key)| {
+                Import {
+                    span: WasmSpan::from_offset(0),
+                    module: "cool-runtime",
+                    field: key.as_str(),
+                    item: ItemSig {
+                        span: WasmSpan::from_offset(0),
+                        id: None,
+                        name: None,
+                        kind: ItemKind::Func(TypeUse {
+                            index: Some(func_ty_id.to_wasm_index(0)),
+                            inline: None,
+                        }),
+                    },
+                }
+            })
+            .collect()
     }
 
     fn generate_tables(&self) -> Vec<wast::core::Table<'static>> {
@@ -611,15 +619,15 @@ impl<'a, 'buf> Codegen<'a, 'buf, WasmTy<'buf>> {
 
         self.func_registry
             .iter()
-            .filter_map(|(func_id, _, def)| match def.kind {
-                FuncDefKind::Builtin => Some(self.generate_builtin(func_id)),
-                FuncDefKind::Runtime => None,
+            .filter_map(|(_, _, def)| match def.kind {
+                FuncDefKind::Builtin(key) => Some(self.generate_builtin(key)),
+                FuncDefKind::Imported(_) => None,
                 FuncDefKind::ClassMethod(method_id) => Some(funcs.remove(&method_id).unwrap()),
             })
             .collect()
     }
 
-    fn generate_builtin(&self, _func_id: FuncId) -> wast::core::Func<'static> {
+    fn generate_builtin(&self, _key: BuiltinFuncKey) -> wast::core::Func<'static> {
         todo!()
     }
 }

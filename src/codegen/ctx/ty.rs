@@ -20,7 +20,7 @@ pub enum WasmTy<'buf> {
 
     Func {
         params: Vec<RegularTy<'buf>>,
-        ret: RegularTy<'buf>,
+        ret: Option<RegularTy<'buf>>,
     },
 }
 
@@ -73,7 +73,7 @@ impl<'buf> From<FunctionTy<'buf>> for WasmTy<'buf> {
                 .into_iter()
                 .map(|param| param.try_into().unwrap())
                 .collect(),
-            ret: (*ret).try_into().unwrap(),
+            ret: Some((*ret).try_into().unwrap()),
         }
     }
 }
@@ -109,7 +109,7 @@ pub fn constructor_ty<'buf>() -> WasmTy<'buf> {
     // actually () -> SELF_TYPE
     WasmTy::Func {
         params: vec![],
-        ret: BuiltinClass::Object.into(),
+        ret: Some(BuiltinClass::Object.into()),
     }
 }
 
@@ -117,7 +117,7 @@ pub fn initializer_ty<'buf>() -> WasmTy<'buf> {
     // actually (SELF_TYPE) -> SELF_TYPE
     WasmTy::Func {
         params: vec![BuiltinClass::Object.into()],
-        ret: BuiltinClass::Object.into(),
+        ret: Some(BuiltinClass::Object.into()),
     }
 }
 

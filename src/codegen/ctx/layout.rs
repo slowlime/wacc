@@ -157,7 +157,7 @@ fn complete_class<'buf>(
 fn complete_func<'buf>(
     ty_index: &TyIndex<'buf, WasmTy<'buf>>,
     params: &[RegularTy<'buf>],
-    ret: &RegularTy<'buf>,
+    ret: Option<&RegularTy<'buf>>,
 ) -> wast::core::Type<'static> {
     use wast::core::*;
     use wast::token::Span;
@@ -171,7 +171,7 @@ fn complete_func<'buf>(
         })
         .collect();
 
-    let ret_ty = make_val_type(ty_index, &ret.clone().into(), true, 0);
+    let ret_ty = ret.map(|ret| make_val_type(ty_index, &ret.clone().into(), true, 0));
 
     Type {
         span: Span::from_offset(0),
@@ -179,7 +179,10 @@ fn complete_func<'buf>(
         name: None,
         def: TypeDef::Func(FunctionType {
             params: param_specs.into(),
-            results: Box::new([ret_ty]),
+            results: match ret_ty {
+                Some(ret_ty) => Box::new([ret_ty]),
+                None => Box::new([]),
+            },
         }),
         parent: None,
     }
@@ -214,7 +217,7 @@ fn complete_wasm_ty<'buf>(
         WasmTy::Regular(RegularTy::Class(_)) => {
             complete_class(ty_ctx, ty_index, field_table, ty_id)
         }
-        WasmTy::Func { params, ret } => complete_func(ty_index, params, ret),
+        WasmTy::Func { params, ret } => complete_func(ty_index, params, ret.as_ref()),
     }
 }
 
