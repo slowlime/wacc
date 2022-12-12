@@ -17,6 +17,7 @@ use ty::WasmTy;
 pub use locals::{LocalCtx, LocalId};
 
 use crate::analysis::ClassName;
+use crate::try_match;
 use crate::util::slice_formatter;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -74,7 +75,6 @@ impl<'buf> TyIndexEntry<'buf> for WasmTy<'buf> {}
 pub struct CompleteWasmTy<'buf> {
     pub complete_ty: wast::core::Type<'static>,
     pub wasm_ty: WasmTy<'buf>,
-    pub vtable_base: Option<VtableId>,
     _private: PhantomData<()>,
 }
 
@@ -149,7 +149,6 @@ impl<'buf> TyIndex<'buf, CompleteWasmTy<'buf>> {
         &mut self,
         complete_ty: wast::core::Type<'static>,
         wasm_ty: WasmTy<'buf>,
-        vtable_base: Option<VtableId>,
     ) -> TyId {
         assert!(wasm_ty.is_boxed());
 
@@ -160,7 +159,6 @@ impl<'buf> TyIndex<'buf, CompleteWasmTy<'buf>> {
         let (idx, _) = self.types.insert_full(CompleteWasmTy {
             complete_ty,
             wasm_ty,
-            vtable_base,
             _private: Default::default(),
         });
 
@@ -173,6 +171,37 @@ impl<'buf> TyIndex<'buf, CompleteWasmTy<'buf>> {
 
     pub fn get_by_id(&self, id: TyId) -> Option<&CompleteWasmTy<'buf>> {
         self.types.get_index(id.0)
+    }
+
+    pub fn extract_completed_tys(
+        self,
+    ) -> (
+        impl Iterator<Item = (TyId, wast::core::Type<'static>)>,
+        TyIndex<'buf, WasmTy<'buf>>,
+    ) {
+        let (complete_tys, wasm_tys): (Vec<_>, IndexSet<_>) = self
+            .types
+            .into_iter()
+            .enumerate()
+            .map(
+                |(
+                    idx,
+                    CompleteWasmTy {
+                        complete_ty,
+                        wasm_ty,
+                        ..
+                    },
+                )| ((TyId(idx), complete_ty), wasm_ty),
+            )
+            .unzip();
+
+        (
+            complete_tys.into_iter(),
+            TyIndex {
+                types: wasm_tys,
+                _marker: Default::default(),
+            },
+        )
     }
 }
 
@@ -570,6 +599,13 @@ impl Vtable {
     pub fn base_offset(&self, ty_id: TyId) -> Option<VtableId> {
         self.base_offsets.get(&ty_id).copied().map(VtableId)
     }
+
+    pub fn iter(&self) -> impl Iterator<Item = (VtableId, MethodTableId)> + '_ {
+        self.table
+            .iter()
+            .enumerate()
+            .map(|(idx, &method_table_id)| (VtableId(idx), method_table_id))
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -610,6 +646,13 @@ impl<'buf> StringTable<'buf> {
     pub fn get_by_id(&self, id: StringId) -> Option<&[u8]> {
         self.strings.get_index(id.0).map(Deref::deref)
     }
+
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item = (StringId, &'a [u8])> {
+        self.strings
+            .iter()
+            .enumerate()
+            .map(|(idx, s)| (StringId(idx), &**s))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -619,6 +662,12 @@ pub enum FuncName<'buf> {
         class_name: ClassName<'buf>,
         method_name: Cow<'buf, [u8]>,
     },
+}
+
+impl FuncName<'_> {
+    pub fn as_plain(&self) -> Option<&str> {
+        try_match!(self, Self::Plain(name) => &**name)
+    }
 }
 
 impl Display for FuncName<'_> {
@@ -702,6 +751,13 @@ impl<'buf> FuncRegistry<'buf> {
 
     pub fn get_by_method_id(&self, method_id: MethodId) -> Option<FuncId> {
         self.methods.get(&method_id).copied()
+    }
+
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item = (FuncId, &'a FuncName<'buf>, &'a FuncDef)> {
+        self.funcs
+            .iter()
+            .enumerate()
+            .map(|(idx, (func_name, func_def))| (FuncId(idx), func_name, func_def))
     }
 }
 

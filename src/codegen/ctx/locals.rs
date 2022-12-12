@@ -1,7 +1,8 @@
 use std::borrow::Cow;
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::marker::PhantomData;
+
+use indexmap::{IndexSet, IndexMap};
 
 use super::TyKind;
 
@@ -22,10 +23,10 @@ impl LocalDef {
         LocalRef { gen, idx }
     }
 
-    fn make_id<'ctx, 'buf>(&mut self, ctx: &'ctx LocalCtx<'buf>) -> LocalId<'ctx, 'buf> {
+    fn make_id<'ctx, 'buf>(&mut self, ctx: &'ctx LocalCtx<'buf>, binding_idx: Option<usize>) -> LocalId<'ctx, 'buf> {
         self.ref_count += 1;
 
-        LocalId { ctx, idx: self.idx }
+        LocalId { ctx, idx: self.idx, binding_idx }
     }
 
     fn is_ref_valid(&self, local_ref: &LocalRef) -> bool {
@@ -35,7 +36,7 @@ impl LocalDef {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct LocalRef {
     gen: usize,
     idx: usize,
@@ -44,14 +45,14 @@ struct LocalRef {
 #[derive(Debug, Clone, Default)]
 pub struct LocalCtx<'buf> {
     locals: RefCell<Vec<LocalDef>>,
-    // FIXME: must use a stack
-    bindings: RefCell<HashMap<Cow<'buf, [u8]>, LocalRef>>,
+    bindings: RefCell<IndexMap<Cow<'buf, [u8]>, IndexSet<LocalRef>>>,
 }
 
 #[derive(Debug)]
-pub struct LocalId<'a, 'buf> {
-    ctx: &'a LocalCtx<'buf>,
+pub struct LocalId<'ctx, 'buf> {
+    ctx: &'ctx LocalCtx<'buf>,
     idx: usize,
+    binding_idx: Option<usize>,
 }
 
 impl LocalId<'_, '_> {
@@ -88,6 +89,12 @@ impl Drop for LocalId<'_, '_> {
         if def.ref_count == 0 {
             def.gen += 1;
         }
+
+        if let Some(binding_idx) = self.binding_idx {
+            let mut bindings = self.ctx.bindings.borrow_mut();
+            let Some((_, bindings)) = bindings.get_index_mut(binding_idx) else { return };
+            assert!(bindings.shift_remove(&def.make_ref()));
+        }
     }
 }
 
@@ -97,22 +104,31 @@ impl<'buf> LocalCtx<'buf> {
     }
 
     pub fn bind(&self, name: Option<Cow<'buf, [u8]>>, ty_kind: impl Into<TyKind>) -> LocalId<'_, 'buf> {
-        let id = self.allocate(ty_kind.into());
+        let mut id = self.allocate(ty_kind.into());
 
         if let Some(name) = name {
-            self.bindings.borrow_mut().insert(name, id.make_ref());
+            let mut bindings = self.bindings.borrow_mut();
+            let entry = bindings.entry(name);
+            id.binding_idx = Some(entry.index());
+
+            entry.or_default().insert(id.make_ref());
         }
 
         id
     }
 
     pub fn get(&self, name: &[u8]) -> Option<LocalId<'_, 'buf>> {
-        let &local_ref = self.bindings.borrow().get(name)?;
+        let (local_ref, binding_idx) = {
+            let bindings = self.bindings.borrow();
+            let (binding_idx, _, bindings) = bindings.get_full(name)?;
+
+            (*bindings.last()?, binding_idx)
+        };
         let mut locals = self.locals.borrow_mut();
         let def = locals.get_mut(local_ref.idx).unwrap();
 
         if def.is_ref_valid(&local_ref) {
-            Some(def.make_id(self))
+            Some(def.make_id(self, Some(binding_idx)))
         } else {
             self.bindings.borrow_mut().remove(name);
 
@@ -127,7 +143,7 @@ impl<'buf> LocalCtx<'buf> {
             .find(|local| local.ref_count == 0 && local.ty_kind == ty_kind);
 
         match def {
-            Some(def) => def.make_id(self),
+            Some(def) => def.make_id(self, None),
 
             None => {
                 let idx = locals.len();
@@ -140,7 +156,7 @@ impl<'buf> LocalCtx<'buf> {
                     _marker: Default::default(),
                 });
 
-                locals[idx].make_id(self)
+                locals[idx].make_id(self, None)
             }
         }
     }

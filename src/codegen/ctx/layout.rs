@@ -5,7 +5,7 @@ use crate::ast::ty::BuiltinClass;
 use crate::codegen::ctx::TyKind;
 use crate::util::slice_formatter;
 
-use super::{CompleteWasmTy, TyId, TyIndex, Vtable, WasmTy, FieldTable};
+use super::{CompleteWasmTy, TyId, TyIndex, WasmTy, FieldTable};
 
 pub const VTABLE_FIELD_NAME: &[u8] = b"{vtable}";
 pub const VALUE_FIELD_NAME: &[u8] = b"{value}";
@@ -242,14 +242,12 @@ pub fn compute_layout<'buf>(
     ty_ctx: &TypeCtx<'buf>,
     ty_index: &TyIndex<'buf, WasmTy<'buf>>,
     field_table: &mut FieldTable<'buf>,
-    vtable: &Vtable,
 ) -> TyIndex<'buf, CompleteWasmTy<'buf>> {
     let mut result = TyIndex::<CompleteWasmTy>::new();
 
     for (ty_id, wasm_ty) in ty_index.iter() {
         let complete_ty = super::layout::complete_wasm_ty(ty_ctx, ty_index, field_table, ty_id, wasm_ty);
-        let vtable_base = vtable.base_offset(ty_id);
-        result.insert(complete_ty, wasm_ty.clone(), vtable_base);
+        result.insert(complete_ty, wasm_ty.clone());
     }
 
     // XXX: need to figure out how stable the type indices are
