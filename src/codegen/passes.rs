@@ -3,7 +3,7 @@ use crate::ast::Class;
 
 use super::ctx::{StringTable, TyIndex, CompleteWasmTy, MethodTable, Vtable, FieldTable, MethodIndex};
 use super::string_collector::StringCollector;
-use super::visitor::{CodegenOutput, Codegen};
+use super::{CodegenOutput, Codegen};
 
 pub use super::ctx::passes::*;
 
