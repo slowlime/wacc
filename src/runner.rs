@@ -98,22 +98,35 @@ fn run(mut ctx: RunnerCtx<'_, '_>) -> ExitCode {
 
     // code generation
     let ty_index = return_if_stopped!(ctx, passes::collect_types(&mut ctx, &sorted, &ty_ctx));
-    let method_index = return_if_stopped!(ctx, passes::enumerate_methods(&mut ctx, &sorted, &ty_ctx, &ty_index));
-    let method_table = return_if_stopped!(ctx, passes::create_method_table(&mut ctx, &ty_ctx, &ty_index, &method_index));
-    let vtable = return_if_stopped!(ctx, passes::create_vtable(&mut ctx, &ty_ctx, &ty_index, &method_index, &method_table));
-    let (field_table, ty_index) = return_if_stopped!(ctx, passes::compute_layout(&mut ctx, &ty_ctx, ty_index));
+    let method_index = return_if_stopped!(
+        ctx,
+        passes::enumerate_methods(&mut ctx, &sorted, &ty_ctx, &ty_index)
+    );
+    let method_table = return_if_stopped!(
+        ctx,
+        passes::create_method_table(&mut ctx, &ty_ctx, &ty_index, &method_index)
+    );
+    let vtable = return_if_stopped!(
+        ctx,
+        passes::create_vtable(&mut ctx, &ty_ctx, &ty_index, &method_index, &method_table)
+    );
+    let (field_table, ty_index) =
+        return_if_stopped!(ctx, passes::compute_layout(&mut ctx, &ty_ctx, ty_index));
     let string_table = return_if_stopped!(ctx, passes::collect_strings(&mut ctx, &classes));
-    let _cg_output = return_if_stopped!(ctx, passes::codegen(
-        &mut ctx,
-        ty_ctx,
-        ty_index,
-        method_index,
-        method_table,
-        vtable,
-        string_table,
-        field_table,
-        &classes,
-    ));
+    let _cg_output = return_if_stopped!(
+        ctx,
+        passes::codegen(
+            &mut ctx,
+            ty_ctx,
+            ty_index,
+            method_index,
+            method_table,
+            vtable,
+            string_table,
+            field_table,
+            &classes,
+        )
+    );
 
     ExitCode::SUCCESS
 }

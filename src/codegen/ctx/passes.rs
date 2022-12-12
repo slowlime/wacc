@@ -6,7 +6,10 @@ use crate::analysis::{ClassName, TypeCtx};
 use crate::codegen::builtin::BUILTIN_FUNCS;
 use crate::util::slice_formatter;
 
-use super::ty::{constructor_ty, get_method_ty, WasmTy, CONSTRUCTOR_NAME, initializer_ty, INITIALIZER_NAME, RegularTy};
+use super::ty::{
+    constructor_ty, get_method_ty, initializer_ty, RegularTy, WasmTy, CONSTRUCTOR_NAME,
+    INITIALIZER_NAME,
+};
 use super::{MethodDefinition, MethodIndex, MethodTable, TyIndex, Vtable};
 
 pub use super::layout::compute_layout;

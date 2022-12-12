@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::marker::PhantomData;
 
-use indexmap::{IndexSet, IndexMap};
+use indexmap::{IndexMap, IndexSet};
 
 use super::TyKind;
 
@@ -23,10 +23,18 @@ impl LocalDef {
         LocalRef { gen, idx }
     }
 
-    fn make_id<'ctx, 'buf>(&mut self, ctx: &'ctx LocalCtx<'buf>, binding_idx: Option<usize>) -> LocalId<'ctx, 'buf> {
+    fn make_id<'ctx, 'buf>(
+        &mut self,
+        ctx: &'ctx LocalCtx<'buf>,
+        binding_idx: Option<usize>,
+    ) -> LocalId<'ctx, 'buf> {
         self.ref_count += 1;
 
-        LocalId { ctx, idx: self.idx, binding_idx }
+        LocalId {
+            ctx,
+            idx: self.idx,
+            binding_idx,
+        }
     }
 
     fn is_ref_valid(&self, local_ref: &LocalRef) -> bool {
@@ -103,7 +111,11 @@ impl<'buf> LocalCtx<'buf> {
         Default::default()
     }
 
-    pub fn bind(&self, name: Option<Cow<'buf, [u8]>>, ty_kind: impl Into<TyKind>) -> LocalId<'_, 'buf> {
+    pub fn bind(
+        &self,
+        name: Option<Cow<'buf, [u8]>>,
+        ty_kind: impl Into<TyKind>,
+    ) -> LocalId<'_, 'buf> {
         let mut id = self.allocate(ty_kind.into());
 
         if let Some(name) = name {

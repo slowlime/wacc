@@ -1,9 +1,11 @@
 use crate::analysis::TypeCtx;
 use crate::ast::Class;
 
-use super::ctx::{StringTable, TyIndex, CompleteWasmTy, MethodTable, Vtable, FieldTable, MethodIndex};
+use super::ctx::{
+    CompleteWasmTy, FieldTable, MethodIndex, MethodTable, StringTable, TyIndex, Vtable,
+};
 use super::string_collector::StringCollector;
-use super::{CodegenOutput, Codegen};
+use super::{Codegen, CodegenOutput};
 
 pub use super::ctx::passes::*;
 
@@ -29,7 +31,7 @@ pub fn lower<'buf>(
         vtable,
         string_table,
         field_table,
-        classes
+        classes,
     );
 
     cg.lower()

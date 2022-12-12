@@ -15,10 +15,9 @@ use crate::ast::Visitor as AstVisitor;
 use crate::codegen::PositionOffset;
 use crate::util::slice_formatter;
 
-use super::Codegen;
 use super::builtin::BUILTIN_FUNCS;
-use super::ctx::ty::RegularTy;
 use super::ctx::ty::constructor_ty;
+use super::ctx::ty::RegularTy;
 use super::ctx::ty::WasmTy;
 use super::ctx::ty::CONSTRUCTOR_NAME;
 use super::ctx::CompleteWasmTy;
@@ -31,6 +30,7 @@ use super::ctx::TableId;
 use super::ctx::TyKind;
 use super::ctx::VtableId;
 use super::ctx::{MethodId, TyId};
+use super::Codegen;
 
 enum NameKind<'ctx, 'buf> {
     Local(LocalId<'ctx, 'buf>),

@@ -1,7 +1,7 @@
 mod builtin;
 pub mod ctx;
-mod string_collector;
 pub mod passes;
+mod string_collector;
 mod visitor;
 
 use std::borrow::Borrow;
@@ -19,12 +19,11 @@ use crate::ast;
 use crate::ast::ty::BuiltinClass;
 use crate::ast::Class;
 use crate::ast::Visitor as AstVisitor;
-use crate::codegen::ctx::ty::RegularTy;
 use crate::codegen::ctx::ty::initializer_ty;
+use crate::codegen::ctx::ty::RegularTy;
 use crate::position::HasSpan;
 use crate::try_match;
 
-use ctx::FuncId;
 use ctx::ty::constructor_ty;
 use ctx::ty::WasmTy;
 use ctx::ty::CONSTRUCTOR_NAME;
@@ -33,6 +32,7 @@ use ctx::CompleteWasmTy;
 use ctx::FieldTable;
 use ctx::FuncDef;
 use ctx::FuncDefKind;
+use ctx::FuncId;
 use ctx::FuncName;
 use ctx::FuncRegistry;
 use ctx::LocalCtx;
@@ -124,7 +124,10 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
             BUILTIN_FUNCS.string_eq.name.clone(),
             FuncDef {
                 kind: FuncDefKind::Runtime,
-                method_ty_id: self.ty_index.get_by_wasm_ty(&BUILTIN_FUNCS.string_eq.ty).unwrap(),
+                method_ty_id: self
+                    .ty_index
+                    .get_by_wasm_ty(&BUILTIN_FUNCS.string_eq.ty)
+                    .unwrap(),
             },
         );
     }
@@ -243,11 +246,15 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
             TyKind::I32 => Instruction::I32Const(0),
             TyKind::Id(ty_id) => match self.ty_index.get_by_id(ty_id).unwrap().wasm_ty {
                 WasmTy::Regular(RegularTy::I32) => unreachable!(),
-                WasmTy::Regular(RegularTy::Class(_)) => Instruction::RefNull(HeapType::Index(ty_id.to_wasm_index(pos))),
-                WasmTy::Regular(RegularTy::ByteArray) => Instruction::ArrayNewFixed(ArrayNewFixed {
-                    array: ty_id.to_wasm_index(pos),
-                    length: 0,
-                }),
+                WasmTy::Regular(RegularTy::Class(_)) => {
+                    Instruction::RefNull(HeapType::Index(ty_id.to_wasm_index(pos)))
+                }
+                WasmTy::Regular(RegularTy::ByteArray) => {
+                    Instruction::ArrayNewFixed(ArrayNewFixed {
+                        array: ty_id.to_wasm_index(pos),
+                        length: 0,
+                    })
+                }
                 WasmTy::Func { .. } => {
                     panic!("no default initializer is available for function types")
                 }
@@ -462,7 +469,10 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
 }
 
 impl<'a, 'buf> Codegen<'a, 'buf, WasmTy<'buf>> {
-    fn generate_module(mut self, rec_decl: wast::core::Rec<'static>) -> wast::core::Module<'static> {
+    fn generate_module(
+        mut self,
+        rec_decl: wast::core::Rec<'static>,
+    ) -> wast::core::Module<'static> {
         use wast::core::*;
 
         let mut module_fields = vec![];
@@ -561,7 +571,10 @@ impl<'a, 'buf> Codegen<'a, 'buf, WasmTy<'buf>> {
 
         // XXX: using a table turns out to be quite an overkill apparently
         // it might be worth looking into memories and data segments
-        let byte_array_id = self.ty_index.get_by_ty(&RegularTy::ByteArray.into()).unwrap();
+        let byte_array_id = self
+            .ty_index
+            .get_by_ty(&RegularTy::ByteArray.into())
+            .unwrap();
         tables.push(Table {
             span: WasmSpan::from_offset(0),
             id: None,
@@ -610,4 +623,3 @@ impl<'a, 'buf> Codegen<'a, 'buf, WasmTy<'buf>> {
         todo!()
     }
 }
-

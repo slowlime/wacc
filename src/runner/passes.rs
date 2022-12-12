@@ -4,7 +4,9 @@ use std::io;
 use crate::analysis::{self, ClassName, TypeChecker, TypeCtx, TypeckResult};
 use crate::ast::{Class, Program};
 use crate::codegen::ctx::ty::WasmTy;
-use crate::codegen::ctx::{MethodIndex, TyIndex, Vtable, FieldTable, CompleteWasmTy, MethodTable, StringTable};
+use crate::codegen::ctx::{
+    CompleteWasmTy, FieldTable, MethodIndex, MethodTable, StringTable, TyIndex, Vtable,
+};
 use crate::codegen::{passes as cg_passes, CodegenOutput};
 use crate::parse::{Cursor, Lexer, Parser};
 use crate::position::HasSpan;
@@ -214,7 +216,11 @@ pub fn create_method_table<'buf>(
     ty_index: &TyIndex<'buf, WasmTy<'buf>>,
     method_index: &MethodIndex<'buf>,
 ) -> PassOutput<MethodTable> {
-    PassOutput::continue_with_output(cg_passes::create_method_table(ty_ctx, ty_index, method_index))
+    PassOutput::continue_with_output(cg_passes::create_method_table(
+        ty_ctx,
+        ty_index,
+        method_index,
+    ))
 }
 
 pub fn create_vtable<'buf>(

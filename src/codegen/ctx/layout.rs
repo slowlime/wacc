@@ -162,11 +162,14 @@ fn complete_func<'buf>(
     use wast::core::*;
     use wast::token::Span;
 
-    let param_specs: Vec<_> = params.into_iter().map(|class_name| {
-        let wasm_ty = class_name.clone().into();
+    let param_specs: Vec<_> = params
+        .into_iter()
+        .map(|class_name| {
+            let wasm_ty = class_name.clone().into();
 
-        (None, None, make_val_type(ty_index, &wasm_ty, true, 0))
-    }).collect();
+            (None, None, make_val_type(ty_index, &wasm_ty, true, 0))
+        })
+        .collect();
 
     let ret_ty = make_val_type(ty_index, &ret.clone().into(), true, 0);
 
