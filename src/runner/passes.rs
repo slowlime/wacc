@@ -1,8 +1,11 @@
 use std::borrow::Cow;
 use std::io;
 
-use crate::analysis::{self, TypeChecker, TypeCtx, TypeckResult, ClassName};
+use crate::analysis::{self, ClassName, TypeChecker, TypeCtx, TypeckResult};
 use crate::ast::{Class, Program};
+use crate::codegen::ctx::ty::WasmTy;
+use crate::codegen::ctx::{MethodIndex, TyIndex, Vtable, FieldTable, CompleteWasmTy, MethodTable, StringTable};
+use crate::codegen::{passes as cg_passes, CodegenOutput};
 use crate::parse::{Cursor, Lexer, Parser};
 use crate::position::HasSpan;
 use crate::util::CloneStatic;
@@ -186,4 +189,86 @@ pub fn dump_types_if_asked<'buf>(
     }
 
     PassOutput::stop_with_output(vec![])
+}
+
+pub fn collect_types<'buf>(
+    _ctx: &mut RunnerCtx<'buf, '_>,
+    sorted: &[ClassName<'buf>],
+    ty_ctx: &TypeCtx<'buf>,
+) -> PassOutput<TyIndex<'buf, WasmTy<'buf>>> {
+    PassOutput::continue_with_output(cg_passes::collect_types(sorted, ty_ctx))
+}
+
+pub fn enumerate_methods<'buf>(
+    _ctx: &mut RunnerCtx<'buf, '_>,
+    sorted: &[ClassName<'buf>],
+    ty_ctx: &TypeCtx<'buf>,
+    ty_index: &TyIndex<'buf, WasmTy<'buf>>,
+) -> PassOutput<MethodIndex<'buf>> {
+    PassOutput::continue_with_output(cg_passes::enumerate_methods(sorted, ty_ctx, ty_index))
+}
+
+pub fn create_method_table<'buf>(
+    _ctx: &mut RunnerCtx<'buf, '_>,
+    ty_ctx: &TypeCtx<'buf>,
+    ty_index: &TyIndex<'buf, WasmTy<'buf>>,
+    method_index: &MethodIndex<'buf>,
+) -> PassOutput<MethodTable> {
+    PassOutput::continue_with_output(cg_passes::create_method_table(ty_ctx, ty_index, method_index))
+}
+
+pub fn create_vtable<'buf>(
+    _ctx: &mut RunnerCtx<'buf, '_>,
+    ty_ctx: &TypeCtx<'buf>,
+    ty_index: &TyIndex<'buf, WasmTy<'buf>>,
+    method_index: &MethodIndex<'buf>,
+    method_table: &MethodTable,
+) -> PassOutput<Vtable> {
+    PassOutput::continue_with_output(cg_passes::create_vtable(
+        ty_ctx,
+        ty_index,
+        method_index,
+        method_table,
+    ))
+}
+
+pub fn compute_layout<'buf>(
+    _ctx: &mut RunnerCtx<'buf, '_>,
+    ty_ctx: &TypeCtx<'buf>,
+    ty_index: TyIndex<'buf, WasmTy<'buf>>,
+) -> PassOutput<(FieldTable<'buf>, TyIndex<'buf, CompleteWasmTy<'buf>>)> {
+    let mut field_table = FieldTable::new();
+    let ty_index = cg_passes::compute_layout(ty_ctx, &ty_index, &mut field_table);
+
+    PassOutput::continue_with_output((field_table, ty_index))
+}
+
+pub fn collect_strings<'buf>(
+    _ctx: &mut RunnerCtx<'buf, '_>,
+    classes: &[Class<'buf>],
+) -> PassOutput<StringTable<'buf>> {
+    PassOutput::continue_with_output(cg_passes::collect_strings(classes))
+}
+
+pub fn codegen<'buf>(
+    _ctx: &mut RunnerCtx<'buf, '_>,
+    ty_ctx: TypeCtx<'buf>,
+    ty_index: TyIndex<'buf, CompleteWasmTy<'buf>>,
+    method_index: MethodIndex<'buf>,
+    method_table: MethodTable,
+    vtable: Vtable,
+    string_table: StringTable<'buf>,
+    field_table: FieldTable<'buf>,
+    classes: &[Class<'buf>],
+) -> PassOutput<CodegenOutput> {
+    PassOutput::continue_with_output(cg_passes::lower(
+        ty_ctx,
+        ty_index,
+        method_index,
+        method_table,
+        vtable,
+        string_table,
+        field_table,
+        classes,
+    ))
 }

@@ -43,7 +43,7 @@ pub fn collect_types<'buf>(
 pub fn enumerate_methods<'buf>(
     sorted: &[ClassName<'buf>],
     ty_ctx: &TypeCtx<'buf>,
-    ty_index: TyIndex<'buf, WasmTy<'buf>>,
+    ty_index: &TyIndex<'buf, WasmTy<'buf>>,
 ) -> MethodIndex<'buf> {
     let mut method_index = MethodIndex::new();
 
