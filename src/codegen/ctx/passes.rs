@@ -3,9 +3,10 @@
 use std::borrow::Cow;
 
 use crate::analysis::{ClassName, TypeCtx};
+use crate::codegen::builtin::BUILTIN_FUNCS;
 use crate::util::slice_formatter;
 
-use super::ty::{constructor_ty, get_method_ty, WasmTy, CONSTRUCTOR_NAME, initializer_ty, INITIALIZER_NAME};
+use super::ty::{constructor_ty, get_method_ty, WasmTy, CONSTRUCTOR_NAME, initializer_ty, INITIALIZER_NAME, RegularTy};
 use super::{MethodDefinition, MethodIndex, MethodTable, TyIndex, Vtable};
 
 pub use super::layout::compute_layout;
@@ -16,15 +17,15 @@ pub fn collect_types<'buf>(
 ) -> TyIndex<'buf, WasmTy<'buf>> {
     let mut ty_index = TyIndex::<WasmTy>::new();
 
-    ty_index.insert(WasmTy::ByteArray);
-    ty_index.insert(WasmTy::StringEqTy);
+    ty_index.insert(RegularTy::ByteArray.into());
 
     for name in sorted {
-        ty_index.insert(WasmTy::Class(name.clone()));
+        ty_index.insert(RegularTy::Class(name.clone()).into());
     }
 
     ty_index.insert(constructor_ty());
     ty_index.insert(initializer_ty());
+    ty_index.insert(BUILTIN_FUNCS.string_eq.ty.clone());
 
     for name in sorted {
         let Some(class_index) = ty_ctx.get_class(name) else {

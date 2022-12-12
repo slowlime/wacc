@@ -2,38 +2,64 @@ use std::borrow::Cow;
 
 use crate::analysis::{ClassName, DefinitionLocation, TypeCtx};
 use crate::ast::ty::BuiltinClass;
+use crate::codegen::ctx::ty::RegularTy;
 use crate::codegen::ctx::TyKind;
 use crate::util::slice_formatter;
 
-use super::{CompleteWasmTy, TyId, TyIndex, WasmTy, FieldTable};
+use super::{CompleteWasmTy, FieldTable, TyId, TyIndex, WasmTy};
 
 pub const VTABLE_FIELD_NAME: &[u8] = b"{vtable}";
 pub const VALUE_FIELD_NAME: &[u8] = b"{value}";
 
-pub fn create_ref_value_type<'buf>(ty_id: TyId, nullable: bool) -> wast::core::ValType<'static> {
-    use wast::core::*;
-    use wast::token::{Index, Span};
+fn make_ref_type<'buf>(
+    ty_index: &TyIndex<'buf, WasmTy<'buf>>,
+    ty: &WasmTy<'buf>,
+    nullable: bool,
+    pos: usize,
+) -> wast::core::RefType<'static> {
+    use wast::core::HeapType;
+    use wast::core::RefType;
 
-    ValType::Ref(RefType {
-        nullable,
-        heap: HeapType::Index(Index::Num(ty_id.index() as _, Span::from_offset(0))),
-    })
+    match ty {
+        WasmTy::Regular(RegularTy::I32) => panic!("Tried to make a reference to i32"),
+        _ => RefType {
+            nullable,
+            heap: HeapType::Index(ty_index.get_by_ty(ty).unwrap().to_wasm_index(pos)),
+        },
+    }
 }
 
-pub fn create_storage_type<'buf>(ty_id: TyId, nullable: bool) -> wast::core::StorageType<'static> {
-    wast::core::StorageType::Val(create_ref_value_type(ty_id, nullable))
+fn make_val_type<'buf>(
+    ty_index: &TyIndex<'buf, WasmTy<'buf>>,
+    ty: &WasmTy<'buf>,
+    nullable: bool,
+    pos: usize,
+) -> wast::core::ValType<'static> {
+    use wast::core::ValType;
+
+    match ty {
+        WasmTy::Regular(RegularTy::I32) => ValType::I32,
+        _ => ValType::Ref(make_ref_type(ty_index, ty, nullable, pos)),
+    }
 }
 
-pub fn class_span<'buf>(ty_ctx: &TypeCtx<'buf>, class_name: &ClassName<'buf>) -> wast::token::Span {
-    use wast::token::Span;
+pub fn make_storage_type<'buf>(
+    ty_index: &TyIndex<'buf, WasmTy<'buf>>,
+    ty: &WasmTy<'buf>,
+    nullable: bool,
+    pos: usize,
+) -> wast::core::StorageType<'static> {
+    wast::core::StorageType::Val(make_val_type(ty_index, ty, nullable, pos))
+}
 
+pub fn class_pos<'buf>(ty_ctx: &TypeCtx<'buf>, class_name: &ClassName<'buf>) -> usize {
     let Some(class_index) = ty_ctx.get_class(class_name) else {
-        return Span::from_offset(0);
+        return 0;
     };
 
     match class_index.location() {
-        DefinitionLocation::UserCode(span) => Span::from_offset(span.start.byte),
-        DefinitionLocation::Synthetic(_) => Span::from_offset(0),
+        DefinitionLocation::UserCode(span) => span.start.byte,
+        DefinitionLocation::Synthetic(_) => 0,
     }
 }
 
@@ -44,7 +70,6 @@ fn complete_class<'buf>(
     ty_id: TyId,
 ) -> wast::core::Type<'static> {
     use wast::core::*;
-    use wast::token::{Index, Span};
 
     // the first field stores the vtable base offset
     let mut fields = vec![StructField {
@@ -54,12 +79,12 @@ fn complete_class<'buf>(
     }];
     field_table.insert(ty_id, Cow::Borrowed(VTABLE_FIELD_NAME), TyKind::I32);
 
-    let Some(&WasmTy::Class(ref class_name)) = ty_index.get_by_id(ty_id) else {
+    let Some(&WasmTy::Regular(RegularTy::Class(ref class_name))) = ty_index.get_by_id(ty_id) else {
         panic!("complete_class was called for a non-class type");
     };
 
     let byte_array_id = ty_index
-        .get_by_ty(&WasmTy::ByteArray)
+        .get_by_ty(&RegularTy::ByteArray.into())
         .expect("the byte array type must be defined in the type index");
     let Some(class_index) = ty_ctx.get_class(class_name) else {
         panic!("The class {} was not found in the type context", class_name);
@@ -80,13 +105,7 @@ fn complete_class<'buf>(
             fields.push(StructField {
                 id: None,
                 mutable: false,
-                ty: StorageType::Val(ValType::Ref(RefType {
-                    nullable: false,
-                    heap: HeapType::Index(Index::Num(
-                        byte_array_id.index() as _,
-                        Span::from_offset(0),
-                    )),
-                })),
+                ty: make_storage_type(ty_index, &RegularTy::ByteArray.into(), false, 0),
             });
         }
 
@@ -108,7 +127,7 @@ fn complete_class<'buf>(
                 fields.push(StructField {
                     id: None,
                     mutable: true,
-                    ty: create_storage_type(field_ty_id, true),
+                    ty: make_storage_type(ty_index, &field_wasm_ty, true, 0),
                 });
             }
         }
@@ -123,11 +142,11 @@ fn complete_class<'buf>(
                 parent_name, class_name);
         };
 
-        Index::Num(parent_ty_id.index() as _, class_span(ty_ctx, parent_name))
+        parent_ty_id.to_wasm_index(class_pos(ty_ctx, parent_name))
     });
 
     Type {
-        span: class_span(ty_ctx, class_name),
+        span: wast::token::Span::from_offset(class_pos(ty_ctx, class_name)),
         id: None,
         name: None,
         def: TypeDef::Struct(StructType { fields }),
@@ -137,33 +156,27 @@ fn complete_class<'buf>(
 
 fn complete_func<'buf>(
     ty_index: &TyIndex<'buf, WasmTy<'buf>>,
-    params: &[ClassName<'buf>],
-    ret: &ClassName<'buf>,
+    params: &[RegularTy<'buf>],
+    ret: &RegularTy<'buf>,
 ) -> wast::core::Type<'static> {
     use wast::core::*;
     use wast::token::Span;
 
-    let param_ty_ids = params.into_iter().map(|class_name| {
+    let param_specs: Vec<_> = params.into_iter().map(|class_name| {
         let wasm_ty = class_name.clone().into();
-        let Some(ty_id) = ty_index.get_by_ty(&wasm_ty) else {
-                panic!("The type {} was not found in the type index", class_name);
-            };
 
-        create_ref_value_type(ty_id, true)
-    });
+        (None, None, make_val_type(ty_index, &wasm_ty, true, 0))
+    }).collect();
 
-    let wasm_ret_ty = ret.clone().into();
-    let Some(ret_ty_id) = ty_index.get_by_ty(&wasm_ret_ty) else {
-        panic!("The type {} was not found in the type index", ret);
-    };
+    let ret_ty = make_val_type(ty_index, &ret.clone().into(), true, 0);
 
     Type {
         span: Span::from_offset(0),
         id: None,
         name: None,
         def: TypeDef::Func(FunctionType {
-            params: param_ty_ids.map(|ty| (None, None, ty)).collect(),
-            results: Box::new([create_ref_value_type(ret_ty_id, true)]),
+            params: param_specs.into(),
+            results: Box::new([ret_ty]),
         }),
         parent: None,
     }
@@ -185,43 +198,6 @@ fn complete_byte_array() -> wast::core::Type<'static> {
     }
 }
 
-fn complete_string_eq_ty<'buf>(
-    ty_index: &TyIndex<'buf, WasmTy<'buf>>,
-) -> wast::core::Type<'static> {
-    use wast::core::*;
-    use wast::token::Span;
-
-    let byte_array_id = ty_index.get_by_ty(&WasmTy::ByteArray).unwrap();
-
-    wast::core::Type {
-        span: Span::from_offset(0),
-        id: None,
-        name: None,
-        def: TypeDef::Func(FunctionType {
-            params: Box::new([
-                (
-                    None,
-                    None,
-                    ValType::Ref(RefType {
-                        nullable: true,
-                        heap: HeapType::Index(byte_array_id.to_wasm_index(0)),
-                    }),
-                ),
-                (
-                    None,
-                    None,
-                    ValType::Ref(RefType {
-                        nullable: true,
-                        heap: HeapType::Index(byte_array_id.to_wasm_index(0)),
-                    }),
-                ),
-            ]),
-            results: Box::new([ValType::I32]),
-        }),
-        parent: None,
-    }
-}
-
 fn complete_wasm_ty<'buf>(
     ty_ctx: &TypeCtx<'buf>,
     ty_index: &TyIndex<'buf, WasmTy<'buf>>,
@@ -230,11 +206,12 @@ fn complete_wasm_ty<'buf>(
     wasm_ty: &WasmTy<'buf>,
 ) -> wast::core::Type<'static> {
     match wasm_ty {
-        WasmTy::Class(_) => complete_class(ty_ctx, ty_index, field_table, ty_id),
+        WasmTy::Regular(RegularTy::I32) => unreachable!(),
+        WasmTy::Regular(RegularTy::ByteArray) => complete_byte_array(),
+        WasmTy::Regular(RegularTy::Class(_)) => {
+            complete_class(ty_ctx, ty_index, field_table, ty_id)
+        }
         WasmTy::Func { params, ret } => complete_func(ty_index, params, ret),
-        WasmTy::ByteArray => complete_byte_array(),
-        WasmTy::StringEqTy => complete_string_eq_ty(ty_index),
-        WasmTy::I32 => unreachable!(),
     }
 }
 
@@ -246,7 +223,8 @@ pub fn compute_layout<'buf>(
     let mut result = TyIndex::<CompleteWasmTy>::new();
 
     for (ty_id, wasm_ty) in ty_index.iter() {
-        let complete_ty = super::layout::complete_wasm_ty(ty_ctx, ty_index, field_table, ty_id, wasm_ty);
+        let complete_ty =
+            super::layout::complete_wasm_ty(ty_ctx, ty_index, field_table, ty_id, wasm_ty);
         result.insert(complete_ty, wasm_ty.clone());
     }
 

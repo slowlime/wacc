@@ -19,6 +19,7 @@ use crate::ast;
 use crate::ast::ty::BuiltinClass;
 use crate::ast::Class;
 use crate::ast::Visitor as AstVisitor;
+use crate::codegen::ctx::ty::RegularTy;
 use crate::codegen::ctx::ty::initializer_ty;
 use crate::position::HasSpan;
 use crate::try_match;
@@ -120,10 +121,10 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
 
     fn register_builtin_funcs(&mut self) {
         self.func_registry.insert(
-            BUILTIN_FUNCS.string_eq.clone(),
+            BUILTIN_FUNCS.string_eq.name.clone(),
             FuncDef {
                 kind: FuncDefKind::Runtime,
-                method_ty_id: self.ty_index.get_by_wasm_ty(&WasmTy::StringEqTy).unwrap(),
+                method_ty_id: self.ty_index.get_by_wasm_ty(&BUILTIN_FUNCS.string_eq.ty).unwrap(),
             },
         );
     }
@@ -241,13 +242,13 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
         match ty_kind {
             TyKind::I32 => Instruction::I32Const(0),
             TyKind::Id(ty_id) => match self.ty_index.get_by_id(ty_id).unwrap().wasm_ty {
-                WasmTy::I32 => unreachable!(),
-                WasmTy::ByteArray => Instruction::ArrayNewFixed(ArrayNewFixed {
+                WasmTy::Regular(RegularTy::I32) => unreachable!(),
+                WasmTy::Regular(RegularTy::Class(_)) => Instruction::RefNull(HeapType::Index(ty_id.to_wasm_index(pos))),
+                WasmTy::Regular(RegularTy::ByteArray) => Instruction::ArrayNewFixed(ArrayNewFixed {
                     array: ty_id.to_wasm_index(pos),
                     length: 0,
                 }),
-                WasmTy::Class(_) => Instruction::RefNull(HeapType::Index(ty_id.to_wasm_index(pos))),
-                WasmTy::Func { .. } | WasmTy::StringEqTy => {
+                WasmTy::Func { .. } => {
                     panic!("no default initializer is available for function types")
                 }
             },
@@ -484,7 +485,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, WasmTy<'buf>> {
         vec![Import {
             span: WasmSpan::from_offset(0),
             module: "cool-runtime",
-            field: BUILTIN_FUNCS.string_eq.as_plain().unwrap(),
+            field: BUILTIN_FUNCS.string_eq.name.as_plain().unwrap(),
             item: ItemSig {
                 span: WasmSpan::from_offset(0),
                 id: None,
@@ -492,7 +493,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, WasmTy<'buf>> {
                 kind: ItemKind::Func(TypeUse {
                     index: Some(
                         self.ty_index
-                            .get_by_ty(&WasmTy::StringEqTy)
+                            .get_by_ty(&BUILTIN_FUNCS.string_eq.ty)
                             .unwrap()
                             .to_wasm_index(0),
                     ),
@@ -560,7 +561,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, WasmTy<'buf>> {
 
         // XXX: using a table turns out to be quite an overkill apparently
         // it might be worth looking into memories and data segments
-        let byte_array_id = self.ty_index.get_by_ty(&WasmTy::ByteArray).unwrap();
+        let byte_array_id = self.ty_index.get_by_ty(&RegularTy::ByteArray.into()).unwrap();
         tables.push(Table {
             span: WasmSpan::from_offset(0),
             id: None,

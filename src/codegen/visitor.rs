@@ -17,6 +17,7 @@ use crate::util::slice_formatter;
 
 use super::Codegen;
 use super::builtin::BUILTIN_FUNCS;
+use super::ctx::ty::RegularTy;
 use super::ctx::ty::constructor_ty;
 use super::ctx::ty::WasmTy;
 use super::ctx::ty::CONSTRUCTOR_NAME;
@@ -92,10 +93,6 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
         }
     }
 
-    fn ty_id_for_class_name(&self, class_name: ClassName<'buf>) -> TyId {
-        self.ty_id_for_wasm_ty(&class_name.into())
-    }
-
     fn ty_id_for_resolved_ty(&self, resolved_ty: ResolvedTy<'buf>) -> TyId {
         self.ty_id_for_wasm_ty(&resolved_ty.into())
     }
@@ -156,8 +153,8 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
             _ => unreachable!(),
         };
 
-        for (i, param_class_name) in wasm_params.into_iter().enumerate() {
-            let param_ty_id = self.ty_id_for_class_name(param_class_name.clone());
+        for (i, param_ty) in wasm_params.into_iter().enumerate() {
+            let param_ty_id = self.ty_id_for_wasm_ty(&param_ty.clone().into());
 
             let name = match i {
                 0 => Cow::Borrowed(b"self".as_slice()),
@@ -195,7 +192,7 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
     }
 
     fn builtin_ty_id(&self, builtin: BuiltinClass) -> TyId {
-        self.ty_id_for_wasm_ty(&WasmTy::Class(ClassName::Builtin(builtin)))
+        self.ty_id_for_wasm_ty(&RegularTy::Class(ClassName::Builtin(builtin)).into())
     }
 
     fn object_ty_id(&self) -> TyId {
@@ -257,7 +254,7 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
 
             &ResolvedTy::Builtin(builtin @ BuiltinClass::String) => (
                 self.builtin_ty_id(builtin),
-                self.ty_id_for_wasm_ty(&WasmTy::ByteArray).into(),
+                self.ty_id_for_wasm_ty(&RegularTy::ByteArray.into()).into(),
             ),
 
             _ => return vec![],
@@ -340,10 +337,10 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
     }
 
     fn call_string_eq(&self, pos: usize) -> Instruction<'static> {
-        let Some(func_id) = self.cg.func_registry.get_by_name(&BUILTIN_FUNCS.string_eq) else {
+        let Some(func_id) = self.cg.func_registry.get_by_name(&BUILTIN_FUNCS.string_eq.name) else {
             panic!(
                 "The function {} was not defined in the function registry",
-                &BUILTIN_FUNCS.string_eq
+                &BUILTIN_FUNCS.string_eq.name
             );
         };
 

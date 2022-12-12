@@ -7,30 +7,62 @@ pub const CONSTRUCTOR_NAME: &[u8] = b"{new}";
 pub const INITIALIZER_NAME: &[u8] = b"{init}";
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum WasmTy<'buf> {
+pub enum RegularTy<'buf> {
     /// The unboxed i32 type.
     I32,
-
     ByteArray,
-
-    /// The type of the `string_eq` runtime function.
-    StringEqTy,
-
     Class(ClassName<'buf>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum WasmTy<'buf> {
+    Regular(RegularTy<'buf>),
 
     Func {
-        params: Vec<ClassName<'buf>>,
-        ret: ClassName<'buf>,
+        params: Vec<RegularTy<'buf>>,
+        ret: RegularTy<'buf>,
     },
+}
+
+impl<'buf> RegularTy<'buf> {
+    pub fn class_name(&self) -> Option<&ClassName<'buf>> {
+        try_match!(self, Self::Class(class_name) => class_name)
+    }
 }
 
 impl<'buf> WasmTy<'buf> {
     pub fn is_boxed(&self) -> bool {
-        !matches!(self, Self::I32)
+        !matches!(self, Self::Regular(RegularTy::I32))
     }
 
     pub fn class_name(&self) -> Option<&ClassName<'buf>> {
-        try_match!(self, Self::Class(class_name) => class_name)
+        try_match!(self, Self::Regular(RegularTy::Class(class_name)) => class_name)
+    }
+}
+
+impl<'buf> TryFrom<ResolvedTy<'buf>> for RegularTy<'buf> {
+    type Error = ();
+
+    fn try_from(ty: ResolvedTy<'buf>) -> Result<RegularTy<'buf>, ()> {
+        Ok(match ty {
+            ResolvedTy::Builtin(builtin) => Self::Class(builtin.into()),
+            ResolvedTy::SelfType { enclosed } => (*enclosed).try_into().unwrap(),
+            ResolvedTy::Class(name) => Self::Class(name.into()),
+            ResolvedTy::Function(_) => return Err(()),
+            ResolvedTy::Bottom | ResolvedTy::Untyped => panic!("the ast must have passed typeck"),
+        })
+    }
+}
+
+impl<'buf> From<BuiltinClass> for RegularTy<'buf> {
+    fn from(builtin: BuiltinClass) -> RegularTy<'buf> {
+        RegularTy::Class(builtin.into())
+    }
+}
+
+impl<'buf> From<ClassName<'buf>> for RegularTy<'buf> {
+    fn from(class_name: ClassName<'buf>) -> RegularTy<'buf> {
+        RegularTy::Class(class_name)
     }
 }
 
@@ -50,22 +82,26 @@ impl<'buf> From<ClassName<'buf>> for WasmTy<'buf> {
     fn from(class_name: ClassName<'buf>) -> Self {
         assert_ne!(class_name, ClassName::SelfType);
 
-        Self::Class(class_name)
+        Self::Regular(RegularTy::Class(class_name))
     }
 }
 
 impl<'buf> From<ResolvedTy<'buf>> for WasmTy<'buf> {
     fn from(ty: ResolvedTy<'buf>) -> WasmTy<'buf> {
         match ty {
-            ResolvedTy::Builtin(builtin) => Self::Class(builtin.into()),
-            ResolvedTy::SelfType { enclosed } => (*enclosed).into(),
-            ResolvedTy::Class(name) => Self::Class(name.into()),
+            ResolvedTy::Builtin(_) | ResolvedTy::SelfType { .. } | ResolvedTy::Class(_) => {
+                Self::Regular(ty.try_into().unwrap())
+            }
             ResolvedTy::Function(ty) => ty.into(),
 
-            ResolvedTy::Bottom | ResolvedTy::Untyped => {
-                unreachable!("the ast must have passed typeck");
-            }
+            ResolvedTy::Bottom | ResolvedTy::Untyped => panic!("the ast must have passed typeck"),
         }
+    }
+}
+
+impl<'buf> From<RegularTy<'buf>> for WasmTy<'buf> {
+    fn from(ty: RegularTy<'buf>) -> WasmTy<'buf> {
+        Self::Regular(ty)
     }
 }
 
