@@ -44,6 +44,7 @@ struct LocalRef {
 #[derive(Debug, Clone, Default)]
 pub struct LocalCtx<'buf> {
     locals: RefCell<Vec<LocalDef>>,
+    // FIXME: must use a stack
     bindings: RefCell<HashMap<Cow<'buf, [u8]>, LocalRef>>,
 }
 

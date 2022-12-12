@@ -5,7 +5,7 @@ use std::borrow::Cow;
 use crate::analysis::{ClassName, TypeCtx};
 use crate::util::slice_formatter;
 
-use super::ty::{constructor_ty, get_method_ty, WasmTy, CONSTRUCTOR_NAME};
+use super::ty::{constructor_ty, get_method_ty, WasmTy, CONSTRUCTOR_NAME, initializer_ty, INITIALIZER_NAME};
 use super::{MethodDefinition, MethodIndex, MethodTable, TyIndex, Vtable};
 
 pub use super::layout::compute_layout;
@@ -24,6 +24,7 @@ pub fn collect_types<'buf>(
     }
 
     ty_index.insert(constructor_ty());
+    ty_index.insert(initializer_ty());
 
     for name in sorted {
         let Some(class_index) = ty_ctx.get_class(name) else {
@@ -75,6 +76,17 @@ pub fn enumerate_methods<'buf>(
             constructor_ty_id,
         );
 
+        // The second method must be the initializer
+        let Some(initializer_ty_id) = ty_index.get_by_ty(&initializer_ty()) else {
+            panic!("While processing the class {}, the initializer type was not found in the type index",
+                class);
+        };
+        method_index.insert(
+            ty_id,
+            Cow::Owned(INITIALIZER_NAME.to_vec()),
+            initializer_ty_id,
+        );
+
         for (method_name, _, _) in class_index.methods() {
             let wasm_method_ty = get_method_ty(ty_ctx, class, method_name);
             let Some(method_ty_id) = ty_index.get_by_ty(&wasm_method_ty) else {
@@ -105,6 +117,11 @@ pub fn create_method_table<'buf>(
             panic!("The constructor of the class {} is not present in the method index", class_name);
         };
         method_table.insert(ty_id, constructor_method_id);
+
+        let Some(initializer_method_id) = method_index.get_by_name(ty_id, INITIALIZER_NAME) else {
+            panic!("The initializer of the class {} is not present in the method index", class_name)
+        };
+        method_table.insert(ty_id, initializer_method_id);
 
         for (method_name, _, _) in class_index.methods() {
             let Some(method_id) = method_index.get_by_name(ty_id, &method_name) else {

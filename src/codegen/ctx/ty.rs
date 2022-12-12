@@ -1,8 +1,10 @@
 use crate::analysis::{ClassName, TypeCtx};
 use crate::ast::ty::{BuiltinClass, FunctionTy, ResolvedTy};
+use crate::try_match;
 use crate::util::slice_formatter;
 
 pub const CONSTRUCTOR_NAME: &[u8] = b"{new}";
+pub const INITIALIZER_NAME: &[u8] = b"{init}";
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum WasmTy<'buf> {
@@ -22,9 +24,13 @@ pub enum WasmTy<'buf> {
     },
 }
 
-impl WasmTy<'_> {
+impl<'buf> WasmTy<'buf> {
     pub fn is_boxed(&self) -> bool {
         !matches!(self, Self::I32)
+    }
+
+    pub fn class_name(&self) -> Option<&ClassName<'buf>> {
+        try_match!(self, Self::Class(class_name) => class_name)
     }
 }
 
@@ -64,8 +70,17 @@ impl<'buf> From<ResolvedTy<'buf>> for WasmTy<'buf> {
 }
 
 pub fn constructor_ty<'buf>() -> WasmTy<'buf> {
+    // actually () -> SELF_TYPE
     WasmTy::Func {
         params: vec![],
+        ret: BuiltinClass::Object.into(),
+    }
+}
+
+pub fn initializer_ty<'buf>() -> WasmTy<'buf> {
+    // actually (SELF_TYPE) -> SELF_TYPE
+    WasmTy::Func {
+        params: vec![BuiltinClass::Object.into()],
         ret: BuiltinClass::Object.into(),
     }
 }

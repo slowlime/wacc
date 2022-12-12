@@ -6,25 +6,28 @@ use std::collections::HashMap;
 use wast::core::HeapType;
 use wast::core::Instruction;
 use wast::token::Index as WasmIndex;
+use wast::token::Span as WasmSpan;
 
 use crate::analysis::ClassName;
+use crate::analysis::TypeCtx;
 use crate::ast;
 use crate::ast::ty::BuiltinClass;
 use crate::ast::ty::ResolvedTy;
 use crate::ast::ty::UnwrapResolvedTy;
 use crate::ast::Class;
 use crate::ast::Visitor as AstVisitor;
+use crate::codegen::ctx::ty::initializer_ty;
 use crate::position::HasSpan;
 use crate::try_match;
 use crate::util::slice_formatter;
 
-use super::ctx::FieldId;
-use super::ctx::FieldTable;
-use super::ctx::TyKind;
 use super::ctx::ty::constructor_ty;
 use super::ctx::ty::WasmTy;
 use super::ctx::ty::CONSTRUCTOR_NAME;
+use super::ctx::ty::INITIALIZER_NAME;
 use super::ctx::CompleteWasmTy;
+use super::ctx::FieldId;
+use super::ctx::FieldTable;
 use super::ctx::FuncDef;
 use super::ctx::FuncDefKind;
 use super::ctx::FuncName;
@@ -38,6 +41,7 @@ use super::ctx::MethodTableId;
 use super::ctx::StringTable;
 use super::ctx::TableId;
 use super::ctx::TyIndex;
+use super::ctx::TyKind;
 use super::ctx::Vtable;
 use super::ctx::VtableId;
 use super::ctx::{MethodId, TyId};
@@ -76,6 +80,7 @@ pub struct CodegenOutput {
 }
 
 pub struct Codegen<'a, 'buf> {
+    ty_ctx: TypeCtx<'buf>,
     ty_index: TyIndex<'buf, CompleteWasmTy<'buf>>,
     method_index: MethodIndex<'buf>,
     method_table: MethodTable,
@@ -91,6 +96,7 @@ pub struct Codegen<'a, 'buf> {
 
 impl<'a, 'buf> Codegen<'a, 'buf> {
     pub fn new(
+        ty_ctx: TypeCtx<'buf>,
         ty_index: TyIndex<'buf, CompleteWasmTy<'buf>>,
         method_index: MethodIndex<'buf>,
         method_table: MethodTable,
@@ -103,6 +109,7 @@ impl<'a, 'buf> Codegen<'a, 'buf> {
         let string_table_id = TableId::new(vtable_table_id.index() + 1);
 
         let mut this = Self {
+            ty_ctx,
             ty_index,
             method_index,
             method_table,
@@ -117,6 +124,7 @@ impl<'a, 'buf> Codegen<'a, 'buf> {
         };
 
         this.register_builtin_funcs();
+        this.register_methods();
 
         this
     }
@@ -129,6 +137,29 @@ impl<'a, 'buf> Codegen<'a, 'buf> {
                 method_ty_id: self.ty_index.get_by_wasm_ty(&WasmTy::StringEqTy).unwrap(),
             },
         );
+    }
+
+    fn register_methods(&mut self) {
+        for (_, method_ty_id, methods) in self.method_table.iter() {
+            for method_id in methods {
+                let (method_name, _) = self.method_index.get_by_id(method_id).unwrap();
+                let ty_id = method_id.ty_id();
+                let wasm_ty = &self.ty_index.get_by_id(ty_id).unwrap().wasm_ty;
+                let class_name = wasm_ty.class_name().unwrap().clone();
+                let func_def = FuncDef {
+                    kind: FuncDefKind::ClassMethod(method_id),
+                    method_ty_id,
+                };
+
+                self.func_registry.insert(
+                    FuncName::Method {
+                        class_name,
+                        method_name: Cow::Owned(method_name.to_owned()),
+                    },
+                    func_def,
+                );
+            }
+        }
     }
 
     fn compute_vtable_id(method_table: &MethodTable) -> TableId {
@@ -159,7 +190,179 @@ impl<'a, 'buf> Codegen<'a, 'buf> {
 
         for feature in &class.features {
             let Some(method) = try_match!(feature, ast::Feature::Method(method) => method) else { continue };
-            self.lower_method(ty_id, &name, method);
+            let Some(method_id) = self.method_index.get_by_name(ty_id, method.name.as_slice()) else {
+                panic!("Method {}::{} was not found in the method index", &name, &method.name);
+            };
+
+            let func = self.lower_method(ty_id, &name, method);
+            self.funcs.insert(method_id, func);
+        }
+
+        let constructor_method_id = self.method_index.get_by_name(ty_id, CONSTRUCTOR_NAME).unwrap();
+        let initializer_method_id = self.method_index.get_by_name(ty_id, INITIALIZER_NAME).unwrap();
+        let constructor = self.generate_constructor(ty_id, class);
+        let initializer = self.generate_initializer(ty_id, &name, class);
+        self.funcs.insert(constructor_method_id, constructor);
+        self.funcs.insert(initializer_method_id, initializer);
+    }
+
+    fn default_initializer_for(&self, ty_kind: TyKind, pos: usize) -> Instruction<'static> {
+        use wast::core::*;
+
+        match ty_kind {
+            TyKind::I32 => Instruction::I32Const(0),
+            TyKind::Id(ty_id) => match self.ty_index.get_by_id(ty_id).unwrap().wasm_ty {
+                WasmTy::I32 => unreachable!(),
+                WasmTy::ByteArray => Instruction::ArrayNewFixed(ArrayNewFixed {
+                    array: ty_id.to_wasm_index(pos),
+                    length: 0,
+                }),
+                WasmTy::Class(_) => Instruction::RefNull(HeapType::Index(ty_id.to_wasm_index(pos))),
+                WasmTy::Func { .. } | WasmTy::StringEqTy => {
+                    panic!("no default initializer is available for function types")
+                }
+            },
+        }
+    }
+
+    fn create_object(&self, ty_id: TyId, pos: usize) -> Vec<Instruction<'static>> {
+        let mut result = vec![];
+
+        let fields = self.field_table.fields(ty_id).unwrap();
+
+        let vtable_base = self.vtable.base_offset(ty_id).unwrap();
+        result.push(vtable_base.to_i32_const());
+
+        for (field_id, name, field_ty_kind) in fields.skip(1) {
+            result.push(self.default_initializer_for(field_ty_kind, pos));
+        }
+
+        result.push(Instruction::StructNew(ty_id.to_wasm_index(pos)));
+
+        result
+    }
+
+    fn generate_constructor(
+        &mut self,
+        ty_id: TyId,
+        class: &Class<'buf>,
+    ) -> wast::core::Func<'static> {
+        use wast::core::*;
+
+        let mut result = vec![];
+
+        result.extend(self.create_object(ty_id, class.pos()));
+        let constructor_ty_id = self.ty_index.get_by_wasm_ty(&constructor_ty()).unwrap();
+        let initializer_method_id = self
+            .method_index
+            .get_by_name(ty_id, INITIALIZER_NAME)
+            .unwrap();
+        let initializer_func_id = self
+            .func_registry
+            .get_by_method_id(initializer_method_id)
+            .unwrap();
+        let object_ty_id = self
+            .ty_index
+            .get_by_wasm_ty(&ClassName::from(BuiltinClass::Object).into())
+            .unwrap();
+        result.push(Instruction::RefCast(
+            object_ty_id.to_wasm_index(class.pos()),
+        ));
+        result.push(Instruction::Call(
+            initializer_func_id.to_wasm_index(class.pos()),
+        ));
+
+        let expression = Expression {
+            instrs: result.into(),
+        };
+
+        Func {
+            span: WasmSpan::from_offset(class.pos()),
+            id: None,
+            name: None,
+            exports: InlineExport { names: vec![] },
+            kind: FuncKind::Inline {
+                locals: vec![],
+                expression,
+            },
+            ty: TypeUse {
+                index: Some(constructor_ty_id.to_wasm_index(class.pos())),
+                inline: None,
+            },
+        }
+    }
+
+    fn generate_initializer(
+        &mut self,
+        ty_id: TyId,
+        class_name: &ClassName<'buf>,
+        class: &Class<'buf>,
+    ) -> wast::core::Func<'static> {
+        use wast::core::*;
+
+        let locals = LocalCtx::new();
+        let mut instrs = vec![];
+
+        let initializer_ty_id = self.ty_index.get_by_wasm_ty(&initializer_ty()).unwrap();
+        let object_ty_id = self.ty_index.get_by_wasm_ty(&ClassName::from(BuiltinClass::Object).into()).unwrap();
+        let object_self_local_id = locals.bind(Some(Cow::Borrowed(b"self")), TyKind::Id(object_ty_id));
+        instrs.push(object_self_local_id.wasm_get(class.pos()));
+
+        let class_index = self.ty_ctx.get_class(class_name).unwrap();
+
+        if let Some(parent) = class_index.parent() {
+            let parent_wasm_ty = parent.clone().into();
+            let parent_ty_id = self.ty_index.get_by_wasm_ty(&parent_wasm_ty).unwrap();
+            let parent_initializer_method_id = self.method_index.get_by_name(parent_ty_id, INITIALIZER_NAME).unwrap();
+            let parent_initializer_func_id = self.func_registry.get_by_method_id(parent_initializer_method_id).unwrap();
+            instrs.push(Instruction::Call(parent_initializer_func_id.to_wasm_index(class.pos())));
+        }
+
+        instrs.push(Instruction::RefCast(ty_id.to_wasm_index(class.pos())));
+        let self_local_id = locals.bind(Some(Cow::Borrowed(b"self")), TyKind::Id(ty_id));
+        self_local_id.wasm_set(class.pos());
+
+        let initializer_method_id = self.method_index.get_by_name(ty_id, INITIALIZER_NAME).unwrap();
+        let mut visitor = CodegenVisitor::new(self, initializer_method_id, &locals, &[]);
+
+        for feature in &class.features {
+            let ast::Feature::Field(field) = feature else { continue };
+            let Some(ref init) = field.0.init else { continue };
+            let field_id = self.field_table.get_by_name(ty_id, field.0.name.as_slice()).unwrap();
+            instrs.push(self_local_id.wasm_get(field.pos()));
+            instrs.extend(visitor.visit_expr(init));
+            instrs.push(field_id.wasm_set(field.pos()));
+        }
+
+        drop(self_local_id);
+        instrs.push(object_self_local_id.wasm_get(class.pos()));
+
+        let expression = Expression {
+            instrs: instrs.into(),
+        };
+
+        Func {
+            span: WasmSpan::from_offset(class.pos()),
+            id: None,
+            name: None,
+            exports: InlineExport { names: vec![] },
+            kind: FuncKind::Inline {
+                locals: vec![
+                    Local {
+                        id: None,
+                        name: None,
+                        ty: ValType::Ref(RefType {
+                            nullable: true,
+                            heap: HeapType::Index(object_ty_id.to_wasm_index(class.pos())),
+                        }),
+                    }
+                ],
+                expression,
+            },
+            ty: TypeUse {
+                index: Some(initializer_ty_id.to_wasm_index(class.pos())),
+                inline: None,
+            },
         }
     }
 
@@ -169,15 +372,46 @@ impl<'a, 'buf> Codegen<'a, 'buf> {
         class_name: &ClassName<'buf>,
         method: &ast::Method<'buf>,
     ) -> wast::core::Func<'static> {
+        use wast::core::*;
+
         let Some(method_id) = self.method_index.get_by_name(ty_id, method.name.as_slice()) else {
             panic!("Method {}::{} was not found in the method index", class_name, &method.name);
         };
 
+        let method_ty_id = self
+            .method_index
+            .get_by_id(method_id)
+            .unwrap()
+            .1
+            .method_ty_id;
+
         let mut locals = Default::default();
         let mut visitor = CodegenVisitor::new(self, method_id, &mut locals, &method.params);
         let instrs = visitor.visit_expr(&method.body);
+        let expression = Expression {
+            instrs: instrs.into(),
+        };
+        drop(visitor);
+        let locals = locals
+            .into_iter()
+            .map(|ty_kind| Local {
+                id: None,
+                name: None,
+                ty: ty_kind.to_val_type(method.pos(), true),
+            })
+            .collect();
 
-        todo!()
+        Func {
+            span: WasmSpan::from_offset(method.pos()),
+            id: None,
+            name: None,
+            exports: InlineExport { names: vec![] },
+            kind: FuncKind::Inline { locals, expression },
+            ty: TypeUse {
+                index: Some(method_ty_id.to_wasm_index(method.pos())),
+                inline: None,
+            },
+        }
     }
 }
 
@@ -192,7 +426,7 @@ impl<'a, 'cg, 'buf> CodegenVisitor<'a, 'cg, 'buf> {
     pub fn new(
         cg: &'a Codegen<'a, 'buf>,
         method_id: MethodId,
-        locals: &'cg mut LocalCtx<'buf>,
+        locals: &'cg LocalCtx<'buf>,
         params: &[ast::Formal<'buf>],
     ) -> Self {
         let mut this = Self {
@@ -348,7 +582,7 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
     }
 
     fn vtable_base_field(&self, pos: usize) -> WasmIndex<'static> {
-        WasmIndex::Num(0, wast::token::Span::from_offset(pos))
+        WasmIndex::Num(0, WasmSpan::from_offset(pos))
     }
 
     fn make_method_ref(&self, method_id: MethodId, pos: usize) -> HeapType<'static> {
@@ -386,7 +620,7 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
 
         Some(Instruction::StructGet(StructAccess {
             r#struct: ty_id.to_wasm_index(pos),
-            field: WasmIndex::Num(1, wast::token::Span::from_offset(pos)),
+            field: WasmIndex::Num(1, WasmSpan::from_offset(pos)),
         }))
     }
 
@@ -396,12 +630,9 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
         let mut result = vec![];
 
         let (ty_id, ty_kind) = match ty {
-            &ResolvedTy::Builtin(
-                builtin @ (BuiltinClass::Int | BuiltinClass::Bool),
-            ) => (
-                self.builtin_ty_id(builtin),
-                TyKind::I32,
-            ),
+            &ResolvedTy::Builtin(builtin @ (BuiltinClass::Int | BuiltinClass::Bool)) => {
+                (self.builtin_ty_id(builtin), TyKind::I32)
+            }
 
             &ResolvedTy::Builtin(builtin @ BuiltinClass::String) => (
                 self.builtin_ty_id(builtin),
@@ -417,7 +648,7 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
         result.push(value_temp.wasm_get(pos));
         result.push(Instruction::StructSet(StructAccess {
             r#struct: ty_id.to_wasm_index(pos),
-            field: WasmIndex::Num(1, wast::token::Span::from_offset(pos)),
+            field: WasmIndex::Num(1, WasmSpan::from_offset(pos)),
         }));
 
         result
@@ -742,14 +973,14 @@ impl<'buf> AstVisitor<'buf> for CodegenVisitor<'_, '_, 'buf> {
         // stack: [block:1] [loop:0] <!antecedent: i32>
         result.push(Instruction::BrIf(WasmIndex::Num(
             1,
-            wast::token::Span::from_offset(expr.condition.pos()),
+            WasmSpan::from_offset(expr.condition.pos()),
         )));
         result.extend(self.visit_expr(&expr.body));
         result.push(Instruction::Drop);
         // stack: [block:1] [loop:0]
         result.push(Instruction::Br(WasmIndex::Num(
             0,
-            wast::token::Span::from_offset(expr.pos()),
+            WasmSpan::from_offset(expr.pos()),
         )));
         result.push(Instruction::End(None));
         result.push(Instruction::End(None));
@@ -841,7 +1072,7 @@ impl<'buf> AstVisitor<'buf> for CodegenVisitor<'_, '_, 'buf> {
 
                 // stack: [block:1 -> ty_id] <scrutinee> [block:0 scrutinee_ty_id -> ty_id]
                 result.push(Instruction::BrOnCastFail(BrOnCast {
-                    label: WasmIndex::Num(0, wast::token::Span::from_offset(arm.pos())),
+                    label: WasmIndex::Num(0, WasmSpan::from_offset(arm.pos())),
                     r#type: arm_ty_id.to_wasm_index(arm.binding_ty_name.pos()),
                 }));
                 // stack: [block:1 -> ty_id] [block:0 scrutinee_ty_id -> ty_id] <scrutinee: arm_ty_id>
@@ -859,7 +1090,7 @@ impl<'buf> AstVisitor<'buf> for CodegenVisitor<'_, '_, 'buf> {
             if idx + 1 < expr.arms.len() {
                 result.push(Instruction::Br(WasmIndex::Num(
                     1,
-                    wast::token::Span::from_offset(arm.pos()),
+                    WasmSpan::from_offset(arm.pos()),
                 )));
                 result.push(Instruction::End(None));
             }
@@ -950,25 +1181,23 @@ impl<'buf> AstVisitor<'buf> for CodegenVisitor<'_, '_, 'buf> {
     }
 
     fn visit_name_expr(&mut self, expr: &ast::NameExpr<'buf>) -> Self::Output {
-        if matches!(*expr.unwrap_res_ty(), ResolvedTy::SelfType { .. }) {
-            self.push_self(expr.pos())
-        } else {
-            let name_kind = self.get_name(expr.name.as_slice());
-            let mut result = vec![];
+        let name_kind = self.get_name(expr.name.as_slice());
+        let mut result = vec![];
 
-            match name_kind {
-                NameKind::Local(local_id) => {
-                    result.push(local_id.wasm_get(expr.pos()));
-                }
-
-                NameKind::Field(field_id) => {
-                    result.extend(self.push_self(expr.pos()));
-                    result.push(field_id.wasm_get(expr.pos()));
-                }
+        match name_kind {
+            NameKind::Local(local_id) => {
+                result.push(local_id.wasm_get(expr.pos()));
             }
 
-            result
+            NameKind::Field(field_id) => {
+                result.extend(self.push_self(expr.pos()));
+                result.push(field_id.wasm_get(expr.pos()));
+            }
         }
+
+        result.extend(self.reify_self_ty(&expr.unwrap_res_ty(), expr.pos()));
+
+        result
     }
 
     fn visit_formal(&mut self, _formal: &ast::Formal<'buf>) -> Self::Output {

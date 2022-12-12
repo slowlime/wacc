@@ -3,7 +3,7 @@ mod locals;
 pub mod passes;
 pub mod ty;
 
-use std::borrow::Cow;
+use std::borrow::{Borrow, Cow};
 use std::collections::HashMap;
 use std::fmt::{self, Display};
 use std::hash::Hash;
@@ -39,6 +39,18 @@ impl TyId {
 pub enum TyKind {
     I32,
     Id(TyId),
+}
+
+impl TyKind {
+    pub fn to_val_type(&self, pos: usize, nullable: bool) -> wast::core::ValType<'static> {
+        match self {
+            Self::I32 => wast::core::ValType::I32,
+            Self::Id(ty_id) => wast::core::ValType::Ref(wast::core::RefType {
+                nullable,
+                heap: wast::core::HeapType::Index(ty_id.to_wasm_index(pos)),
+            }),
+        }
+    }
 }
 
 impl From<TyId> for TyKind {
@@ -410,10 +422,7 @@ impl FieldId {
 
         Instruction::StructSet(StructAccess {
             r#struct: self.ty_id.to_wasm_index(pos),
-            field: WasmIndex::Num(
-                self.idx.try_into().unwrap(),
-                WasmSpan::from_offset(pos),
-            ),
+            field: WasmIndex::Num(self.idx.try_into().unwrap(), WasmSpan::from_offset(pos)),
         })
     }
 
@@ -424,10 +433,7 @@ impl FieldId {
 
         Instruction::StructSet(StructAccess {
             r#struct: self.ty_id.to_wasm_index(pos),
-            field: WasmIndex::Num(
-                self.idx.try_into().unwrap(),
-                WasmSpan::from_offset(pos),
-            ),
+            field: WasmIndex::Num(self.idx.try_into().unwrap(), WasmSpan::from_offset(pos)),
         })
     }
 }
@@ -484,6 +490,24 @@ impl<'buf> FieldTable<'buf> {
 
         Some((name, ty_kind))
     }
+
+    pub fn fields<'a>(
+        &'a self,
+        ty_id: TyId,
+    ) -> Option<impl Iterator<Item = (FieldId, &'a [u8], TyKind)>> {
+        self.classes.get(&ty_id).map(move |class_map| {
+            class_map.iter().map(move |(name, &ty_kind)| {
+                (
+                    FieldId {
+                        ty_id,
+                        idx: class_map.get_index_of(name).unwrap(),
+                    },
+                    name.borrow(),
+                    ty_kind,
+                )
+            })
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -492,6 +516,10 @@ pub struct VtableId(usize);
 impl VtableId {
     pub fn offset(&self, offset: usize) -> VtableId {
         VtableId(self.0 + offset)
+    }
+
+    pub fn to_i32_const(&self) -> wast::core::Instruction<'static> {
+        wast::core::Instruction::I32Const(self.0.try_into().unwrap())
     }
 }
 
@@ -607,7 +635,7 @@ impl Display for FuncName<'_> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FuncDefKind {
     /// A method defined a class, possibly built-in.
     ClassMethod(MethodId),
@@ -641,17 +669,25 @@ impl FuncId {
 #[derive(Debug, Clone)]
 pub struct FuncRegistry<'buf> {
     funcs: IndexMap<FuncName<'buf>, FuncDef>,
+    methods: HashMap<MethodId, FuncId>,
 }
 
 impl<'buf> FuncRegistry<'buf> {
     pub fn new() -> Self {
         Self {
             funcs: IndexMap::new(),
+            methods: HashMap::new(),
         }
     }
 
     pub fn insert(&mut self, func_name: FuncName<'buf>, def: FuncDef) -> FuncId {
+        let kind = def.kind;
+
         let (idx, _) = self.funcs.insert_full(func_name, def);
+
+        if let FuncDefKind::ClassMethod(method_id) = kind {
+            self.methods.insert(method_id, FuncId(idx));
+        }
 
         FuncId(idx)
     }
@@ -662,6 +698,10 @@ impl<'buf> FuncRegistry<'buf> {
 
     pub fn get_by_id(&self, id: FuncId) -> Option<(&FuncName<'buf>, &FuncDef)> {
         self.funcs.get_index(id.0)
+    }
+
+    pub fn get_by_method_id(&self, method_id: MethodId) -> Option<FuncId> {
+        self.methods.get(&method_id).copied()
     }
 }
 
