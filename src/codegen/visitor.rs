@@ -15,12 +15,8 @@ use crate::ast::Visitor as AstVisitor;
 use crate::codegen::PositionOffset;
 use crate::util::slice_formatter;
 
-use super::funcs::BUILTIN_FUNCS;
-use super::funcs::BuiltinFuncKey;
-use super::ctx::ty::constructor_ty;
 use super::ctx::ty::RegularTy;
 use super::ctx::ty::WasmTy;
-use super::ctx::ty::CONSTRUCTOR_NAME;
 use super::ctx::CompleteWasmTy;
 use super::ctx::FieldId;
 use super::ctx::LocalCtx;
@@ -29,8 +25,11 @@ use super::ctx::MethodDefinition;
 use super::ctx::MethodTableId;
 use super::ctx::TableId;
 use super::ctx::TyKind;
-use super::ctx::VtableId;
 use super::ctx::{MethodId, TyId};
+use super::funcs::BuiltinFuncKey;
+use super::funcs::SpecialMethodKey;
+use super::funcs::BUILTIN_FUNCS;
+use super::funcs::SPECIAL_METHODS;
 use super::Codegen;
 
 enum NameKind<'ctx, 'buf> {
@@ -273,16 +272,16 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
         result
     }
 
-    fn constructor_ty_id(&self) -> TyId {
-        self.ty_id_for_wasm_ty(&constructor_ty())
+    fn ty_id_for_special(&self, key: SpecialMethodKey) -> TyId {
+        self.ty_id_for_wasm_ty(&SPECIAL_METHODS.get(key).ty)
     }
 
-    fn constructor_table_id(&self) -> TableId {
-        self.table_id_for_method_ty(self.constructor_ty_id())
+    fn table_id_for_special(&self, key: SpecialMethodKey) -> TableId {
+        self.table_id_for_method_ty(self.ty_id_for_special(key))
     }
 
-    fn constructor_method_id(&self) -> MethodId {
-        self.method_id_by_name(self.self_ty_id(), CONSTRUCTOR_NAME)
+    fn method_id_for_special(&self, ty_id: TyId, key: SpecialMethodKey) -> MethodId {
+        self.method_id_by_name(ty_id, SPECIAL_METHODS.get(key).name)
     }
 
     fn construct_self(&self, pos: usize) -> Vec<Instruction<'static>> {
@@ -290,6 +289,7 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
 
         // `new SELF_TYPE` is basically the same as `self.{new}()`
         let mut result = vec![];
+        let vtable_base_local = self.locals.bind(None, TyKind::I32);
 
         result.extend(self.push_self(pos));
         result.push(Instruction::StructGet(StructAccess {
@@ -298,24 +298,24 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
         }));
         result.push(Instruction::TableGet(self.vtable_table_arg(pos)));
         result.push(Instruction::I31GetU);
-        let constructor_table_id = self.constructor_table_id();
+        // stack: <self> <vtable_base>
+        result.push(vtable_base_local.wasm_set(pos));
+        result.push(Instruction::Drop);
+        result.push(vtable_base_local.wasm_get(pos));
+        drop(vtable_base_local);
+        let constructor_table_id = self.table_id_for_special(SpecialMethodKey::Constructor);
+        let constructor_method_id =
+            self.method_id_for_special(self.self_ty_id(), SpecialMethodKey::Constructor);
         result.push(Instruction::TableGet(
             constructor_table_id.to_table_arg(pos),
         ));
         result.push(Instruction::CallRef(
-            self.make_method_ref(self.constructor_method_id(), pos),
+            self.make_method_ref(constructor_method_id, pos),
         ));
+        // stack: <that: Object>
         result.push(Instruction::RefCast(self.self_ty_id().to_wasm_index(pos)));
 
         result
-    }
-
-    fn base_offset(&self, ty_id: TyId) -> VtableId {
-        match self.cg.vtable.base_offset(ty_id) {
-            Some(vtable_id) => vtable_id,
-
-            None => panic!("The type id {:?} was not found in the vtable", ty_id,),
-        }
     }
 
     fn construct_new(&self, ty_id: TyId, pos: usize) -> Vec<Instruction<'static>> {
@@ -323,16 +323,18 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
 
         let mut result = vec![];
 
-        let vtable_id = self.base_offset(ty_id);
-        let method_table_id = self.cg.vtable.get(vtable_id).unwrap();
+        let constructor_method_id = self.method_id_by_name(
+            ty_id,
+            SPECIAL_METHODS.get(SpecialMethodKey::Constructor).name,
+        );
 
-        result.push(method_table_id.to_i32_const());
-        result.push(Instruction::TableGet(
-            method_table_id.table_id().to_table_arg(pos),
-        ));
-        result.push(Instruction::CallRef(
-            self.make_method_ref(self.constructor_method_id(), pos),
-        ));
+        let constructor_func_id = self
+            .cg
+            .func_registry
+            .get_by_method_id(constructor_method_id)
+            .unwrap();
+
+        result.push(Instruction::Call(constructor_func_id.to_wasm_index(pos)));
 
         result
     }
@@ -363,15 +365,9 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
 
         let ty_id = self.ty_id_for_resolved_ty(ty.unwrap_res_ty().into_owned());
         let method_id = self.method_id_by_name(ty_id, expr.method.as_slice());
-        let method_table_id = self.method_table_id(method_id);
+        let func_id = self.cg.func_registry.get_by_method_id(method_id).unwrap();
 
-        result.push(method_table_id.to_i32_const());
-        result.push(Instruction::TableGet(
-            method_table_id.table_id().to_table_arg(expr.method.pos()),
-        ));
-        result.push(Instruction::CallRef(
-            self.make_method_ref(method_id, expr.method.pos()),
-        ));
+        result.push(Instruction::Call(func_id.to_wasm_index(expr.method.pos())));
         result.extend(self.reify_self_ty(&expr.unwrap_res_ty(), expr.method.pos()));
 
         result

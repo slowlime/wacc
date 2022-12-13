@@ -1,8 +1,11 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 
+use indexmap::IndexMap;
 use once_cell::sync::Lazy;
 use paste::paste;
+
+use crate::ast::ty::BuiltinClass;
 
 use super::ctx::ty::{RegularTy, WasmTy};
 use super::ctx::FuncName;
@@ -97,4 +100,72 @@ define_special_funcs! {
             ret: None,
         },
     }
+}
+
+pub struct SpecialMethod {
+    pub name: &'static [u8],
+    pub ty: WasmTy<'static>,
+}
+
+macro_rules! define_special_methods {
+    ($( $key:ident => $name:literal: $ty:expr ),* $(,)?) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+        pub enum SpecialMethodKey {
+            $( $key, )*
+        }
+
+        static SPECIAL_METHOD_MAP: Lazy<IndexMap<SpecialMethodKey, SpecialMethod>> = Lazy::new(|| {
+            let mut map = IndexMap::new();
+
+            $(
+                map.insert(SpecialMethodKey::$key, SpecialMethod {
+                    name: $name,
+                    ty: $ty,
+                });
+            )*
+
+            map
+        });
+
+        pub struct SpecialMethodProvider(());
+
+        pub const SPECIAL_METHODS: SpecialMethodProvider = SpecialMethodProvider(());
+
+        impl SpecialMethodProvider {
+            pub fn get(&self, key: SpecialMethodKey) -> &'static SpecialMethod {
+                SPECIAL_METHOD_MAP.get(&key).unwrap()
+            }
+
+            pub fn iter(&self) -> impl Iterator<Item = (SpecialMethodKey, &'static SpecialMethod)> {
+                SPECIAL_METHOD_MAP.iter()
+                    .map(|(&key, method)| (key, method))
+            }
+        }
+    }
+}
+
+define_special_methods! {
+    // actually it's () -> SELF_TYPE
+    Constructor => b"{new}": WasmTy::Func {
+        params: vec![],
+        ret: Some(BuiltinClass::Object.into()),
+    },
+
+    // actually it's (SELF_TYPE) -> SELF_TYPE
+    Initializer => b"{init}": WasmTy::Func {
+        params: vec![BuiltinClass::Object.into()],
+        ret: Some(BuiltinClass::Object.into()),
+    },
+
+    // actually it's (SELF_TYPE) -> SELF_TYPE
+    Copy => b"{copy}": WasmTy::Func {
+        params: vec![BuiltinClass::Object.into()],
+        ret: Some(BuiltinClass::Object.into()),
+    },
+
+    // actually it's (SELF_TYPE) -> bytes
+    TypeName => b"{type_name}": WasmTy::Func {
+        params: vec![BuiltinClass::Object.into()],
+        ret: Some(RegularTy::ByteArray.into()),
+    },
 }

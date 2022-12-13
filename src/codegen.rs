@@ -19,15 +19,11 @@ use crate::ast;
 use crate::ast::ty::BuiltinClass;
 use crate::ast::Class;
 use crate::ast::Visitor as AstVisitor;
-use crate::codegen::ctx::ty::initializer_ty;
 use crate::codegen::ctx::ty::RegularTy;
 use crate::position::HasSpan;
 use crate::try_match;
 
-use ctx::ty::constructor_ty;
 use ctx::ty::WasmTy;
-use ctx::ty::CONSTRUCTOR_NAME;
-use ctx::ty::INITIALIZER_NAME;
 use ctx::CompleteWasmTy;
 use ctx::FieldTable;
 use ctx::FuncDef;
@@ -46,6 +42,8 @@ use ctx::Vtable;
 use ctx::{MethodId, TyId};
 use visitor::CodegenVisitor;
 
+use self::funcs::SPECIAL_METHODS;
+use self::funcs::SpecialMethodKey;
 use self::funcs::specials;
 use self::funcs::BuiltinFuncKey;
 use self::funcs::SpecialFuncKey;
@@ -212,8 +210,8 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
     }
 
     fn lower_class(&mut self, class: &Class<'buf>) {
-        let name: ClassName = class.name.borrow().into();
-        let wasm_ty = name.clone().into();
+        let class_name: ClassName = class.name.borrow().into();
+        let wasm_ty = class_name.clone().into();
         let Some(ty_id) = self.ty_index.get_by_wasm_ty(&wasm_ty) else {
             panic!("The class {} was not found in the type index", &class.name);
         };
@@ -221,25 +219,38 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
         for feature in &class.features {
             let Some(method) = try_match!(feature, ast::Feature::Method(method) => method) else { continue };
             let Some(method_id) = self.method_index.get_by_name(ty_id, method.name.as_slice()) else {
-                panic!("Method {}::{} was not found in the method index", &name, &method.name);
+                panic!("Method {}::{} was not found in the method index", &class_name, &method.name);
             };
 
-            let func = self.lower_method(ty_id, &name, method);
+            let func = self.lower_method(ty_id, &class_name, method);
             self.funcs.insert(method_id, func);
         }
 
-        let constructor_method_id = self
-            .method_index
-            .get_by_name(ty_id, CONSTRUCTOR_NAME)
-            .unwrap();
-        let initializer_method_id = self
-            .method_index
-            .get_by_name(ty_id, INITIALIZER_NAME)
-            .unwrap();
-        let constructor = self.generate_constructor(ty_id, class);
-        let initializer = self.generate_initializer(ty_id, &name, class);
-        self.funcs.insert(constructor_method_id, constructor);
-        self.funcs.insert(initializer_method_id, initializer);
+        for (key, func) in SPECIAL_METHODS.iter() {
+            let method_id = self.method_index.get_by_name(ty_id, func.name).unwrap();
+
+            let func = match key {
+                SpecialMethodKey::Constructor => self.generate_constructor(ty_id, class),
+                SpecialMethodKey::Initializer => self.generate_initializer(ty_id, &class_name, class),
+                SpecialMethodKey::Copy => self.generate_copy(ty_id, class),
+                SpecialMethodKey::TypeName => self.generate_type_name(ty_id, &class_name, class),
+            };
+
+            self.funcs.insert(method_id, func);
+        }
+    }
+
+    fn generate_copy(&self, ty_id: TyId, class: &Class<'buf>) -> wast::core::Func<'static> {
+        todo!("generate a copy() method for the class unless it's defined by the user")
+    }
+
+    fn generate_type_name(
+        &self,
+        ty_id: TyId,
+        name: &ClassName<'buf>,
+        class: &Class<'buf>,
+    ) -> wast::core::Func<'static> {
+        todo!("generate a type_name() method for the class unless it's defined by the user")
     }
 
     fn default_initializer_for(&self, ty_kind: TyKind, pos: usize) -> Instruction<'static> {
@@ -292,10 +303,11 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
         let mut result = vec![];
 
         result.extend(self.create_object(ty_id, class.pos()));
-        let constructor_ty_id = self.ty_index.get_by_wasm_ty(&constructor_ty()).unwrap();
+        let func = SPECIAL_METHODS.get(SpecialMethodKey::Constructor);
+        let constructor_ty_id = self.ty_index.get_by_wasm_ty(&func.ty).unwrap();
         let initializer_method_id = self
             .method_index
-            .get_by_name(ty_id, INITIALIZER_NAME)
+            .get_by_name(ty_id, SPECIAL_METHODS.get(SpecialMethodKey::Initializer).name)
             .unwrap();
         let initializer_func_id = self
             .func_registry
@@ -343,7 +355,8 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
         let locals = LocalCtx::new();
         let mut instrs = vec![];
 
-        let initializer_ty_id = self.ty_index.get_by_wasm_ty(&initializer_ty()).unwrap();
+        let func = SPECIAL_METHODS.get(SpecialMethodKey::Initializer);
+        let initializer_ty_id = self.ty_index.get_by_wasm_ty(&func.ty).unwrap();
         let object_ty_id = self
             .ty_index
             .get_by_wasm_ty(&ClassName::from(BuiltinClass::Object).into())
@@ -359,7 +372,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
             let parent_ty_id = self.ty_index.get_by_wasm_ty(&parent_wasm_ty).unwrap();
             let parent_initializer_method_id = self
                 .method_index
-                .get_by_name(parent_ty_id, INITIALIZER_NAME)
+                .get_by_name(parent_ty_id, func.name)
                 .unwrap();
             let parent_initializer_func_id = self
                 .func_registry
@@ -376,7 +389,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
 
         let initializer_method_id = self
             .method_index
-            .get_by_name(ty_id, INITIALIZER_NAME)
+            .get_by_name(ty_id, func.name)
             .unwrap();
         let mut visitor = CodegenVisitor::new(self, initializer_method_id, &locals, &[]);
 
@@ -502,21 +515,19 @@ impl<'a, 'buf> Codegen<'a, 'buf, WasmTy<'buf>> {
                     (func_def.method_ty_id, key)
                 })
             })
-            .map(|(func_ty_id, key)| {
-                Import {
+            .map(|(func_ty_id, key)| Import {
+                span: WasmSpan::from_offset(0),
+                module: "cool-runtime",
+                field: key.as_str(),
+                item: ItemSig {
                     span: WasmSpan::from_offset(0),
-                    module: "cool-runtime",
-                    field: key.as_str(),
-                    item: ItemSig {
-                        span: WasmSpan::from_offset(0),
-                        id: None,
-                        name: None,
-                        kind: ItemKind::Func(TypeUse {
-                            index: Some(func_ty_id.to_wasm_index(0)),
-                            inline: None,
-                        }),
-                    },
-                }
+                    id: None,
+                    name: None,
+                    kind: ItemKind::Func(TypeUse {
+                        index: Some(func_ty_id.to_wasm_index(0)),
+                        inline: None,
+                    }),
+                },
             })
             .collect()
     }

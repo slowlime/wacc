@@ -3,13 +3,10 @@
 use std::borrow::Cow;
 
 use crate::analysis::{ClassName, TypeCtx};
-use crate::codegen::funcs::specials;
+use crate::codegen::funcs::{specials, SPECIAL_METHODS};
 use crate::util::slice_formatter;
 
-use super::ty::{
-    constructor_ty, get_method_ty, initializer_ty, RegularTy, WasmTy, CONSTRUCTOR_NAME,
-    INITIALIZER_NAME,
-};
+use super::ty::{get_method_ty, RegularTy, WasmTy};
 use super::{MethodDefinition, MethodIndex, MethodTable, TyIndex, Vtable};
 
 pub use super::layout::compute_layout;
@@ -26,10 +23,11 @@ pub fn collect_types<'buf>(
         ty_index.insert(RegularTy::Class(name.clone()).into());
     }
 
-    ty_index.insert(constructor_ty());
-    ty_index.insert(initializer_ty());
-
     for (_, func) in specials() {
+        ty_index.insert(func.ty.clone());
+    }
+
+    for (_, func) in SPECIAL_METHODS.iter() {
         ty_index.insert(func.ty.clone());
     }
 
@@ -72,27 +70,10 @@ pub fn enumerate_methods<'buf>(
             method_index.inherit(super_ty_id, ty_id);
         }
 
-        // The first method must be the constructor — this invariant is relied upon in codegen
-        let Some(constructor_ty_id) = ty_index.get_by_ty(&constructor_ty()) else {
-            panic!("While processing the class {}, the constructor type was not found in the type index",
-                class);
-        };
-        method_index.insert(
-            ty_id,
-            Cow::Owned(CONSTRUCTOR_NAME.to_vec()),
-            constructor_ty_id,
-        );
-
-        // The second method must be the initializer
-        let Some(initializer_ty_id) = ty_index.get_by_ty(&initializer_ty()) else {
-            panic!("While processing the class {}, the initializer type was not found in the type index",
-                class);
-        };
-        method_index.insert(
-            ty_id,
-            Cow::Owned(INITIALIZER_NAME.to_vec()),
-            initializer_ty_id,
-        );
+        for (_, func) in SPECIAL_METHODS.iter() {
+            let method_ty_id = ty_index.get_by_ty(&func.ty).unwrap();
+            method_index.insert(ty_id, Cow::Borrowed(func.name), method_ty_id);
+        }
 
         for (method_name, _, _) in class_index.methods() {
             let wasm_method_ty = get_method_ty(ty_ctx, class, method_name);
@@ -120,15 +101,10 @@ pub fn create_method_table<'buf>(
             panic!("The class {} was not found in the type index", class_name);
         };
 
-        let Some(constructor_method_id) = method_index.get_by_name(ty_id, CONSTRUCTOR_NAME) else {
-            panic!("The constructor of the class {} is not present in the method index", class_name);
-        };
-        method_table.insert(ty_id, constructor_method_id);
-
-        let Some(initializer_method_id) = method_index.get_by_name(ty_id, INITIALIZER_NAME) else {
-            panic!("The initializer of the class {} is not present in the method index", class_name)
-        };
-        method_table.insert(ty_id, initializer_method_id);
+        for (_, func) in SPECIAL_METHODS.iter() {
+            let method_id = method_index.get_by_name(ty_id, func.name).unwrap();
+            method_table.insert(ty_id, method_id);
+        }
 
         for (method_name, _, _) in class_index.methods() {
             let Some(method_id) = method_index.get_by_name(ty_id, &method_name) else {

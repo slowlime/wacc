@@ -3,9 +3,6 @@ use crate::ast::ty::{BuiltinClass, FunctionTy, ResolvedTy};
 use crate::try_match;
 use crate::util::slice_formatter;
 
-pub const CONSTRUCTOR_NAME: &[u8] = b"{new}";
-pub const INITIALIZER_NAME: &[u8] = b"{init}";
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum RegularTy<'buf> {
     /// The unboxed i32 type.
@@ -102,22 +99,6 @@ impl<'buf> From<ResolvedTy<'buf>> for WasmTy<'buf> {
 impl<'buf> From<RegularTy<'buf>> for WasmTy<'buf> {
     fn from(ty: RegularTy<'buf>) -> WasmTy<'buf> {
         Self::Regular(ty)
-    }
-}
-
-pub fn constructor_ty<'buf>() -> WasmTy<'buf> {
-    // actually () -> SELF_TYPE
-    WasmTy::Func {
-        params: vec![],
-        ret: Some(BuiltinClass::Object.into()),
-    }
-}
-
-pub fn initializer_ty<'buf>() -> WasmTy<'buf> {
-    // actually (SELF_TYPE) -> SELF_TYPE
-    WasmTy::Func {
-        params: vec![BuiltinClass::Object.into()],
-        ret: Some(BuiltinClass::Object.into()),
     }
 }
 
