@@ -42,11 +42,11 @@ use ctx::Vtable;
 use ctx::{MethodId, TyId};
 use visitor::CodegenVisitor;
 
-use self::funcs::SPECIAL_METHODS;
-use self::funcs::SpecialMethodKey;
 use self::funcs::specials;
 use self::funcs::BuiltinFuncKey;
 use self::funcs::SpecialFuncKey;
+use self::funcs::SpecialMethodKey;
+use self::funcs::SPECIAL_METHODS;
 
 trait PositionOffset {
     fn pos(&self) -> usize;
@@ -231,9 +231,11 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
 
             let func = match key {
                 SpecialMethodKey::Constructor => self.generate_constructor(ty_id, class),
-                SpecialMethodKey::Initializer => self.generate_initializer(ty_id, &class_name, class),
+                SpecialMethodKey::Initializer => {
+                    self.generate_initializer(ty_id, &class_name, class)
+                }
                 SpecialMethodKey::Copy => self.generate_copy(ty_id, class),
-                SpecialMethodKey::TypeName => self.generate_type_name(ty_id, &class_name, class),
+                SpecialMethodKey::TypeName => self.generate_type_name(&class_name, class),
             };
 
             self.funcs.insert(method_id, func);
@@ -241,16 +243,91 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
     }
 
     fn generate_copy(&self, ty_id: TyId, class: &Class<'buf>) -> wast::core::Func<'static> {
-        todo!("generate a copy() method for the class unless it's defined by the user")
+        use wast::core::*;
+
+        let func = SPECIAL_METHODS.get(SpecialMethodKey::Copy);
+        let mut instrs = vec![];
+
+        for (field_id, _, _) in self.field_table.fields(ty_id).unwrap() {
+            instrs.push(field_id.wasm_get(class.pos()));
+        }
+
+        instrs.push(Instruction::StructNew(ty_id.to_wasm_index(class.pos())));
+
+        Func {
+            span: WasmSpan::from_offset(class.pos()),
+            id: None,
+            name: None,
+            exports: InlineExport { names: vec![] },
+            kind: FuncKind::Inline {
+                locals: vec![Local {
+                    id: None,
+                    name: None,
+                    ty: ValType::Ref(RefType {
+                        nullable: true,
+                        heap: HeapType::Index(
+                            self.ty_index
+                                .get_by_wasm_ty(&BuiltinClass::Object.into())
+                                .unwrap()
+                                .to_wasm_index(class.pos()),
+                        ),
+                    }),
+                }],
+                expression: Expression {
+                    instrs: instrs.into(),
+                },
+            },
+            ty: TypeUse {
+                index: Some(
+                    self.ty_index
+                        .get_by_wasm_ty(&func.ty)
+                        .unwrap()
+                        .to_wasm_index(class.pos()),
+                ),
+                inline: None,
+            },
+        }
     }
 
     fn generate_type_name(
         &self,
-        ty_id: TyId,
         name: &ClassName<'buf>,
         class: &Class<'buf>,
     ) -> wast::core::Func<'static> {
-        todo!("generate a type_name() method for the class unless it's defined by the user")
+        use wast::core::*;
+
+        let func = SPECIAL_METHODS.get(SpecialMethodKey::TypeName);
+        let string_id = self
+            .string_table
+            .borrow_mut()
+            .insert(Cow::Owned(name.to_string().into()));
+        let mut instrs = vec![];
+        instrs.push(string_id.to_i32_const());
+        instrs.push(Instruction::TableGet(
+            self.string_table_id.to_table_arg(class.pos()),
+        ));
+
+        Func {
+            span: WasmSpan::from_offset(class.pos()),
+            id: None,
+            name: None,
+            exports: InlineExport { names: vec![] },
+            kind: FuncKind::Inline {
+                locals: vec![],
+                expression: Expression {
+                    instrs: instrs.into(),
+                },
+            },
+            ty: TypeUse {
+                index: Some(
+                    self.ty_index
+                        .get_by_wasm_ty(&func.ty)
+                        .unwrap()
+                        .to_wasm_index(class.pos()),
+                ),
+                inline: None,
+            },
+        }
     }
 
     fn default_initializer_for(&self, ty_kind: TyKind, pos: usize) -> Instruction<'static> {
@@ -307,7 +384,10 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
         let constructor_ty_id = self.ty_index.get_by_wasm_ty(&func.ty).unwrap();
         let initializer_method_id = self
             .method_index
-            .get_by_name(ty_id, SPECIAL_METHODS.get(SpecialMethodKey::Initializer).name)
+            .get_by_name(
+                ty_id,
+                SPECIAL_METHODS.get(SpecialMethodKey::Initializer).name,
+            )
             .unwrap();
         let initializer_func_id = self
             .func_registry
@@ -387,10 +467,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
         let self_local_id = locals.bind(Some(Cow::Borrowed(b"self")), TyKind::Id(ty_id));
         self_local_id.wasm_set(class.pos());
 
-        let initializer_method_id = self
-            .method_index
-            .get_by_name(ty_id, func.name)
-            .unwrap();
+        let initializer_method_id = self.method_index.get_by_name(ty_id, func.name).unwrap();
         let mut visitor = CodegenVisitor::new(self, initializer_method_id, &locals, &[]);
 
         for feature in &class.features {

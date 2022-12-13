@@ -163,9 +163,9 @@ define_special_methods! {
         ret: Some(BuiltinClass::Object.into()),
     },
 
-    // actually it's (SELF_TYPE) -> bytes
+    // actually it's () -> bytes
     TypeName => b"{type_name}": WasmTy::Func {
-        params: vec![BuiltinClass::Object.into()],
+        params: vec![],
         ret: Some(RegularTy::ByteArray.into()),
     },
 }

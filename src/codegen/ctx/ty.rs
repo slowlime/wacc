@@ -83,6 +83,12 @@ impl<'buf> From<ClassName<'buf>> for WasmTy<'buf> {
     }
 }
 
+impl<'buf> From<BuiltinClass> for WasmTy<'buf> {
+    fn from(builtin: BuiltinClass) -> Self {
+        Self::Regular(RegularTy::Class(builtin.into()))
+    }
+}
+
 impl<'buf> From<ResolvedTy<'buf>> for WasmTy<'buf> {
     fn from(ty: ResolvedTy<'buf>) -> WasmTy<'buf> {
         match ty {
