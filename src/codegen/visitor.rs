@@ -225,7 +225,7 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
         }
     }
 
-    fn unbox(&self, ty: &ResolvedTy<'buf>, pos: usize) -> Option<Instruction<'static>> {
+    pub fn unbox(&self, ty: &ResolvedTy<'buf>, pos: usize) -> Option<Instruction<'static>> {
         use wast::core::*;
 
         let ty_id = match ty {
@@ -242,7 +242,7 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
         }))
     }
 
-    fn r#box(&self, ty: &ResolvedTy<'buf>, pos: usize) -> Vec<Instruction<'static>> {
+    pub fn r#box(&self, ty: &ResolvedTy<'buf>, pos: usize) -> Vec<Instruction<'static>> {
         use wast::core::*;
 
         let mut result = vec![];

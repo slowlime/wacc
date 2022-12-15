@@ -14,13 +14,14 @@ use indexmap::{Equivalent, IndexMap, IndexSet};
 
 use ty::WasmTy;
 
-pub use locals::{LocalCtx, LocalId};
-
 use crate::analysis::ClassName;
 use crate::try_match;
 use crate::util::slice_formatter;
 
 use super::funcs::{BuiltinFuncKey, ImportedFuncKey};
+
+pub use locals::{LocalCtx, LocalId};
+pub use layout::{VTABLE_FIELD_NAME, VALUE_FIELD_NAME};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct TyId(usize);
@@ -221,6 +222,10 @@ impl MethodId {
 
     pub fn index(&self) -> usize {
         self.idx
+    }
+
+    pub fn to_i32_const(&self) -> wast::core::Instruction<'static> {
+        wast::core::Instruction::I32Const(self.idx.try_into().unwrap())
     }
 }
 

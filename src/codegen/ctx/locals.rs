@@ -111,6 +111,7 @@ impl<'buf> LocalCtx<'buf> {
         Default::default()
     }
 
+    #[must_use]
     pub fn bind(
         &self,
         name: Option<Cow<'buf, [u8]>>,
@@ -129,6 +130,7 @@ impl<'buf> LocalCtx<'buf> {
         id
     }
 
+    #[must_use]
     pub fn get(&self, name: &[u8]) -> Option<LocalId<'_, 'buf>> {
         let (local_ref, binding_idx) = {
             let bindings = self.bindings.borrow();

@@ -92,12 +92,42 @@ define_special_funcs! {
             params: vec![RegularTy::ByteArray; 2],
             ret: Some(RegularTy::I32),
         },
+
+        StringConcat => "string_concat": WasmTy::Func {
+            params: vec![RegularTy::ByteArray; 2],
+            ret: Some(RegularTy::ByteArray),
+        },
+
+        StringSubstr => "string_substr": WasmTy::Func {
+            params: vec![RegularTy::ByteArray, RegularTy::I32, RegularTy::I32],
+            ret: Some(RegularTy::ByteArray),
+        },
     }
 
     Imported {
         Abort => "abort": WasmTy::Func {
             params: vec![],
             ret: None,
+        },
+
+        PrintBytes => "print_bytes": WasmTy::Func {
+            params: vec![RegularTy::ByteArray],
+            ret: None,
+        },
+
+        PrintInt => "print_int": WasmTy::Func {
+            params: vec![RegularTy::I32],
+            ret: None,
+        },
+
+        ReadLine => "read_line": WasmTy::Func {
+            params: vec![],
+            ret: Some(RegularTy::ByteArray),
+        },
+
+        ReadInt => "read_int": WasmTy::Func {
+            params: vec![],
+            ret: Some(RegularTy::I32),
         },
     }
 }
