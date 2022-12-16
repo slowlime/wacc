@@ -48,7 +48,7 @@ impl<'a, 'cg, 'buf> CodegenVisitor<'a, 'cg, 'buf> {
         cg: &'a Codegen<'a, 'buf>,
         method_id: MethodId,
         locals: &'cg LocalCtx<'buf>,
-        params: &[ast::Formal<'buf>],
+        params: Option<&[ast::Formal<'buf>]>,
     ) -> Self {
         let mut this = Self {
             cg,
@@ -56,7 +56,11 @@ impl<'a, 'cg, 'buf> CodegenVisitor<'a, 'cg, 'buf> {
             locals,
             params: vec![],
         };
-        this.params = this.bind_params(params);
+
+        this.params = match params {
+            Some(params) => this.bind_params(params),
+            None => Default::default(),
+        };
 
         this
     }
@@ -356,7 +360,7 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
 
     fn push_self(&self, pos: usize) -> Vec<Instruction<'static>> {
         vec![
-            self.params[0].wasm_get(pos),
+            self.locals.get(b"self").unwrap().wasm_get(pos),
             Instruction::RefCast(self.self_ty_id().to_wasm_index(pos)),
         ]
     }

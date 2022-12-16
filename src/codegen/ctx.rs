@@ -11,14 +11,15 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 
 use indexmap::{Equivalent, IndexMap, IndexSet};
-
-use ty::WasmTy;
+use tracing::{trace_span, trace, Level};
 
 use crate::analysis::ClassName;
 use crate::try_match;
 use crate::util::slice_formatter;
 
 use super::funcs::{BuiltinFuncKey, ImportedFuncKey};
+
+use ty::WasmTy;
 
 pub use locals::{LocalCtx, LocalId};
 pub use layout::{VTABLE_FIELD_NAME, VALUE_FIELD_NAME};
@@ -301,8 +302,20 @@ impl<'buf> MethodIndex<'buf> {
 
     /// Copies methods from `super_ty_id` to `ty_id`.
     pub fn inherit(&mut self, super_ty_id: TyId, ty_id: TyId) {
+        let span = trace_span!("MethodIndex::inherit", ?ty_id, ?super_ty_id);
+        let _span = span.enter();
+
         let Some(super_class_map) = self.classes.get(&super_ty_id) else { return };
         let class_map = super_class_map.clone();
+
+        trace!("Inheriting {:?} from {:?}", ty_id, super_ty_id);
+
+        if tracing::enabled!(Level::TRACE) {
+            for (idx, (name, def)) in class_map.iter().enumerate() {
+                trace!(name = %slice_formatter(name), method_id = ?MethodId { ty_id, idx }, ?def);
+            }
+        }
+
         self.classes.insert(ty_id, class_map);
     }
 
@@ -387,12 +400,13 @@ impl MethodTable {
     }
 
     pub fn insert(&mut self, method_ty_id: TyId, method_id: MethodId) -> MethodTableId {
+        assert_ne!(method_ty_id, method_id.ty_id());
         let table_entry = self.method_tys.entry(method_ty_id);
         let table_idx = table_entry.index();
         let method_set = table_entry.or_default();
         let (method_idx, inserted) = method_set.insert_full(method_id);
         assert!(
-            !inserted,
+            inserted,
             "Method id {:?} is already contained in the method table",
             method_id
         );
@@ -499,11 +513,11 @@ impl<'buf> FieldTable<'buf> {
         let idx = entry.index();
 
         match entry {
-            Entry::Occupied(mut entry) => {
+            Entry::Vacant(entry) => {
                 entry.insert(field_ty_kind.into());
             }
 
-            Entry::Vacant(entry) => panic!(
+            Entry::Occupied(entry) => panic!(
                 "Field `{}` (ty id = {:?}) is defined twice",
                 slice_formatter(entry.key()),
                 ty_id

@@ -2,7 +2,8 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::marker::PhantomData;
 
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexMap;
+use tracing::{error, trace, trace_span};
 
 use super::TyKind;
 
@@ -28,13 +29,20 @@ impl LocalDef {
         ctx: &'ctx LocalCtx<'buf>,
         binding_idx: Option<usize>,
     ) -> LocalId<'ctx, 'buf> {
+        let span = trace_span!("LocalDef::make_id", ?self);
+        let _span = span.enter();
+
         self.ref_count += 1;
 
-        LocalId {
+        let result = LocalId {
             ctx,
             idx: self.idx,
             binding_idx,
-        }
+        };
+
+        trace!(ref_count = self.ref_count, id = ?&result, "Made a new LocalId");
+
+        result
     }
 
     fn is_ref_valid(&self, local_ref: &LocalRef) -> bool {
@@ -53,7 +61,7 @@ struct LocalRef {
 #[derive(Debug, Clone, Default)]
 pub struct LocalCtx<'buf> {
     locals: RefCell<Vec<LocalDef>>,
-    bindings: RefCell<IndexMap<Cow<'buf, [u8]>, IndexSet<LocalRef>>>,
+    bindings: RefCell<IndexMap<Cow<'buf, [u8]>, Vec<LocalRef>>>,
 }
 
 #[derive(Debug)]
@@ -90,18 +98,33 @@ impl LocalId<'_, '_> {
 impl Drop for LocalId<'_, '_> {
     fn drop(&mut self) {
         let locals = &mut *self.ctx.locals.borrow_mut();
+        let span = trace_span!("LocalId::drop", ?self, locals = ?&*locals);
+        let _span = span.enter();
+
         let def = &mut locals[self.idx];
+        let r#ref = def.make_ref();
 
         def.ref_count -= 1;
+        trace!("Dropped a reference to a local {:?}", def);
 
         if def.ref_count == 0 {
+            trace!(gen = def.gen, "The reference count has reached zero, incrementing the generation");
             def.gen += 1;
         }
 
         if let Some(binding_idx) = self.binding_idx {
             let mut bindings = self.ctx.bindings.borrow_mut();
             let Some((_, bindings)) = bindings.get_index_mut(binding_idx) else { return };
-            assert!(bindings.shift_remove(&def.make_ref()));
+            let idx = bindings.iter().enumerate().rfind(|&(_, binding)| binding == &r#ref).map(|(idx, _)| idx);
+
+            if !idx.is_some() {
+                error!(
+                    ?def, ?bindings, binding_idx, r#ref = ?r#ref,
+                    "We hold a reference to a binding that no longer exists"
+                );
+            }
+            bindings.remove(idx.unwrap());
+            trace!(r#ref = ?r#ref, "Removing the binding");
         }
     }
 }
@@ -124,7 +147,7 @@ impl<'buf> LocalCtx<'buf> {
             let entry = bindings.entry(name);
             id.binding_idx = Some(entry.index());
 
-            entry.or_default().insert(id.make_ref());
+            entry.or_default().push(id.make_ref());
         }
 
         id
@@ -142,7 +165,10 @@ impl<'buf> LocalCtx<'buf> {
         let def = locals.get_mut(local_ref.idx).unwrap();
 
         if def.is_ref_valid(&local_ref) {
-            Some(def.make_id(self, Some(binding_idx)))
+            let id = def.make_id(self, Some(binding_idx));
+            self.bindings.borrow_mut().get_index_mut(binding_idx).unwrap().1.push(def.make_ref());
+
+            Some(id)
         } else {
             self.bindings.borrow_mut().remove(name);
 

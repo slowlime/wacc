@@ -166,8 +166,9 @@ macro_rules! define_well_known_types {
     }
 }
 
-// TODO: register in the type collection pass
 define_well_known_types! {
+    ByteArray => RegularTy::ByteArray.into(),
+
     FuncToI32 => WasmTy::Func {
         params: vec![],
         ret: Some(RegularTy::I32),

@@ -493,7 +493,18 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
             self.ctx.add_class(name, index);
         }
 
-        sorted
+        let builtins = [
+            BuiltinClass::Object.into(),
+            BuiltinClass::Int.into(),
+            BuiltinClass::String.into(),
+            BuiltinClass::Bool.into(),
+            BuiltinClass::IO.into(),
+        ];
+
+        builtins
+            .into_iter()
+            .chain(sorted.into_iter())
+            .collect()
     }
 
     /// Resolves a type name using the list of available classes.

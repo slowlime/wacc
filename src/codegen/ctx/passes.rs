@@ -2,11 +2,13 @@
 
 use std::borrow::Cow;
 
+use tracing::{trace, trace_span};
+
 use crate::analysis::{ClassName, TypeCtx};
 use crate::codegen::funcs::{specials, SPECIAL_METHODS};
 use crate::util::slice_formatter;
 
-use super::ty::{get_method_ty, RegularTy, WasmTy};
+use super::ty::{get_method_ty, RegularTy, WasmTy, WELL_KNOWN_TYS};
 use super::{MethodDefinition, MethodIndex, MethodTable, TyIndex, Vtable};
 
 pub use super::layout::compute_layout;
@@ -17,7 +19,9 @@ pub fn collect_types<'buf>(
 ) -> TyIndex<'buf, WasmTy<'buf>> {
     let mut ty_index = TyIndex::<WasmTy>::new();
 
-    ty_index.insert(RegularTy::ByteArray.into());
+    for (_, ty) in WELL_KNOWN_TYS.iter() {
+        ty_index.insert(ty.clone());
+    }
 
     for name in sorted {
         ty_index.insert(RegularTy::Class(name.clone()).into());
@@ -50,9 +54,15 @@ pub fn enumerate_methods<'buf>(
     ty_ctx: &TypeCtx<'buf>,
     ty_index: &TyIndex<'buf, WasmTy<'buf>>,
 ) -> MethodIndex<'buf> {
+    let span = trace_span!("enumerate_methods");
+    let _span = span.enter();
+
     let mut method_index = MethodIndex::new();
 
     for class in sorted {
+        let class_span = trace_span!("class processing", class_name = %&class);
+        let _class_span = class_span.enter();
+
         let wasm_ty = class.clone().into();
         let Some(ty_id) = ty_index.get_by_ty(&wasm_ty) else {
             panic!("The type of the class {} is not present in the type index", class);
@@ -70,9 +80,11 @@ pub fn enumerate_methods<'buf>(
             method_index.inherit(super_ty_id, ty_id);
         }
 
-        for (_, func) in SPECIAL_METHODS.iter() {
+        for (key, func) in SPECIAL_METHODS.iter() {
             let method_ty_id = ty_index.get_by_ty(&func.ty).unwrap();
-            method_index.insert(ty_id, Cow::Borrowed(func.name), method_ty_id);
+            let method_id = method_index.insert(ty_id, Cow::Borrowed(func.name), method_ty_id);
+
+            trace!(?key, ?method_ty_id, ?method_id, "Inserted a special method");
         }
 
         for (method_name, _, _) in class_index.methods() {
@@ -81,7 +93,9 @@ pub fn enumerate_methods<'buf>(
                 panic!("While processing the class {}, the type of the method {} was not found in the type index",
                     class, slice_formatter(method_name));
             };
-            method_index.insert(ty_id, method_name.clone(), method_ty_id);
+
+            let method_id = method_index.insert(ty_id, method_name.clone(), method_ty_id);
+            trace!(method_name = %slice_formatter(method_name), ?method_ty_id, ?method_id, "Inserted a class method");
         }
     }
 
@@ -103,7 +117,8 @@ pub fn create_method_table<'buf>(
 
         for (_, func) in SPECIAL_METHODS.iter() {
             let method_id = method_index.get_by_name(ty_id, func.name).unwrap();
-            method_table.insert(ty_id, method_id);
+            let method_ty_id = ty_index.get_by_ty(&func.ty).unwrap();
+            method_table.insert(method_ty_id, method_id);
         }
 
         for (method_name, _, _) in class_index.methods() {
@@ -111,11 +126,13 @@ pub fn create_method_table<'buf>(
                 panic!("The method {} of the class {} was not found in the method index",
                     slice_formatter(method_name), class_name);
             };
-            let &MethodDefinition { last_def_id, .. } =
-                method_index.get_by_id(method_id).unwrap().1;
+            let &MethodDefinition {
+                method_ty_id,
+                last_def_id,
+                ..
+            } = method_index.get_by_id(method_id).unwrap().1;
             assert_eq!(last_def_id, method_id);
-
-            method_table.insert(ty_id, method_id);
+            method_table.insert(method_ty_id, method_id);
         }
     }
 

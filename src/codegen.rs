@@ -413,7 +413,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
 
         {
             let _self_local_id = locals.bind(Some(Cow::Borrowed(b"self")), object_ty_id);
-            let visitor = CodegenVisitor::new(self, type_name_method_id, &locals, &[]);
+            let visitor = CodegenVisitor::new(self, type_name_method_id, &locals, None);
 
             instrs.extend(self.virtual_dispatch(
                 &locals,
@@ -521,7 +521,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
         {
             let self_local_id = locals.bind(Some(Cow::Borrowed(b"self")), io_ty_id);
             let x_local_id = locals.bind(Some(Cow::Borrowed(b"x")), string_ty_id);
-            let visitor = CodegenVisitor::new(self, method_id, &locals, &[]);
+            let visitor = CodegenVisitor::new(self, method_id, &locals, None);
 
             instrs.push(x_local_id.wasm_get(0));
             instrs.extend(visitor.unbox(&BuiltinClass::String.into(), 0));
@@ -556,7 +556,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
         {
             let self_local_id = locals.bind(Some(Cow::Borrowed(b"self")), io_ty_id);
             let x_local_id = locals.bind(Some(Cow::Borrowed(b"x")), int_ty_id);
-            let visitor = CodegenVisitor::new(self, method_id, &locals, &[]);
+            let visitor = CodegenVisitor::new(self, method_id, &locals, None);
 
             instrs.push(x_local_id.wasm_get(0));
             instrs.extend(visitor.unbox(&BuiltinClass::Int.into(), 0));
@@ -592,7 +592,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
 
         {
             let _self_local_id = locals.bind(Some(Cow::Borrowed(b"self")), io_ty_id);
-            let visitor = CodegenVisitor::new(self, method_id, &locals, &[]);
+            let visitor = CodegenVisitor::new(self, method_id, &locals, None);
 
             instrs.push(Instruction::Call(read_line_func_id.to_wasm_index(0)));
             instrs.extend(visitor.r#box(&BuiltinClass::String.into(), 0));
@@ -619,7 +619,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
 
         {
             let _self_local_id = locals.bind(Some(Cow::Borrowed(b"self")), io_ty_id);
-            let visitor = CodegenVisitor::new(self, method_id, &locals, &[]);
+            let visitor = CodegenVisitor::new(self, method_id, &locals, None);
 
             instrs.push(Instruction::Call(read_int_func_id.to_wasm_index(0)));
             instrs.extend(visitor.r#box(&BuiltinClass::Int.into(), 0));
@@ -647,7 +647,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
 
         {
             let self_local_id = locals.bind(Some(Cow::Borrowed(b"self")), string_ty_id);
-            let visitor = CodegenVisitor::new(self, method_id, &locals, &[]);
+            let visitor = CodegenVisitor::new(self, method_id, &locals, None);
 
             instrs.push(self_local_id.wasm_get(0));
             instrs.extend(visitor.unbox(&BuiltinClass::String.into(), 0));
@@ -683,7 +683,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
         {
             let self_local_id = locals.bind(Some(Cow::Borrowed(b"self")), string_ty_id);
             let s_local_id = locals.bind(Some(Cow::Borrowed(b"s")), string_ty_id);
-            let visitor = CodegenVisitor::new(self, method_id, &locals, &[]);
+            let visitor = CodegenVisitor::new(self, method_id, &locals, None);
 
             instrs.push(self_local_id.wasm_get(0));
             instrs.extend(visitor.unbox(&BuiltinClass::String.into(), 0));
@@ -725,7 +725,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
             let self_local_id = locals.bind(Some(Cow::Borrowed(b"self")), string_ty_id);
             let i_local_id = locals.bind(Some(Cow::Borrowed(b"i")), int_ty_id);
             let l_local_id = locals.bind(Some(Cow::Borrowed(b"l")), int_ty_id);
-            let visitor = CodegenVisitor::new(self, method_id, &locals, &[]);
+            let visitor = CodegenVisitor::new(self, method_id, &locals, None);
 
             instrs.push(self_local_id.wasm_get(0));
             instrs.extend(visitor.unbox(&BuiltinClass::String.into(), 0));
@@ -965,7 +965,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
                     let initializer_method_id =
                         self.method_index.get_by_name(ty_id, func.name).unwrap();
                     let mut visitor =
-                        CodegenVisitor::new(self, initializer_method_id, &locals, &[]);
+                        CodegenVisitor::new(self, initializer_method_id, &locals, None);
 
                     for feature in &class.features {
                         let ast::Feature::Field(field) = feature else { continue };
@@ -1010,7 +1010,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
 
         let locals = Default::default();
         let instrs =
-            CodegenVisitor::new(self, method_id, &locals, &method.params).visit_expr(&method.body);
+            CodegenVisitor::new(self, method_id, &locals, Some(&method.params)).visit_expr(&method.body);
 
         self.make_func(instrs, locals, method_ty_id, method.pos())
     }
