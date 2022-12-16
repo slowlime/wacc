@@ -2,7 +2,9 @@ pub mod ctx;
 mod funcs;
 pub mod passes;
 mod string_collector;
+mod string_ops;
 mod visitor;
+mod wat;
 
 use std::borrow::Borrow;
 use std::borrow::Cow;
@@ -21,8 +23,8 @@ use crate::ast::Class;
 use crate::ast::Visitor as AstVisitor;
 use crate::codegen::ctx::ty::RegularTy;
 use crate::codegen::ctx::VTABLE_FIELD_NAME;
-use crate::codegen::funcs::BUILTIN_FUNCS;
 use crate::codegen::funcs::ImportedFuncKey;
+use crate::codegen::funcs::BUILTIN_FUNCS;
 use crate::codegen::funcs::IMPORTED_FUNCS;
 use crate::position::HasSpan;
 use crate::try_match;
@@ -51,6 +53,19 @@ use self::funcs::BuiltinFuncKey;
 use self::funcs::SpecialFuncKey;
 use self::funcs::SpecialMethodKey;
 use self::funcs::SPECIAL_METHODS;
+
+fn process_locals<'buf>(locals: LocalCtx<'buf>, pos: usize) -> Vec<wast::core::Local<'static>> {
+    use wast::core::*;
+
+    locals
+        .into_iter()
+        .map(|ty_kind| Local {
+            id: None,
+            name: None,
+            ty: ty_kind.to_val_type(pos, true),
+        })
+        .collect()
+}
 
 trait PositionOffset {
     fn pos(&self) -> usize;
@@ -358,7 +373,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
             name: None,
             exports: InlineExport { names: vec![] },
             kind: FuncKind::Inline {
-                locals: self.process_locals(locals, 0),
+                locals: process_locals(locals, 0),
                 expression: Expression {
                     instrs: instrs.into(),
                 },
@@ -416,7 +431,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
             name: None,
             exports: InlineExport { names: vec![] },
             kind: FuncKind::Inline {
-                locals: self.process_locals(locals, 0),
+                locals: process_locals(locals, 0),
                 expression: Expression {
                     instrs: instrs.into(),
                 },
@@ -467,7 +482,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
             name: None,
             exports: InlineExport { names: vec![] },
             kind: FuncKind::Inline {
-                locals: self.process_locals(locals, 0),
+                locals: process_locals(locals, 0),
                 expression: Expression {
                     instrs: instrs.into(),
                 },
@@ -522,10 +537,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
     fn generate_io_out_int(&self) -> wast::core::Func<'static> {
         let io_ty_id = self.builtin_ty_id(BuiltinClass::IO);
         let int_ty_id = self.builtin_ty_id(BuiltinClass::Int);
-        let method_id = self
-            .method_index
-            .get_by_name(io_ty_id, b"out_int")
-            .unwrap();
+        let method_id = self.method_index.get_by_name(io_ty_id, b"out_int").unwrap();
         let method_ty_id = self
             .method_index
             .get_by_id(method_id)
@@ -592,10 +604,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
 
     fn generate_io_in_int(&self) -> wast::core::Func<'static> {
         let io_ty_id = self.builtin_ty_id(BuiltinClass::IO);
-        let method_id = self
-            .method_index
-            .get_by_name(io_ty_id, b"in_int")
-            .unwrap();
+        let method_id = self.method_index.get_by_name(io_ty_id, b"in_int").unwrap();
         let method_ty_id = self
             .method_index
             .get_by_id(method_id)
@@ -603,10 +612,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
             .1
             .method_ty_id;
         let read_int_func = IMPORTED_FUNCS.get(ImportedFuncKey::ReadInt);
-        let read_int_func_id = self
-            .func_registry
-            .get_by_name(&read_int_func.name)
-            .unwrap();
+        let read_int_func_id = self.func_registry.get_by_name(&read_int_func.name).unwrap();
 
         let mut instrs = vec![];
         let locals = LocalCtx::new();
@@ -707,7 +713,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
             .1
             .method_ty_id;
         let string_substr_func = BUILTIN_FUNCS.get(BuiltinFuncKey::StringSubstr);
-        let string_substr_func_id= self
+        let string_substr_func_id = self
             .func_registry
             .get_by_name(&string_substr_func.name)
             .unwrap();
@@ -1013,23 +1019,6 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
         self.ty_index.get_by_wasm_ty(&builtin.into()).unwrap()
     }
 
-    fn process_locals(
-        &self,
-        locals: LocalCtx<'buf>,
-        pos: usize,
-    ) -> Vec<wast::core::Local<'static>> {
-        use wast::core::*;
-
-        locals
-            .into_iter()
-            .map(|ty_kind| Local {
-                id: None,
-                name: None,
-                ty: ty_kind.to_val_type(pos, true),
-            })
-            .collect()
-    }
-
     fn virtual_dispatch(
         &self,
         locals: &LocalCtx<'buf>,
@@ -1089,7 +1078,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
             name: None,
             exports: InlineExport { names: vec![] },
             kind: FuncKind::Inline {
-                locals: self.process_locals(locals, pos),
+                locals: process_locals(locals, pos),
                 expression: Expression {
                     instrs: instrs.into(),
                 },
@@ -1256,7 +1245,11 @@ impl<'a, 'buf> Codegen<'a, 'buf, WasmTy<'buf>> {
             .collect()
     }
 
-    fn generate_builtin(&self, _key: BuiltinFuncKey) -> wast::core::Func<'static> {
-        todo!()
+    fn generate_builtin(&self, key: BuiltinFuncKey) -> wast::core::Func<'static> {
+        match key {
+            BuiltinFuncKey::StringEq => self.generate_string_eq(),
+            BuiltinFuncKey::StringConcat => self.generate_string_concat(),
+            BuiltinFuncKey::StringSubstr => self.generate_string_substr(),
+        }
     }
 }

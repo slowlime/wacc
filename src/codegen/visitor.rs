@@ -22,7 +22,6 @@ use super::ctx::FieldId;
 use super::ctx::LocalCtx;
 use super::ctx::LocalId;
 use super::ctx::MethodDefinition;
-use super::ctx::MethodTableId;
 use super::ctx::TableId;
 use super::ctx::TyKind;
 use super::ctx::{MethodId, TyId};
@@ -113,24 +112,6 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
             Some(res) => res,
             None => panic!(
                 "The method id {:?} was not found in the method index",
-                method_id,
-            ),
-        }
-    }
-
-    fn method_table_id(&self, method_id: MethodId) -> MethodTableId {
-        let (name, def) = self.method_by_id(method_id);
-        let method_id = def.last_def_id;
-
-        match self
-            .cg
-            .method_table
-            .get_by_method_id(def.method_ty_id, method_id)
-        {
-            Some(method_table_id) => method_table_id,
-            None => panic!(
-                "The last override of the method {} (id {:?}) was not found in the method table",
-                slice_formatter(name),
                 method_id,
             ),
         }

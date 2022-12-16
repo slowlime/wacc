@@ -1,3 +1,6 @@
+use indexmap::IndexMap;
+use once_cell::sync::Lazy;
+
 use crate::analysis::{ClassName, TypeCtx};
 use crate::ast::ty::{BuiltinClass, FunctionTy, ResolvedTy};
 use crate::try_match;
@@ -127,4 +130,56 @@ pub fn get_method_ty<'buf>(
         .insert(0, def_class_name.clone().try_into().unwrap());
 
     method_ty.into()
+}
+
+macro_rules! define_well_known_types {
+    ($( $key:ident => $ty:expr ),* $(,)?) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+        pub enum WellKnownTyKey {
+            $( $key, )*
+        }
+
+        static WELL_KNOWN_TY_MAP: Lazy<IndexMap<WellKnownTyKey, WasmTy<'static>>> = Lazy::new(|| {
+            let mut map = IndexMap::new();
+
+            $(
+                map.insert(WellKnownTyKey::$key, $ty);
+            )*
+
+            map
+        });
+
+        pub struct WellKnownTyProvider(());
+
+        pub const WELL_KNOWN_TYS: WellKnownTyProvider = WellKnownTyProvider(());
+
+        impl WellKnownTyProvider {
+            pub fn get(&self, key: WellKnownTyKey) -> &'static WasmTy<'static> {
+                WELL_KNOWN_TY_MAP.get(&key).unwrap()
+            }
+
+            pub fn iter(&self) -> impl Iterator<Item = (WellKnownTyKey, &'static WasmTy<'static>)> {
+                WELL_KNOWN_TY_MAP.iter()
+                    .map(|(&key, wasm_ty)| (key, wasm_ty))
+            }
+        }
+    }
+}
+
+// TODO: register in the type collection pass
+define_well_known_types! {
+    FuncToI32 => WasmTy::Func {
+        params: vec![],
+        ret: Some(RegularTy::I32),
+    },
+
+    FuncBytesToBytes => WasmTy::Func {
+        params: vec![RegularTy::ByteArray],
+        ret: Some(RegularTy::ByteArray),
+    },
+
+    FuncEmpty => WasmTy::Func {
+        params: vec![],
+        ret: None,
+    },
 }
