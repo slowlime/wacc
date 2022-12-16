@@ -8,10 +8,16 @@ use crate::position::{HasSpan, PositionPath, Span, Spanned};
 use crate::source::Source;
 use crate::util::slice_formatter;
 
-use super::config::OutputFormat;
+use super::config::LexerOutputFormat;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AstDumpFormat {
+    Coolc,
+    Debug,
+}
 
 pub fn dump_tokens<'buf, I>(
-    format: OutputFormat,
+    format: LexerOutputFormat,
     source: &Source<'buf>,
     tokens: I,
     mut out: impl Write,
@@ -20,8 +26,8 @@ where
     I: Iterator<Item = Result<Token<'buf>, LexerError>>,
 {
     match format {
-        OutputFormat::Coolc => dump_tokens_coolc(source, tokens, out),
-        OutputFormat::Debug => writeln!(out, "{:#?}", tokens.collect::<Vec<_>>()),
+        LexerOutputFormat::Coolc => dump_tokens_coolc(source, tokens, out),
+        LexerOutputFormat::Debug => writeln!(out, "{:#?}", tokens.collect::<Vec<_>>()),
     }
 }
 
@@ -124,13 +130,13 @@ where
 
 pub fn dump_ast<'buf>(
     source: &Source<'buf>,
-    format: OutputFormat,
+    format: AstDumpFormat,
     ast: ast::Program<'buf>,
     mut out: impl Write,
 ) -> io::Result<()> {
     match format {
-        OutputFormat::Coolc => dump_ast_coolc(source, ast, out),
-        OutputFormat::Debug => writeln!(out, "{:#?}", ast),
+        AstDumpFormat::Coolc => dump_ast_coolc(source, ast, out),
+        AstDumpFormat::Debug => writeln!(out, "{:#?}", ast),
     }
 }
 

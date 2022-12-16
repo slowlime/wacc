@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::io;
+use std::io::{self, Write};
 
 use crate::analysis::{self, ClassName, TypeChecker, TypeCtx, TypeckResult};
 use crate::ast::{Class, Program};
@@ -12,8 +12,8 @@ use crate::parse::{Cursor, Lexer, Parser};
 use crate::position::HasSpan;
 use crate::util::CloneStatic;
 
-use super::config::{CompilationStage, OutputFormat};
-use super::dump::{dump_ast, dump_tokens};
+use super::config::{CodegenOutputFormat, OutputKind, ParserOutputFormat, TypeckOutputFormat};
+use super::dump::{dump_ast, dump_tokens, AstDumpFormat};
 use super::{PassOutput, RunnerCtx};
 
 pub fn load_files(ctx: &mut RunnerCtx<'_, '_>) -> PassOutput<()> {
@@ -48,13 +48,11 @@ pub fn dump_tokens_if_asked<'buf>(
     ctx: &mut RunnerCtx<'buf, '_>,
     mut lexers: Vec<Lexer<'buf>>,
 ) -> PassOutput<Vec<Lexer<'buf>>> {
-    if ctx.config.output.stage != CompilationStage::Lexer {
+    let OutputKind::Lexer(format) = ctx.config.output else {
         return PassOutput::continue_with_output(lexers);
-    }
+    };
 
     for lexer in lexers.drain(..) {
-        let format = ctx.config.output.format.unwrap_or(OutputFormat::Coolc);
-
         if let Err(e) = dump_tokens(format, &ctx.source.borrow(), lexer, io::stdout()) {
             ctx.diagnostics
                 .error()
@@ -95,13 +93,16 @@ pub fn dump_asts_if_asked<'buf>(
     ctx: &mut RunnerCtx<'buf, '_>,
     mut asts: Vec<Program<'buf>>,
 ) -> PassOutput<Vec<Program<'buf>>> {
-    if ctx.config.output.stage != CompilationStage::Parser {
+    let OutputKind::Parser(format) = ctx.config.output else {
         return PassOutput::continue_with_output(asts);
-    }
+    };
+
+    let format = match format {
+        ParserOutputFormat::Coolc => AstDumpFormat::Coolc,
+        ParserOutputFormat::Debug => AstDumpFormat::Debug,
+    };
 
     for ast in asts.drain(..) {
-        let format = ctx.config.output.format.unwrap_or(OutputFormat::Coolc);
-
         if let Err(e) = dump_ast(&ctx.source.borrow(), format, ast, io::stdout()) {
             ctx.diagnostics
                 .error()
@@ -162,11 +163,15 @@ pub fn dump_types_if_asked<'buf>(
     ctx: &mut RunnerCtx<'buf, '_>,
     classes: Vec<Class<'buf>>,
 ) -> PassOutput<Vec<Class<'buf>>> {
-    if ctx.config.output.stage != CompilationStage::Typeck {
+    let OutputKind::Typeck(format) = ctx.config.output else {
         return PassOutput::continue_with_output(classes);
-    }
+    };
 
-    let format = ctx.config.output.format.unwrap_or(OutputFormat::Coolc);
+    let format = match format {
+        TypeckOutputFormat::Coolc => AstDumpFormat::Coolc,
+        TypeckOutputFormat::Debug => AstDumpFormat::Debug,
+    };
+
     let span = classes
         .iter()
         .map(|class| class.span())
@@ -277,4 +282,56 @@ pub fn codegen<'buf>(
         field_table,
         classes,
     ))
+}
+
+pub fn output_module_if_asked(
+    ctx: &mut RunnerCtx<'_, '_>,
+    CodegenOutput { module }: &CodegenOutput,
+) -> PassOutput<()> {
+    if ctx.config.output != OutputKind::Codegen(CodegenOutputFormat::Debug) {
+        return PassOutput::r#continue();
+    }
+
+    println!("{:?}", module);
+
+    PassOutput::stop()
+}
+
+pub fn assemble(
+    ctx: &mut RunnerCtx<'_, '_>,
+    CodegenOutput { mut module }: CodegenOutput,
+) -> PassOutput<Vec<u8>> {
+    match module.encode() {
+        Ok(bytes) => PassOutput::continue_with_output(bytes),
+
+        Err(e) => {
+            let message = e.to_string();
+
+            ctx.diagnostics
+                .fatal()
+                .with_source(Box::new(e))
+                .with_message(message)
+                .emit();
+
+            PassOutput::stop_with_output(vec![])
+        }
+    }
+}
+
+pub fn write_wasm(ctx: &mut RunnerCtx, wasm: Vec<u8>) -> PassOutput<()> {
+    match std::io::stdout().lock().write_all(&wasm) {
+        Ok(()) => PassOutput::r#continue(),
+
+        Err(e) => {
+            let message = e.to_string();
+
+            ctx.diagnostics
+                .fatal()
+                .with_source(Box::new(e))
+                .with_message(message)
+                .emit();
+
+            PassOutput::stop()
+        }
+    }
 }

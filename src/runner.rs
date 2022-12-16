@@ -39,6 +39,16 @@ impl<O> PassOutput<O> {
     }
 }
 
+impl PassOutput<()> {
+    pub fn stop() -> Self {
+        Self::stop_with_output(())
+    }
+
+    pub fn r#continue() -> Self {
+        Self::continue_with_output(())
+    }
+}
+
 pub struct RunnerCtx<'buf, 'emt> {
     pub config: WaccConfig,
     pub source: Rc<RefCell<Source<'buf>>>,
@@ -113,7 +123,7 @@ fn run(mut ctx: RunnerCtx<'_, '_>) -> ExitCode {
     let (field_table, ty_index) =
         return_if_stopped!(ctx, passes::compute_layout(&mut ctx, &ty_ctx, ty_index));
     let string_table = return_if_stopped!(ctx, passes::collect_strings(&mut ctx, &classes));
-    let _cg_output = return_if_stopped!(
+    let codegen_out = return_if_stopped!(
         ctx,
         passes::codegen(
             &mut ctx,
@@ -127,6 +137,9 @@ fn run(mut ctx: RunnerCtx<'_, '_>) -> ExitCode {
             &classes,
         )
     );
+    return_if_stopped!(ctx, passes::output_module_if_asked(&mut ctx, &codegen_out));
+    let wasm = return_if_stopped!(ctx, passes::assemble(&mut ctx, codegen_out));
+    return_if_stopped!(ctx, passes::write_wasm(&mut ctx, wasm));
 
     ExitCode::SUCCESS
 }
