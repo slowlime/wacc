@@ -11,7 +11,7 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 
 use indexmap::{Equivalent, IndexMap, IndexSet};
-use tracing::{trace_span, trace, Level};
+use tracing::{trace, trace_span, Level};
 
 use crate::analysis::ClassName;
 use crate::try_match;
@@ -21,8 +21,8 @@ use super::funcs::{BuiltinFuncKey, ImportedFuncKey};
 
 use ty::WasmTy;
 
+pub use layout::{VALUE_FIELD_NAME, VTABLE_FIELD_NAME};
 pub use locals::{LocalCtx, LocalId};
-pub use layout::{VTABLE_FIELD_NAME, VALUE_FIELD_NAME};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct TyId(usize);
@@ -355,6 +355,13 @@ impl TableId {
 
     pub fn index(&self) -> usize {
         self.0
+    }
+
+    pub fn to_wasm_index(&self, pos: usize) -> wast::token::Index<'static> {
+        wast::token::Index::Num(
+            self.0.try_into().unwrap(),
+            wast::token::Span::from_offset(pos),
+        )
     }
 
     pub fn to_table_arg(&self, pos: usize) -> wast::core::TableArg<'static> {
@@ -732,7 +739,10 @@ impl FuncId {
     }
 
     pub fn to_wasm_index(&self, pos: usize) -> wast::token::Index<'static> {
-        wast::token::Index::Num(self.0.try_into().unwrap(), wast::token::Span::from_offset(pos))
+        wast::token::Index::Num(
+            self.0.try_into().unwrap(),
+            wast::token::Span::from_offset(pos),
+        )
     }
 }
 
@@ -757,7 +767,9 @@ impl<'buf> FuncRegistry<'buf> {
 
         match kind {
             FuncDefKind::Imported(_) if self.imported_allowed => {}
-            FuncDefKind::Imported(_) => panic!("Imported functions must be inserted before other kinds"),
+            FuncDefKind::Imported(_) => {
+                panic!("Imported functions must be inserted before other kinds")
+            }
             _ => {
                 self.imported_allowed = false;
             }

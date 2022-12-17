@@ -141,7 +141,7 @@ impl<'buf> Codegen<'_, 'buf, WasmTy<'buf>> {
                       (local.get :idx_local)     // <i: i32>
                       (i32.const 1)              // <i: i32> <1: i32>
                       (i32.add)                  // <i + 1: i32>
-                      (local.set :result_local)  // ø
+                      (local.set :idx_local)  // ø
                       (br 1)))))
 
               (block (type :func_empty_ty_id)  // ø

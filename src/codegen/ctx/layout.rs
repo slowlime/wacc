@@ -95,7 +95,7 @@ fn complete_class<'buf>(
             field_table.insert(ty_id, Cow::Borrowed(VALUE_FIELD_NAME), TyKind::I32);
             fields.push(StructField {
                 id: None,
-                mutable: false,
+                mutable: true,
                 ty: StorageType::Val(ValType::I32),
             });
         }
@@ -104,7 +104,7 @@ fn complete_class<'buf>(
             field_table.insert(ty_id, Cow::Borrowed(VALUE_FIELD_NAME), byte_array_id);
             fields.push(StructField {
                 id: None,
-                mutable: false,
+                mutable: true,
                 ty: make_storage_type(ty_index, &RegularTy::ByteArray.into(), false, 0),
             });
         }
@@ -197,7 +197,7 @@ fn complete_byte_array() -> wast::core::Type<'static> {
         id: None,
         name: None,
         def: TypeDef::Array(ArrayType {
-            mutable: false,
+            mutable: true,
             ty: StorageType::I8,
         }),
         parent: None,

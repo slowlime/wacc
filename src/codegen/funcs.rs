@@ -129,6 +129,11 @@ define_special_funcs! {
             params: vec![RegularTy::ByteArray, RegularTy::I32, RegularTy::I32],
             ret: Some(RegularTy::ByteArray),
         },
+
+        Start => "start": WasmTy::Func {
+            params: vec![],
+            ret: None,
+        },
     }
 }
 
