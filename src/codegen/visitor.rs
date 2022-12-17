@@ -246,13 +246,16 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
         };
 
         let value_temp = self.locals.bind(None, ty_kind);
+        let result_local = self.locals.bind(None, ty_id);
         result.push(value_temp.wasm_set(pos));
         result.extend(self.construct_new(ty_id, pos));
+        result.push(result_local.wasm_tee(pos));
         result.push(value_temp.wasm_get(pos));
         result.push(Instruction::StructSet(StructAccess {
             r#struct: ty_id.to_wasm_index(pos),
             field: WasmIndex::Num(1, WasmSpan::from_offset(pos)),
         }));
+        result.push(result_local.wasm_get(pos));
 
         result
     }
@@ -281,8 +284,7 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
             r#struct: self.self_ty_id().to_wasm_index(pos),
             field: self.vtable_base_field(pos),
         }));
-        result.push(Instruction::TableGet(self.vtable_table_arg(pos)));
-        result.push(Instruction::I31GetU);
+        result.push(Instruction::I32Load(self.cg.vtable_mem_arg(pos)));
         // stack: <self> <vtable_base>
         result.push(vtable_base_local.wasm_set(pos));
         result.push(Instruction::Drop);
@@ -320,6 +322,7 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
             .unwrap();
 
         result.push(Instruction::Call(constructor_func_id.to_wasm_index(pos)));
+        result.push(Instruction::RefCast(ty_id.to_wasm_index(pos)));
 
         result
     }
@@ -363,14 +366,6 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
             self.locals.get(b"self").unwrap().wasm_get(pos),
             Instruction::RefCast(self.self_ty_id().to_wasm_index(pos)),
         ]
-    }
-
-    fn vtable_table_arg(&self, pos: usize) -> wast::core::TableArg<'static> {
-        self.cg.vtable_table_id.to_table_arg(pos)
-    }
-
-    fn string_table_arg(&self, pos: usize) -> wast::core::TableArg<'static> {
-        self.cg.string_table_id.to_table_arg(pos)
     }
 
     fn visit_dynamic_call(&mut self, expr: &ast::Call<'buf>) -> Vec<Instruction<'static>> {
@@ -425,10 +420,7 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
         result.push(Instruction::I32Const(offset));
         result.push(Instruction::I32Add);
         // stack: <receiver> <args...> <receiver.vtable_base + offset>
-        result.push(Instruction::TableGet(
-            self.vtable_table_arg(expr.method.pos()),
-        ));
-        result.push(Instruction::I31GetU);
+        result.push(Instruction::I32Load(self.cg.vtable_mem_arg(expr.method.pos())));
         // stack: <receiver> <args...> <method_table_method_idx>
         result.push(Instruction::TableGet(
             method_table_id.to_table_arg(expr.method.pos()),
@@ -842,8 +834,7 @@ impl<'buf> AstVisitor<'buf> for CodegenVisitor<'_, '_, 'buf> {
             .string_table
             .borrow_mut()
             .insert(expr.0.value.clone());
-        result.push(string_id.to_i32_const());
-        result.push(Instruction::TableGet(self.string_table_arg(expr.pos())));
+        result.extend(self.cg.generate_string(string_id, expr.pos()));
         result.extend(self.r#box(&BuiltinClass::String.into(), expr.pos()));
 
         result

@@ -30,10 +30,11 @@ impl<'buf> Codegen<'_, 'buf, WasmTy<'buf>> {
             (pre {
                 let lhs_local = locals.bind(None, bytes_ty_id);
                 let rhs_local = locals.bind(None, bytes_ty_id);
+
                 let idx_local = locals.bind(None, TyKind::I32);
             })
             (span 0)
-            (func (type :func_ty_id) (local {process_locals(locals, 0)})
+            (func (type :func_ty_id) (local {process_locals(locals, 2, 0)})
               (local.get :lhs_local) // <lhs: $bytes>
               (array.len)            // <lhs.len: i32>
               (local.get :rhs_local) // <lhs.len: i32> <rhs: $bytes>
@@ -54,7 +55,7 @@ impl<'buf> Codegen<'_, 'buf, WasmTy<'buf>> {
                     (if (type :func_to_i32_ty_id)
                       (then
                         (i32.const 1)
-                        (return))
+                        (br 2))
 
                       (else
                         (local.get :lhs_local) // <lhs: $bytes>
@@ -75,11 +76,11 @@ impl<'buf> Codegen<'_, 'buf, WasmTy<'buf>> {
 
                           (else
                             (i32.const 0)
-                            (return)))))))
+                            (br 3)))))))
 
                 (else // lhs.len != rhs.len
                   (i32.const 0)
-                  (return))))
+                  (br 0))))
         }
     }
 
@@ -93,20 +94,21 @@ impl<'buf> Codegen<'_, 'buf, WasmTy<'buf>> {
 
         let locals = LocalCtx::new();
 
-        let func_bytes_to_bytes_ty_id = self
+        let func_empty_ty_id = self
             .ty_index
-            .get_by_ty(&WELL_KNOWN_TYS.get(WellKnownTyKey::FuncBytesToBytes))
+            .get_by_ty(&WELL_KNOWN_TYS.get(WellKnownTyKey::FuncEmpty))
             .unwrap();
 
         quote_wat! {
             (pre {
                 let lhs_local = locals.bind(None, bytes_ty_id);
                 let rhs_local = locals.bind(None, bytes_ty_id);
+
                 let idx_local = locals.bind(None, TyKind::I32);
                 let result_local = locals.bind(None, bytes_ty_id);
             })
             (span 0)
-            (func (type :func_ty_id) (local {process_locals(locals, 0)})
+            (func (type :func_ty_id) (local {process_locals(locals, 2, 0)})
               (local.get :lhs_local) // <lhs: $bytes>
               (array.len)            // <lhs.len: i32>
               (local.get :rhs_local) // <lhs.len: i32> <rhs: $bytes>
@@ -115,58 +117,62 @@ impl<'buf> Codegen<'_, 'buf, WasmTy<'buf>> {
               (array.new_canon_default :bytes_ty_id) // <result: $bytes>
               (i32.const 0)          // <result: $bytes> <0: i32>
               (local.set :idx_local) // <result: $bytes>
-              (local.tee :result_local) // <result: $bytes>
+              (local.set :result_local) // ø
 
-              (block (type :func_bytes_to_bytes_ty_id)  // <result: $bytes>
-                (loop (type :func_bytes_to_bytes_ty_id) // <result: $bytes>
-                  (local.get :idx_local) // <result: $bytes> <i: i32>
-                  (local.get :lhs_local) // <result: $bytes> <i: i32> <lhs: $bytes>
-                  (array.len)            // <result: $bytes> <i: i32> <lhs.len: i32>
-                  (i32.eq)               // <result: $bytes> <i == lhs.len: i32>
+              (block (type :func_empty_ty_id)  // ø
+                (loop (type :func_empty_ty_id) // ø
+                  (local.get :idx_local) // <i: i32>
+                  (local.get :lhs_local) // <i: i32> <lhs: $bytes>
+                  (array.len)            // <i: i32> <lhs.len: i32>
+                  (i32.eq)               // <i == lhs.len: i32>
 
-                  (if (type :func_bytes_to_bytes_ty_id)
+                  (if (type :func_empty_ty_id) // ø
                     (then
-                      (br 2)) // <result: $bytes>
+                      (local.get :result_local) // <result: $bytes>
+                      (br 2))
 
                     (else
-                      (local.get :idx_local) // <result: $bytes> <i: i32>
-                      (local.get :lhs_local) // <result: $bytes> <i: i32> <lhs: $bytes>
-                      (local.get :idx_local) // <result: $bytes> <i: i32> <lhs: $bytes> <i: i32>
+                      (local.get :result_local) // <result: $bytes>
+                      (local.get :idx_local)    // <result: $bytes> <i: i32>
+                      (local.get :lhs_local)    // <result: $bytes> <i: i32> <lhs: $bytes>
+                      (local.get :idx_local)    // <result: $bytes> <i: i32> <lhs: $bytes> <i: i32>
                       (array.get_u :bytes_ty_id) // <result: $bytes> <i: i32> <lhs[i]: i32>
                       (array.set :bytes_ty_id)   // ø
-                      (local.get :result_local)  // <result: $bytes>
-                      (local.get :idx_local)     // <result: $bytes> <i: i32>
-                      (i32.const 1)              // <result: $bytes> <i: i32> <1: i32>
-                      (i32.add)                  // <result: $bytes> <i + 1: i32>
-                      (local.set :result_local)  // <result: $bytes>
+                      (local.get :idx_local)     // <i: i32>
+                      (i32.const 1)              // <i: i32> <1: i32>
+                      (i32.add)                  // <i + 1: i32>
+                      (local.set :result_local)  // ø
                       (br 1)))))
 
-              (block (type :func_bytes_to_bytes_ty_id)  // <result: $bytes>
-                (loop (type :func_bytes_to_bytes_ty_id) // <result: $bytes>
-                  (local.get :idx_local) // <result: $bytes> <i: i32>
-                  (local.get :result_local) // <result: $bytes> <i: i32> <result: $bytes>
-                  (array.len)               // <result: $bytes> <i: i32> <result.len: i32>
-                  (i32.eq)                  // <result: $bytes> <i == result.len: i32>
+              (block (type :func_empty_ty_id)  // ø
+                (loop (type :func_empty_ty_id) // ø
+                  (local.get :idx_local) // <i: i32>
+                  (local.get :result_local) // <i: i32> <result: $bytes>
+                  (array.len)               // <i: i32> <result.len: i32>
+                  (i32.eq)                  // <i == result.len: i32>
 
-                  (if (type :func_bytes_to_bytes_ty_id)
+                  (if (type :func_empty_ty_id) // ø
                     (then
-                      (br 2)) // <result: $bytes>
+                      (local.get :result_local) // <result: $bytes>
+                      (br 2))
 
                     (else
-                      (local.get :idx_local) // <result: $bytes> <i: i32>
-                      (local.get :rhs_local) // <result: $bytes> <i: i32> <rhs: $bytes>
-                      (local.get :idx_local) // <result: $bytes> <i: i32> <rhs: $bytes> <i: i32>
-                      (local.get :lhs_local) // <result: $bytes> <i: i32> <rhs: $bytes> <i: i32> <lhs: $bytes>
-                      (array.len)            // <result: $bytes> <i: i32> <rhs: $bytes> <i: i32> <lhs.len: i32>
-                      (i32.sub)              // <result: $bytes> <i: i32> <rhs: $bytes> <i - lhs.len: i32>
+                      (local.get :result_local) // <result: $bytes>
+                      (local.get :idx_local)    // <result: $bytes> <i: i32>
+                      (local.get :rhs_local)    // <result: $bytes> <i: i32> <rhs: $bytes>
+                      (local.get :idx_local)    // <result: $bytes> <i: i32> <rhs: $bytes> <i: i32>
+                      (local.get :lhs_local)    // <result: $bytes> <i: i32> <rhs: $bytes> <i: i32> <lhs: $bytes>
+                      (array.len)               // <result: $bytes> <i: i32> <rhs: $bytes> <i: i32> <lhs.len: i32>
+                      (i32.sub)                 // <result: $bytes> <i: i32> <rhs: $bytes> <i - lhs.len: i32>
                       (array.get_u :bytes_ty_id) // <result: $bytes> <i: i32> <rhs[i - lhs.len]: i32>
                       (array.set :bytes_ty_id)   // ø
-                      (local.get :result_local)  // <result: $bytes>
-                      (local.get :idx_local)     // <result: $bytes> <i: i32>
-                      (i32.const 1)              // <result: $bytes> <i: i32> <1: i32>
-                      (i32.add)                  // <result: $bytes> <i + 1: i32>
-                      (local.set :idx_local)     // <result: $bytes>
-                      (br 1))))))
+                      (local.get :idx_local)     // <i: i32>
+                      (i32.const 1)              // <i: i32> <1: i32>
+                      (i32.add)                  // <i + 1: i32>
+                      (local.set :idx_local)     // ø
+                      (br 1)))))
+
+              (local.get :result_local))
         }
     }
 
@@ -191,11 +197,12 @@ impl<'buf> Codegen<'_, 'buf, WasmTy<'buf>> {
                 let s_local = locals.bind(None, bytes_ty_id);
                 let start_local = locals.bind(None, TyKind::I32);
                 let len_local = locals.bind(None, TyKind::I32);
+
                 let idx_local = locals.bind(None, TyKind::I32);
                 let result_local = locals.bind(None, bytes_ty_id);
             })
             (span 0)
-            (func (type :func_ty_id) (local {process_locals(locals, 0)})
+            (func (type :func_ty_id) (local {process_locals(locals, 3, 0)})
               // we're going to allocate an array of length `len`
               // so make sure it's at least not larger than the input array...
               (local.get :len_local) // <len: i32>
@@ -239,7 +246,7 @@ impl<'buf> Codegen<'_, 'buf, WasmTy<'buf>> {
                     (local.get :idx_local)     // <i: i32>
                     (i32.const 1)              // <i: i32> <1: i32>
                     (i32.add)                  // <i + 1: i32>
-                    (local.set :idx_local)
+                    (local.set :idx_local)     // ø
                     (br 1))))
 
               // this is technically unreachable

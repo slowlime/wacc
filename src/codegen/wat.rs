@@ -78,8 +78,8 @@ macro_rules! quote_wat {
     });
 
     ([$pos:expr] instr $instrs:ident @ (local.get :$id:ident)) => ($instrs.push($id.wasm_get($pos)));
-    ([$pos:expr] instr $instrs:ident @ (local.set :$id:ident)) => ($id.wasm_set($pos));
-    ([$pos:expr] instr $instrs:ident @ (local.tee :$id:ident)) => ($id.wasm_tee($pos));
+    ([$pos:expr] instr $instrs:ident @ (local.set :$id:ident)) => ($instrs.push($id.wasm_set($pos)));
+    ([$pos:expr] instr $instrs:ident @ (local.tee :$id:ident)) => ($instrs.push($id.wasm_tee($pos)));
     ([$pos:expr] instr $instrs:ident @ (array.len)) => ($instrs.push(Instruction::ArrayLen));
     ([$pos:expr] instr $instrs:ident @ (i32.add)) => ($instrs.push(Instruction::I32Add));
     ([$pos:expr] instr $instrs:ident @ (i32.sub)) => ($instrs.push(Instruction::I32Sub));
@@ -106,6 +106,8 @@ macro_rules! quote_wat {
         $(
             quote_wat!([$pos] instr $instrs @ $sexpr);
         )*
+
+        $instrs.push(Instruction::End(None));
     });
 
     ([$pos:expr] instr $instrs:ident @ (loop (type :$id:ident) $($sexpr:tt)*)) => ({
@@ -114,6 +116,8 @@ macro_rules! quote_wat {
         $(
             quote_wat!([$pos] instr $instrs @ $sexpr);
         )*
+
+        $instrs.push(Instruction::End(None));
     });
 
     ([$pos:expr] instr $instrs:ident @ (if (type :$id:ident) $then:tt $($else:tt)?)) => ({

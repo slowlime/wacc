@@ -139,7 +139,7 @@ fn run(mut ctx: RunnerCtx<'_, '_>) -> ExitCode {
     );
     return_if_stopped!(ctx, passes::output_module_if_asked(&mut ctx, &codegen_out));
     let wasm = return_if_stopped!(ctx, passes::assemble(&mut ctx, codegen_out));
-    return_if_stopped!(ctx, passes::write_wasm(&mut ctx, wasm));
+    return_if_stopped!(ctx, passes::write_wasm(&mut ctx, &wasm));
 
     ExitCode::SUCCESS
 }

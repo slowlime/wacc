@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 
-use tracing::{trace, trace_span};
+use tracing::{trace, trace_span, Level};
 
 use crate::analysis::{ClassName, TypeCtx};
 use crate::codegen::funcs::{specials, SPECIAL_METHODS};
@@ -17,32 +17,57 @@ pub fn collect_types<'buf>(
     sorted: &[ClassName<'buf>],
     ty_ctx: &TypeCtx<'buf>,
 ) -> TyIndex<'buf, WasmTy<'buf>> {
+    let span = trace_span!("collect_types");
+    let _span = span.enter();
+
     let mut ty_index = TyIndex::<WasmTy>::new();
 
     for (_, ty) in WELL_KNOWN_TYS.iter() {
-        ty_index.insert(ty.clone());
+        let ty_id = ty_index.insert(ty.clone());
+        trace!(?ty_id, ?ty, "Added a well-known type");
     }
 
     for name in sorted {
-        ty_index.insert(RegularTy::Class(name.clone()).into());
+        let ty: WasmTy = RegularTy::Class(name.clone()).into();
+
+        if tracing::enabled!(Level::TRACE) {
+            let ty_id = ty_index.insert(ty.clone());
+            trace!(?ty_id, ty = ?ty, "Added a class type");
+        } else {
+            ty_index.insert(ty);
+        }
     }
 
-    for (_, func) in specials() {
-        ty_index.insert(func.ty.clone());
+    for (key, func) in specials() {
+        let ty_id = ty_index.insert(func.ty.clone());
+        trace!(?ty_id, ty = ?&func.ty, "Added a functional type for a special function {:?}", key);
     }
 
-    for (_, func) in SPECIAL_METHODS.iter() {
-        ty_index.insert(func.ty.clone());
+    for (key, func) in SPECIAL_METHODS.iter() {
+        let ty_id = ty_index.insert(func.ty.clone());
+        trace!(?ty_id, ty = ?&func.ty, "Added a functional type for a special method {:?}", key);
     }
 
     for name in sorted {
+        let class_span = trace_span!("class method", class_name = %name);
+        let _class_span = class_span.enter();
+
         let Some(class_index) = ty_ctx.get_class(name) else {
             panic!("The class {} was not found in the type context", name);
         };
 
         for (method_name, _, _) in class_index.methods() {
             let method_ty = get_method_ty(ty_ctx, name, &method_name);
-            ty_index.insert(method_ty);
+
+            if tracing::enabled!(Level::TRACE) {
+                let ty_id = ty_index.insert(method_ty.clone());
+                trace!(
+                    ?ty_id, ty = ?&method_ty,
+                    "Added a functional type for a class method `{}`", slice_formatter(method_name)
+                );
+            } else {
+                ty_index.insert(method_ty.clone());
+            }
         }
     }
 

@@ -174,11 +174,6 @@ define_well_known_types! {
         ret: Some(RegularTy::I32),
     },
 
-    FuncBytesToBytes => WasmTy::Func {
-        params: vec![RegularTy::ByteArray],
-        ret: Some(RegularTy::ByteArray),
-    },
-
     FuncEmpty => WasmTy::Func {
         params: vec![],
         ret: None,

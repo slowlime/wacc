@@ -8,6 +8,7 @@ mod runner;
 pub mod source;
 pub mod util;
 
+use std::io;
 use std::process::ExitCode;
 
 use tracing_subscriber::filter::{EnvFilter, LevelFilter};
@@ -21,7 +22,7 @@ pub fn main() -> ExitCode {
         .with_env_var(LOG_ENV_NAME)
         .from_env_lossy();
     tracing_subscriber::registry()
-        .with(tracing_subscriber::fmt::layer())
+        .with(tracing_subscriber::fmt::layer().with_writer(io::stderr))
         .with(filter)
         .init();
 

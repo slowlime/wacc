@@ -248,13 +248,13 @@ pub struct MethodDefinition {
 
 #[derive(Debug, Clone)]
 pub struct MethodIndex<'buf> {
-    classes: HashMap<TyId, IndexMap<Cow<'buf, [u8]>, MethodDefinition>>,
+    classes: IndexMap<TyId, IndexMap<Cow<'buf, [u8]>, MethodDefinition>>,
 }
 
 impl<'buf> MethodIndex<'buf> {
     pub fn new() -> Self {
         Self {
-            classes: HashMap::new(),
+            classes: IndexMap::new(),
         }
     }
 
@@ -481,7 +481,7 @@ impl FieldId {
         use wast::token::Index as WasmIndex;
         use wast::token::Span as WasmSpan;
 
-        Instruction::StructSet(StructAccess {
+        Instruction::StructGet(StructAccess {
             r#struct: self.ty_id.to_wasm_index(pos),
             field: WasmIndex::Num(self.idx.try_into().unwrap(), WasmSpan::from_offset(pos)),
         })
@@ -490,13 +490,13 @@ impl FieldId {
 
 #[derive(Debug, Clone)]
 pub struct FieldTable<'buf> {
-    classes: HashMap<TyId, IndexMap<Cow<'buf, [u8]>, TyKind>>,
+    classes: IndexMap<TyId, IndexMap<Cow<'buf, [u8]>, TyKind>>,
 }
 
 impl<'buf> FieldTable<'buf> {
     pub fn new() -> Self {
         Self {
-            classes: HashMap::new(),
+            classes: IndexMap::new(),
         }
     }
 
@@ -732,7 +732,7 @@ impl FuncId {
     }
 
     pub fn to_wasm_index(&self, pos: usize) -> wast::token::Index<'static> {
-        wast::token::Index::Num(pos.try_into().unwrap(), wast::token::Span::from_offset(pos))
+        wast::token::Index::Num(self.0.try_into().unwrap(), wast::token::Span::from_offset(pos))
     }
 }
 

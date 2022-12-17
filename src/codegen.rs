@@ -9,10 +9,12 @@ mod wat;
 use std::borrow::Borrow;
 use std::borrow::Cow;
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::mem;
 
+use indexmap::IndexMap;
+use tracing::{trace, trace_span};
 use wast::core::Instruction;
+use wast::token::Index as WasmIndex;
 use wast::token::Span as WasmSpan;
 
 use crate::analysis::ClassName;
@@ -28,6 +30,7 @@ use crate::codegen::funcs::BUILTIN_FUNCS;
 use crate::codegen::funcs::IMPORTED_FUNCS;
 use crate::position::HasSpan;
 use crate::try_match;
+use crate::util::slice_formatter;
 
 use ctx::ty::WasmTy;
 use ctx::CompleteWasmTy;
@@ -40,7 +43,6 @@ use ctx::LocalCtx;
 use ctx::MethodIndex;
 use ctx::MethodTable;
 use ctx::StringTable;
-use ctx::TableId;
 use ctx::TyIndex;
 use ctx::TyIndexEntry;
 use ctx::TyKind;
@@ -48,17 +50,19 @@ use ctx::Vtable;
 use ctx::{MethodId, TyId};
 use visitor::CodegenVisitor;
 
+use self::ctx::StringId;
 use self::funcs::specials;
 use self::funcs::BuiltinFuncKey;
 use self::funcs::SpecialFuncKey;
 use self::funcs::SpecialMethodKey;
 use self::funcs::SPECIAL_METHODS;
 
-fn process_locals<'buf>(locals: LocalCtx<'buf>, pos: usize) -> Vec<wast::core::Local<'static>> {
+fn process_locals<'buf>(locals: LocalCtx<'buf>, param_count: usize, pos: usize) -> Vec<wast::core::Local<'static>> {
     use wast::core::*;
 
     locals
         .into_iter()
+        .skip(param_count)
         .map(|ty_kind| Local {
             id: None,
             name: None,
@@ -119,13 +123,11 @@ pub struct Codegen<'a, 'buf, T: TyIndexEntry<'buf> = CompleteWasmTy<'buf>> {
     method_index: MethodIndex<'buf>,
     method_table: MethodTable,
     vtable: Vtable,
-    vtable_table_id: TableId,
     string_table: RefCell<StringTable<'buf>>,
-    string_table_id: TableId,
     field_table: FieldTable<'buf>,
     func_registry: FuncRegistry<'buf>,
     classes: &'a [Class<'buf>],
-    funcs: HashMap<MethodId, wast::core::Func<'static>>,
+    funcs: IndexMap<MethodId, wast::core::Func<'static>>,
 }
 
 impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
@@ -139,28 +141,31 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
         field_table: FieldTable<'buf>,
         classes: &'a [Class<'buf>],
     ) -> Self {
-        let vtable_table_id = Self::compute_vtable_id(&method_table);
-        let string_table_id = TableId::new(vtable_table_id.index() + 1);
-
         let mut this = Self {
             ty_ctx,
             ty_index,
             method_index,
             method_table,
             vtable,
-            vtable_table_id,
             string_table: RefCell::new(string_table),
-            string_table_id,
             field_table,
             func_registry: FuncRegistry::new(),
             classes,
-            funcs: HashMap::new(),
+            funcs: IndexMap::new(),
         };
 
         this.register_special_funcs();
         this.register_methods();
 
         this
+    }
+
+    fn vtable_mem_arg(&self, pos: usize) -> wast::core::MemArg<'static> {
+        wast::core::MemArg {
+            align: 4,
+            offset: 0,
+            memory: WasmIndex::Num(0, WasmSpan::from_offset(pos)),
+        }
     }
 
     fn register_special_funcs(&mut self) {
@@ -201,17 +206,6 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
         }
     }
 
-    fn compute_vtable_id(method_table: &MethodTable) -> TableId {
-        TableId::new(
-            method_table
-                .iter()
-                .map(|(table_id, _, _)| table_id)
-                .max()
-                .map(|table_id| table_id.index() + 1)
-                .unwrap_or(0),
-        )
-    }
-
     pub fn lower(mut self) -> CodegenOutput {
         for class in self.classes {
             self.lower_class(class);
@@ -226,6 +220,23 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
         let module = self.generate_module();
 
         CodegenOutput { module }
+    }
+
+    fn generate_string(&self, string_id: StringId, pos: usize) -> Vec<Instruction<'static>> {
+        use wast::core::*;
+
+        let mut instrs = vec![];
+
+        let bytes_ty_id = self.ty_index.get_by_wasm_ty(&RegularTy::ByteArray.into()).unwrap();
+        let string_table = self.string_table.borrow_mut();
+        let s = string_table.get_by_id(string_id).unwrap();
+        instrs.extend(s.iter().map(|&c| Instruction::I32Const(c as i32)));
+        instrs.push(Instruction::ArrayNewFixed(ArrayNewFixed {
+            array: bytes_ty_id.to_wasm_index(pos),
+            length: s.len().try_into().unwrap(),
+        }));
+
+        instrs
     }
 
     fn generate_module(self) -> wast::core::Module<'static> {
@@ -245,9 +256,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
                 method_index: self.method_index,
                 method_table: self.method_table,
                 vtable: self.vtable,
-                vtable_table_id: self.vtable_table_id,
                 string_table: self.string_table,
-                string_table_id: self.string_table_id,
                 field_table: self.field_table,
                 func_registry: self.func_registry,
                 classes: self.classes,
@@ -373,7 +382,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
             name: None,
             exports: InlineExport { names: vec![] },
             kind: FuncKind::Inline {
-                locals: process_locals(locals, 0),
+                locals: process_locals(locals, 1, 0),
                 expression: Expression {
                     instrs: instrs.into(),
                 },
@@ -431,7 +440,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
             name: None,
             exports: InlineExport { names: vec![] },
             kind: FuncKind::Inline {
-                locals: process_locals(locals, 0),
+                locals: process_locals(locals, 1, 0),
                 expression: Expression {
                     instrs: instrs.into(),
                 },
@@ -470,8 +479,9 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
         let locals = LocalCtx::new();
 
         {
-            let _self_local_id = locals.bind(Some(Cow::Borrowed(b"self")), object_ty_id);
+            let self_local_id = locals.bind(Some(Cow::Borrowed(b"self")), object_ty_id);
 
+            instrs.push(self_local_id.wasm_get(0));
             instrs.extend(self.virtual_dispatch(&locals, object_ty_id, special_copy_method_id));
             // stack: <self_copy: Object>
         }
@@ -482,7 +492,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
             name: None,
             exports: InlineExport { names: vec![] },
             kind: FuncKind::Inline {
-                locals: process_locals(locals, 0),
+                locals: process_locals(locals, 1, 0),
                 expression: Expression {
                     instrs: instrs.into(),
                 },
@@ -772,6 +782,11 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
     ) -> wast::core::Func<'static> {
         use wast::core::*;
 
+        let span = trace_span!("generate_copy", ?ty_id);
+        let _span = span.enter();
+
+        trace!("Generating a {{copy}} method");
+
         let func = SPECIAL_METHODS.get(SpecialMethodKey::Copy);
         let object_ty_id = self.builtin_ty_id(BuiltinClass::Object);
 
@@ -786,7 +801,8 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
             let self_local_id = locals.bind(Some(Cow::Borrowed(b"self")), ty_id);
             instrs.push(self_local_id.wasm_set(source.pos()));
 
-            for (field_id, _, _) in self.field_table.fields(ty_id).unwrap() {
+            for (field_id, field_name, _) in self.field_table.fields(ty_id).unwrap() {
+                trace!(?field_id, "Retrieving a field {}", slice_formatter(field_name));
                 instrs.push(self_local_id.wasm_get(source.pos()));
                 instrs.push(field_id.wasm_get(source.pos()));
             }
@@ -808,8 +824,6 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
         name: &ClassName<'buf>,
         source: BuiltinMethodGeneratorSource<'_, 'buf>,
     ) -> wast::core::Func<'static> {
-        use wast::core::*;
-
         let func = SPECIAL_METHODS.get(SpecialMethodKey::TypeName);
         let string_id = self
             .string_table
@@ -822,10 +836,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
         {
             let _self_local_id = locals.bind(Some(Cow::Borrowed(b"self")), ty_id);
 
-            instrs.push(string_id.to_i32_const());
-            instrs.push(Instruction::TableGet(
-                self.string_table_id.to_table_arg(source.pos()),
-            ));
+            instrs.extend(self.generate_string(string_id, source.pos()));
         }
 
         self.make_func(
@@ -1051,8 +1062,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
         instrs.push(method_id.to_i32_const());
         instrs.push(Instruction::I32Add);
         // stack: <Self::<method>::idx: i32>
-        instrs.push(Instruction::TableGet(self.vtable_table_id.to_table_arg(0)));
-        instrs.push(Instruction::I31GetU);
+        instrs.push(Instruction::I32Load(self.vtable_mem_arg(0)));
         instrs.push(Instruction::TableGet(
             method_table_id.table_id().to_table_arg(0),
         ));
@@ -1072,13 +1082,17 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
     ) -> wast::core::Func<'static> {
         use wast::core::*;
 
+        let WasmTy::Func { ref params, .. } = self.ty_index.get_by_id(method_ty_id).unwrap().wasm_ty else {
+            panic!("method_ty_id {:?} does not refer to a method type", method_ty_id);
+        };
+
         Func {
             span: WasmSpan::from_offset(pos),
             id: None,
             name: None,
             exports: InlineExport { names: vec![] },
             kind: FuncKind::Inline {
-                locals: process_locals(locals, pos),
+                locals: process_locals(locals, params.len(), pos),
                 expression: Expression {
                     instrs: instrs.into(),
                 },
@@ -1103,6 +1117,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, WasmTy<'buf>> {
         module_fields.extend(self.generate_imports().into_iter().map(ModuleField::Import));
         module_fields.extend(self.generate_tables().into_iter().map(ModuleField::Table));
         module_fields.extend(self.generate_functions().into_iter().map(ModuleField::Func));
+        module_fields.extend(self.generate_memory());
 
         Module {
             span: WasmSpan::from_offset(0),
@@ -1142,9 +1157,23 @@ impl<'a, 'buf> Codegen<'a, 'buf, WasmTy<'buf>> {
     fn generate_tables(&self) -> Vec<wast::core::Table<'static>> {
         use wast::core::*;
 
+        let span = trace_span!("Codegen::generate_tables");
+        let _span = span.enter();
+
         let mut tables = vec![];
 
-        for (_table_id, method_ty_id, methods) in self.method_table.iter() {
+        for (table_id, method_ty_id, methods) in self.method_table.iter() {
+            let table_span = trace_span!("method_table", ?table_id, ?method_ty_id);
+            let _table_span = table_span.enter();
+
+            let mut indices = vec![];
+
+            for (idx, method_id) in methods.enumerate() {
+                let func_id = self.func_registry.get_by_method_id(method_id).unwrap();
+                trace!(?method_id, ?func_id, idx, "Pushing an index to the table");
+                indices.push(func_id.to_wasm_index(0));
+            }
+
             tables.push(Table {
                 span: WasmSpan::from_offset(0),
                 id: None,
@@ -1155,97 +1184,107 @@ impl<'a, 'buf> Codegen<'a, 'buf, WasmTy<'buf>> {
                         nullable: false,
                         heap: HeapType::Index(method_ty_id.to_wasm_index(0)),
                     },
-                    payload: ElemPayload::Indices(
-                        methods
-                            .map(|method_id| {
-                                self.func_registry
-                                    .get_by_method_id(method_id)
-                                    .unwrap()
-                                    .to_wasm_index(0)
-                            })
-                            .collect(),
-                    ),
+                    payload: ElemPayload::Indices(indices),
                 },
             });
         }
 
-        tables.push(Table {
-            span: WasmSpan::from_offset(0),
-            id: None,
-            name: None,
-            exports: InlineExport { names: vec![] },
-            kind: TableKind::Inline {
-                elem: RefType {
-                    nullable: false,
-                    heap: HeapType::I31,
-                },
-                payload: ElemPayload::Exprs {
-                    ty: RefType {
-                        nullable: false,
-                        heap: HeapType::I31,
-                    },
-                    exprs: self
-                        .vtable
-                        .iter()
-                        .map(|(_, method_table_id)| Expression {
-                            instrs: Box::new([method_table_id.to_i32_const(), Instruction::I31New]),
-                        })
-                        .collect(),
-                },
-            },
-        });
-
-        // XXX: using a table turns out to be quite an overkill apparently
-        // it might be worth looking into memories and data segments
-        let byte_array_id = self
-            .ty_index
-            .get_by_ty(&RegularTy::ByteArray.into())
-            .unwrap();
-        tables.push(Table {
-            span: WasmSpan::from_offset(0),
-            id: None,
-            name: None,
-            exports: InlineExport { names: vec![] },
-            kind: TableKind::Inline {
-                elem: RefType {
-                    nullable: false,
-                    heap: HeapType::Index(byte_array_id.to_wasm_index(0)),
-                },
-                payload: ElemPayload::Exprs {
-                    ty: RefType {
-                        nullable: false,
-                        heap: HeapType::Index(byte_array_id.to_wasm_index(0)),
-                    },
-                    exprs: self
-                        .string_table
-                        .borrow()
-                        .iter()
-                        .flat_map(|(_, s)| s)
-                        .map(|&b| Expression {
-                            instrs: Box::new([Instruction::I32Const(b as _)]),
-                        })
-                        .collect(),
-                },
-            },
-        });
-
         tables
     }
 
-    fn generate_functions(&mut self) -> Vec<wast::core::Func<'static>> {
-        let mut funcs = mem::replace(&mut self.funcs, HashMap::new());
+    fn generate_memory(&self) -> Vec<wast::core::ModuleField<'static>> {
+        use wast::core::*;
 
-        self.func_registry
-            .iter()
-            .filter_map(|(_, _, def)| match def.kind {
-                FuncDefKind::Builtin(key) => Some(self.generate_builtin(key)),
-                FuncDefKind::Imported(_) => None,
-                FuncDefKind::ClassMethod(method_id) => Some(funcs.remove(&method_id).unwrap()),
-            })
-            .collect()
+        const PAGE_SIZE: usize = 65536;
+
+        let span = trace_span!("generate_memory");
+        let _span = span.enter();
+
+        let memory_size = 4 * self.vtable.iter().count();
+        let memory_size_pages = (memory_size + (PAGE_SIZE - 1)) / PAGE_SIZE;
+        let memory = Memory {
+            span: WasmSpan::from_offset(0),
+            id: None,
+            name: None,
+            exports: InlineExport { names: vec![] },
+            kind: MemoryKind::Normal(MemoryType::B32 {
+                limits: Limits {
+                    min: memory_size_pages as u32,
+                    max: None,
+                },
+                shared: false,
+            }),
+        };
+
+        trace!("Defined a 32-bit memory of size {} pages ({} B)", memory_size_pages, PAGE_SIZE);
+
+        let mut vtable_bytes = vec![];
+
+        {
+            let vtable_span = trace_span!("compile_vtable");
+            let _vtable_span = vtable_span.enter();
+
+            for (vtable_id, method_table_id) in self.vtable.iter() {
+                trace!(?vtable_id, ?method_table_id, "Pushing an index to the table");
+                let idx: u32 = method_table_id.method_idx().try_into().unwrap();
+                vtable_bytes.extend(idx.to_le_bytes());
+            }
+        }
+
+        let data = Data {
+            span: WasmSpan::from_offset(0),
+            id: None,
+            name: None,
+            kind: DataKind::Active {
+                memory: WasmIndex::Num(0, WasmSpan::from_offset(0)),
+                offset: Expression {
+                    instrs: vec![Instruction::I32Const(0)].into(),
+                },
+            },
+            data: vec![DataVal::Integral(vtable_bytes)],
+        };
+
+        vec![
+            ModuleField::Memory(memory),
+            ModuleField::Data(data),
+        ]
+    }
+
+    fn generate_functions(&mut self) -> Vec<wast::core::Func<'static>> {
+        let span = trace_span!("Codegen::generate_functions");
+        let _span = span.enter();
+
+        let mut funcs = mem::replace(&mut self.funcs, IndexMap::new());
+        let mut result = vec![];
+
+        for (func_id, func_name, def) in self.func_registry.iter() {
+            let span = trace_span!("iter", ?func_id);
+            let _span = span.enter();
+            trace!(%func_name, ?def);
+
+            let func = match def.kind {
+                FuncDefKind::Builtin(key) => self.generate_builtin(key),
+                FuncDefKind::Imported(_) => {
+                    trace!("Skipping the function because it's imported");
+
+                    continue;
+                }
+                FuncDefKind::ClassMethod(method_id) => funcs.remove(&method_id).unwrap(),
+            };
+
+            result.push(func);
+            trace!("Added to the function list");
+        }
+
+        result
     }
 
     fn generate_builtin(&self, key: BuiltinFuncKey) -> wast::core::Func<'static> {
+        let span = trace_span!("generate_builtin", ?key);
+        let _span = span.enter();
+
+        trace!("Generating a built-in function");
+
         match key {
             BuiltinFuncKey::StringEq => self.generate_string_eq(),
             BuiltinFuncKey::StringConcat => self.generate_string_concat(),

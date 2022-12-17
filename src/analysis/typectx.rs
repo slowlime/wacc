@@ -1,10 +1,11 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
-use std::collections::{hash_map, HashMap};
-use std::fmt::{self, Display};
+use std::collections::HashMap;
+use std::fmt::{self, Debug, Display};
 use std::iter::successors;
 
-use indexmap::IndexMap;
+use byte_string::ByteStr;
+use indexmap::{IndexMap, map as index_map};
 use itertools::Itertools;
 
 use crate::ast::ty::{BuiltinClass, FunctionTy, ResolvedTy, Ty, UnresolvedTy};
@@ -13,7 +14,7 @@ use crate::position::Span;
 use crate::try_match;
 use crate::util::slice_formatter;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum ClassName<'buf> {
     Builtin(BuiltinClass),
     Named(Cow<'buf, [u8]>),
@@ -36,6 +37,16 @@ impl Display for ClassName<'_> {
             Self::Builtin(builtin) => write!(f, "{}", builtin),
             Self::Named(name) => write!(f, "{}", slice_formatter(name)),
             Self::SelfType => write!(f, "SELF_TYPE"),
+        }
+    }
+}
+
+impl Debug for ClassName<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Builtin(builtin) => f.debug_tuple("Builtin").field(&builtin).finish(),
+            Self::Named(name) => f.debug_tuple("Named").field(&ByteStr::new(&name)).finish(),
+            Self::SelfType => f.debug_struct("SelfType").finish(),
         }
     }
 }
@@ -135,7 +146,7 @@ impl<'buf> TryFrom<ClassName<'buf>> for ResolvedTy<'buf> {
 pub struct ClassIndex<'buf> {
     parent: Option<ClassName<'buf>>,
     location: DefinitionLocation,
-    methods: HashMap<Cow<'buf, [u8]>, (DefinitionLocation, FunctionTy<'buf>)>,
+    methods: IndexMap<Cow<'buf, [u8]>, (DefinitionLocation, FunctionTy<'buf>)>,
     fields: IndexMap<Cow<'buf, [u8]>, (DefinitionLocation, ResolvedTy<'buf>)>,
 }
 
@@ -144,7 +155,7 @@ impl<'buf> ClassIndex<'buf> {
         Self {
             parent,
             location,
-            methods: HashMap::new(),
+            methods: IndexMap::new(),
             fields: IndexMap::new(),
         }
     }
@@ -174,14 +185,14 @@ impl<'buf> ClassIndex<'buf> {
         ty: FunctionTy<'buf>,
     ) {
         match self.methods.entry(name) {
-            hash_map::Entry::Occupied(entry) => {
+            index_map::Entry::Occupied(entry) => {
                 panic!(
                     "the method {} has already been added",
                     slice_formatter(entry.key()),
                 );
             }
 
-            hash_map::Entry::Vacant(entry) => {
+            index_map::Entry::Vacant(entry) => {
                 entry.insert((location, ty));
             }
         }
@@ -205,7 +216,7 @@ impl<'buf> ClassIndex<'buf> {
         assert_ne!(&*name, &b"self"[..]);
 
         match self.fields.entry(name) {
-            indexmap::map::Entry::Occupied(entry) => {
+            index_map::Entry::Occupied(entry) => {
                 panic!(
                     "the field {} (location: {:?}) has already been added",
                     slice_formatter(entry.key()),
@@ -213,7 +224,7 @@ impl<'buf> ClassIndex<'buf> {
                 );
             }
 
-            indexmap::map::Entry::Vacant(entry) => {
+            index_map::Entry::Vacant(entry) => {
                 entry.insert((location, ty));
             }
         }
@@ -279,13 +290,13 @@ impl<'buf> ClassIndex<'buf> {
 
 #[derive(Debug, Clone)]
 pub struct TypeCtx<'buf> {
-    types: HashMap<ClassName<'buf>, ClassIndex<'buf>>,
+    types: IndexMap<ClassName<'buf>, ClassIndex<'buf>>,
 }
 
 impl<'buf> TypeCtx<'buf> {
     pub fn empty() -> Self {
         Self {
-            types: HashMap::new(),
+            types: IndexMap::new(),
         }
     }
 
@@ -293,11 +304,11 @@ impl<'buf> TypeCtx<'buf> {
         let class_name = name.into();
 
         match self.types.entry(class_name) {
-            hash_map::Entry::Occupied(entry) => {
+            index_map::Entry::Occupied(entry) => {
                 panic!("the class {} has already been added", entry.key());
             }
 
-            hash_map::Entry::Vacant(entry) => {
+            index_map::Entry::Vacant(entry) => {
                 let class_name = entry.into_key();
 
                 let parent_added = index
@@ -338,7 +349,7 @@ impl<'buf> TypeCtx<'buf> {
     ) -> impl Iterator<Item = (&'a ClassName<'buf>, &'a ClassIndex<'buf>)> {
         const PRESENT_MESSAGE: &str = "the iterator only returns entries present in the typectx";
 
-        let iter = successors(Some(class_name.into()), |name| {
+        let iter = successors(Some(class_name.into()), |&name| {
             self.types.get(name).expect(PRESENT_MESSAGE).parent()
         });
 

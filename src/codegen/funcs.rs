@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::collections::HashMap;
 
 use indexmap::IndexMap;
 use once_cell::sync::Lazy;
@@ -20,6 +19,7 @@ macro_rules! define_special_funcs {
         $( define_special_funcs!(@ $section, $( $key => $name : $ty ),*); )+
 
         paste! {
+            #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
             pub enum SpecialFuncKey {
                 $( [< $section:camel >]([< $section:camel FuncKey >]), )+
             }
@@ -41,7 +41,7 @@ macro_rules! define_special_funcs {
 
     (@ $section:ident, $( $key:ident => $name:literal : $ty:expr ),* ) => {
         paste! {
-            #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+            #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
             pub enum [< $section:camel FuncKey >] {
                 $( $key, )*
             }
@@ -56,8 +56,8 @@ macro_rules! define_special_funcs {
                 }
             }
 
-            static [< $section:upper _FUNC_TYS >]: Lazy<HashMap<[< $section:camel FuncKey >], SpecialFunc>> = Lazy::new(|| {
-                let mut map = HashMap::new();
+            static [< $section:upper _FUNC_TYS >]: Lazy<IndexMap<[< $section:camel FuncKey >], SpecialFunc>> = Lazy::new(|| {
+                let mut map = IndexMap::new();
 
                 $(
                     map.insert([< $section:camel FuncKey >]::$key, SpecialFunc {

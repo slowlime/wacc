@@ -272,7 +272,7 @@ pub fn codegen<'buf>(
     field_table: FieldTable<'buf>,
     classes: &[Class<'buf>],
 ) -> PassOutput<CodegenOutput> {
-    PassOutput::continue_with_output(cg_passes::lower(
+    let mut codegen_out = cg_passes::lower(
         ty_ctx,
         ty_index,
         method_index,
@@ -281,7 +281,10 @@ pub fn codegen<'buf>(
         string_table,
         field_table,
         classes,
-    ))
+    );
+    codegen_out.module.resolve().unwrap();
+
+    PassOutput::continue_with_output(codegen_out)
 }
 
 pub fn output_module_if_asked(
@@ -292,7 +295,7 @@ pub fn output_module_if_asked(
         return PassOutput::r#continue();
     }
 
-    println!("{:?}", module);
+    println!("{:#?}", module);
 
     PassOutput::stop()
 }
@@ -318,8 +321,12 @@ pub fn assemble(
     }
 }
 
-pub fn write_wasm(ctx: &mut RunnerCtx, wasm: Vec<u8>) -> PassOutput<()> {
-    match std::io::stdout().lock().write_all(&wasm) {
+pub fn write_wasm(ctx: &mut RunnerCtx, wasm: &[u8]) -> PassOutput<()> {
+    if ctx.config.output != OutputKind::Codegen(CodegenOutputFormat::Wasm) {
+        return PassOutput::r#continue();
+    }
+
+    match std::io::stdout().lock().write_all(wasm) {
         Ok(()) => PassOutput::r#continue(),
 
         Err(e) => {
