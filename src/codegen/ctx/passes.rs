@@ -57,7 +57,7 @@ pub fn collect_types<'buf>(
         };
 
         for (method_name, _, _) in class_index.methods() {
-            let method_ty = get_method_ty(ty_ctx, name, &method_name);
+            let method_ty = get_method_ty(ty_ctx, name, method_name);
 
             if tracing::enabled!(Level::TRACE) {
                 let ty_id = ty_index.insert(method_ty.clone());
@@ -147,7 +147,7 @@ pub fn create_method_table<'buf>(
         }
 
         for (method_name, _, _) in class_index.methods() {
-            let Some(method_id) = method_index.get_by_name(ty_id, &method_name) else {
+            let Some(method_id) = method_index.get_by_name(ty_id, method_name) else {
                 panic!("The method {} of the class {} was not found in the method index",
                     slice_formatter(method_name), class_name);
             };

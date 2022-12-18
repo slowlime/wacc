@@ -261,6 +261,9 @@ pub fn collect_strings<'buf>(
     PassOutput::continue_with_output(cg_passes::collect_strings(classes))
 }
 
+// i *was* planning to use a struct here but then decided not to
+// that how this function got its 9 parameters
+#[allow(clippy::too_many_arguments)]
 pub fn codegen<'buf>(
     _ctx: &mut RunnerCtx<'buf, '_>,
     ty_ctx: TypeCtx<'buf>,

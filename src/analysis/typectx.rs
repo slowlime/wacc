@@ -45,7 +45,7 @@ impl Debug for ClassName<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Builtin(builtin) => f.debug_tuple("Builtin").field(&builtin).finish(),
-            Self::Named(name) => f.debug_tuple("Named").field(&ByteStr::new(&name)).finish(),
+            Self::Named(name) => f.debug_tuple("Named").field(&ByteStr::new(name)).finish(),
             Self::SelfType => f.debug_struct("SelfType").finish(),
         }
     }

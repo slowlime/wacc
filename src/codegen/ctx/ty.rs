@@ -120,6 +120,8 @@ pub fn get_method_ty<'buf>(
     class_name: &ClassName<'buf>,
     method_name: &[u8],
 ) -> WasmTy<'buf> {
+    // https://github.com/rust-lang/rust-clippy/issues/8132
+    #[allow(clippy::needless_collect)]
     let chain = ty_ctx.inheritance_chain(class_name).collect::<Vec<_>>();
     let method = chain
         .into_iter()

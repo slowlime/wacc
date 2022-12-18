@@ -231,6 +231,6 @@ define_special_methods! {
     // actually it's () -> bytes
     TypeName => b"{type_name}": WasmTy::Func {
         params: vec![],
-        ret: Some(RegularTy::ByteArray.into()),
+        ret: Some(RegularTy::ByteArray),
     },
 }

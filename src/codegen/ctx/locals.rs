@@ -117,7 +117,7 @@ impl Drop for LocalId<'_, '_> {
             let Some((_, bindings)) = bindings.get_index_mut(binding_idx) else { return };
             let idx = bindings.iter().enumerate().rfind(|&(_, binding)| binding == &r#ref).map(|(idx, _)| idx);
 
-            if !idx.is_some() {
+            if idx.is_none() {
                 error!(
                     ?def, ?bindings, binding_idx, r#ref = ?r#ref,
                     "We hold a reference to a binding that no longer exists"

@@ -1,3 +1,6 @@
+// the code with explicit push calls seems more readable to me
+#![allow(clippy::vec_init_then_push)]
+
 use std::borrow::Cow;
 
 use wast::core::HeapType;
@@ -90,7 +93,7 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
     }
 
     fn ty_id_for_wasm_ty(&self, wasm_ty: &WasmTy<'buf>) -> TyId {
-        match self.cg.ty_index.get_by_wasm_ty(&wasm_ty) {
+        match self.cg.ty_index.get_by_wasm_ty(wasm_ty) {
             Some(ty_id) => ty_id,
             _ => panic!("The type {:?} was not found in the type index", wasm_ty),
         }
@@ -138,7 +141,7 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
             _ => unreachable!(),
         };
 
-        for (i, param_ty) in wasm_params.into_iter().enumerate() {
+        for (i, param_ty) in wasm_params.iter().enumerate() {
             let param_ty_id = self.ty_id_for_wasm_ty(&param_ty.clone().into());
 
             let name = match i {
@@ -232,12 +235,12 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
 
         let mut result = vec![];
 
-        let (ty_id, ty_kind) = match ty {
-            &ResolvedTy::Builtin(builtin @ (BuiltinClass::Int | BuiltinClass::Bool)) => {
+        let (ty_id, ty_kind) = match *ty {
+            ResolvedTy::Builtin(builtin @ (BuiltinClass::Int | BuiltinClass::Bool)) => {
                 (self.builtin_ty_id(builtin), TyKind::I32)
             }
 
-            &ResolvedTy::Builtin(builtin @ BuiltinClass::String) => (
+            ResolvedTy::Builtin(builtin @ BuiltinClass::String) => (
                 self.builtin_ty_id(builtin),
                 self.ty_id_for_wasm_ty(&RegularTy::ByteArray.into()).into(),
             ),
@@ -346,7 +349,7 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
         let ast::Receiver::Static { object, ty, .. } = &expr.receiver else { unreachable!() };
         let mut result = vec![];
 
-        result.extend(self.visit_expr(&object));
+        result.extend(self.visit_expr(object));
 
         for arg in &expr.args {
             result.extend(self.visit_expr(arg));

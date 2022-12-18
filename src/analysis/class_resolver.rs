@@ -485,7 +485,7 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
         for name in &sorted {
             let ty_name = indexes
                 .name_map
-                .get(&name)
+                .get(name)
                 .expect("toposort does not add new items");
             let (name, index) = indexes
                 .ty_indexes

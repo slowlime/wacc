@@ -1,3 +1,6 @@
+// the code with explicit push calls seems more readable to me
+#![allow(clippy::vec_init_then_push)]
+
 pub mod ctx;
 mod funcs;
 pub mod passes;
@@ -140,6 +143,8 @@ where
 }
 
 impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
+    // yeah clippy, I know
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         ty_ctx: TypeCtx<'buf>,
         ty_index: TyIndex<'buf, CompleteWasmTy<'buf>>,

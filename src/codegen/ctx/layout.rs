@@ -116,6 +116,8 @@ fn complete_class<'buf>(
         }
 
         ClassName::Builtin(BuiltinClass::Object | BuiltinClass::IO) | ClassName::Named(_) => {
+            // https://github.com/rust-lang/rust-clippy/issues/8132
+            #[allow(clippy::needless_collect)]
             let inheritance_chain = ty_ctx.inheritance_chain(class_name).collect::<Vec<_>>();
             let defined_fields = inheritance_chain
                 .into_iter()
@@ -169,7 +171,7 @@ fn complete_func<'buf>(
     use wast::token::Span;
 
     let param_specs: Vec<_> = params
-        .into_iter()
+        .iter()
         .map(|class_name| {
             let wasm_ty = class_name.clone().into();
 

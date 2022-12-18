@@ -160,6 +160,12 @@ impl<'buf> TyIndex<'buf, WasmTy<'buf>> {
     }
 }
 
+impl<'buf> Default for TyIndex<'buf, WasmTy<'buf>> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<'buf> TyIndex<'buf, CompleteWasmTy<'buf>> {
     pub fn new() -> Self {
         Self {
@@ -217,6 +223,12 @@ impl<'buf> TyIndex<'buf, CompleteWasmTy<'buf>> {
                 _marker: Default::default(),
             },
         )
+    }
+}
+
+impl<'buf> Default for TyIndex<'buf, CompleteWasmTy<'buf>> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -369,6 +381,12 @@ impl<'buf> MethodIndex<'buf> {
     }
 }
 
+impl Default for MethodIndex<'_> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct TableId(usize);
 
@@ -489,6 +507,12 @@ impl MethodTable {
     }
 }
 
+impl Default for MethodTable {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct FieldId {
     ty_id: TyId,
@@ -572,10 +596,7 @@ impl<'buf> FieldTable<'buf> {
         Some((name, ty_kind))
     }
 
-    pub fn fields<'a>(
-        &'a self,
-        ty_id: TyId,
-    ) -> Option<impl Iterator<Item = (FieldId, &'a [u8], TyKind)>> {
+    pub fn fields(&self, ty_id: TyId) -> Option<impl Iterator<Item = (FieldId, &'_ [u8], TyKind)>> {
         self.classes.get(&ty_id).map(move |class_map| {
             class_map.iter().map(move |(name, &ty_kind)| {
                 (
@@ -588,6 +609,12 @@ impl<'buf> FieldTable<'buf> {
                 )
             })
         })
+    }
+}
+
+impl Default for FieldTable<'_> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -660,6 +687,12 @@ impl Vtable {
     }
 }
 
+impl Default for Vtable {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct StringId(usize);
 
@@ -699,11 +732,17 @@ impl<'buf> StringTable<'buf> {
         self.strings.get_index(id.0).map(Deref::deref)
     }
 
-    pub fn iter<'a>(&'a self) -> impl Iterator<Item = (StringId, &'a [u8])> {
+    pub fn iter(&self) -> impl Iterator<Item = (StringId, &'_ [u8])> {
         self.strings
             .iter()
             .enumerate()
             .map(|(idx, s)| (StringId(idx), &**s))
+    }
+}
+
+impl Default for StringTable<'_> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -825,6 +864,12 @@ impl<'buf> FuncRegistry<'buf> {
             .iter()
             .enumerate()
             .map(|(idx, (func_name, func_def))| (FuncId(idx), func_name, func_def))
+    }
+}
+
+impl Default for FuncRegistry<'_> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

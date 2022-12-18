@@ -23,7 +23,7 @@ impl<'buf> Codegen<'_, 'buf, WasmTy<'buf>> {
 
         let func_to_i32_ty_id = self
             .ty_index
-            .get_by_wasm_ty(&WELL_KNOWN_TYS.get(WellKnownTyKey::FuncToI32))
+            .get_by_wasm_ty(WELL_KNOWN_TYS.get(WellKnownTyKey::FuncToI32))
             .unwrap();
 
         quote_wat! {
@@ -96,7 +96,7 @@ impl<'buf> Codegen<'_, 'buf, WasmTy<'buf>> {
 
         let func_empty_ty_id = self
             .ty_index
-            .get_by_wasm_ty(&WELL_KNOWN_TYS.get(WellKnownTyKey::FuncEmpty))
+            .get_by_wasm_ty(WELL_KNOWN_TYS.get(WellKnownTyKey::FuncEmpty))
             .unwrap();
 
         quote_wat! {
@@ -186,10 +186,13 @@ impl<'buf> Codegen<'_, 'buf, WasmTy<'buf>> {
 
         let locals = LocalCtx::new();
 
-        let func_to_i32_ty_id = self.ty_index.get_by_wasm_ty(&WELL_KNOWN_TYS.get(WellKnownTyKey::FuncToI32)).unwrap();
+        let func_to_i32_ty_id = self
+            .ty_index
+            .get_by_wasm_ty(WELL_KNOWN_TYS.get(WellKnownTyKey::FuncToI32))
+            .unwrap();
         let func_empty_ty_id = self
             .ty_index
-            .get_by_wasm_ty(&WELL_KNOWN_TYS.get(WellKnownTyKey::FuncEmpty))
+            .get_by_wasm_ty(WELL_KNOWN_TYS.get(WellKnownTyKey::FuncEmpty))
             .unwrap();
 
         quote_wat! {

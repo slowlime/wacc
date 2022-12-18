@@ -13,6 +13,8 @@ pub fn collect_strings<'buf>(classes: &[Class<'buf>]) -> StringTable<'buf> {
     StringCollector::new(classes).collect()
 }
 
+// haha, you call this too many?
+#[allow(clippy::too_many_arguments)]
 pub fn lower<'buf>(
     ty_ctx: TypeCtx<'buf>,
     ty_index: TyIndex<'buf, CompleteWasmTy<'buf>>,
