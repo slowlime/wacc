@@ -170,9 +170,15 @@ pub fn create_vtable<'buf>(
     method_index: &MethodIndex<'buf>,
     method_table: &MethodTable,
 ) -> Vtable {
+    let span = trace_span!("create_vtable");
+    let _span = span.enter();
+
     let mut vtable = Vtable::new();
 
     for (class_name, _) in ty_ctx.iter() {
+        let class_span = trace_span!("process_class", %class_name);
+        let _class_span = class_span.enter();
+
         let wasm_ty = class_name.clone().into();
         let Some(ty_id) = ty_index.get_by_wasm_ty(&wasm_ty) else {
             panic!("The class {} was not found in the type index", class_name);
@@ -194,9 +200,13 @@ pub fn create_vtable<'buf>(
                     slice_formatter(method_name), class_name);
             };
             method_table_ids.push(table_id);
+
+            trace!(?table_id, "Pushing the method {}", slice_formatter(method_name));
         }
 
-        vtable.insert(ty_id, method_table_ids);
+        let method_count = method_table_ids.len();
+        let base_offset = vtable.insert(ty_id, method_table_ids);
+        trace!(?base_offset, "Added {} methods to the vtable", method_count);
     }
 
     vtable

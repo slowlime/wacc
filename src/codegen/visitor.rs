@@ -284,6 +284,7 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
             r#struct: self.self_ty_id().to_wasm_index(pos),
             field: self.vtable_base_field(pos),
         }));
+        result.extend(self.cg.vtable_idx_to_offset());
         result.push(Instruction::I32Load(self.cg.vtable_mem_arg(pos)));
         // stack: <self> <vtable_base>
         result.push(vtable_base_local.wasm_set(pos));
@@ -420,6 +421,7 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
         result.push(Instruction::I32Const(offset));
         result.push(Instruction::I32Add);
         // stack: <receiver> <args...> <receiver.vtable_base + offset>
+        result.extend(self.cg.vtable_idx_to_offset());
         result.push(Instruction::I32Load(self.cg.vtable_mem_arg(expr.method.pos())));
         // stack: <receiver> <args...> <method_table_method_idx>
         result.push(Instruction::TableGet(

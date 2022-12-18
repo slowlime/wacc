@@ -885,22 +885,32 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
         )
     }
 
-    fn default_initializer_for(&self, ty_kind: TyKind, pos: usize) -> Instruction<'static> {
+    fn default_initializer_for(&self, ty_kind: TyKind, pos: usize) -> Vec<Instruction<'static>> {
         use wast::core::*;
 
         match ty_kind {
-            TyKind::I32 => Instruction::I32Const(0),
+            TyKind::I32 => vec![Instruction::I32Const(0)],
+
             TyKind::Id(ty_id) => match self.ty_index.get_by_id(ty_id).unwrap().wasm_ty {
                 WasmTy::Regular(RegularTy::I32) => unreachable!(),
+
+                WasmTy::Regular(RegularTy::Class(ClassName::Builtin(
+                    BuiltinClass::Int | BuiltinClass::String | BuiltinClass::Bool,
+                ))) => self.create_object(ty_id, pos),
+
                 WasmTy::Regular(RegularTy::Class(_)) => {
-                    Instruction::RefNull(HeapType::Index(ty_id.to_wasm_index(pos)))
+                    vec![Instruction::RefNull(HeapType::Index(
+                        ty_id.to_wasm_index(pos),
+                    ))]
                 }
+
                 WasmTy::Regular(RegularTy::ByteArray) => {
-                    Instruction::ArrayNewFixed(ArrayNewFixed {
+                    vec![Instruction::ArrayNewFixed(ArrayNewFixed {
                         array: ty_id.to_wasm_index(pos),
                         length: 0,
-                    })
+                    })]
                 }
+
                 WasmTy::Func { .. } => {
                     panic!("no default initializer is available for function types")
                 }
@@ -917,7 +927,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
         result.push(vtable_base.to_i32_const());
 
         for (_, _, field_ty_kind) in fields.skip(1) {
-            result.push(self.default_initializer_for(field_ty_kind, pos));
+            result.extend(self.default_initializer_for(field_ty_kind, pos));
         }
 
         result.push(Instruction::StructNew(ty_id.to_wasm_index(pos)));
@@ -1229,11 +1239,12 @@ impl<'a, 'buf> Codegen<'a, 'buf, WasmTy<'buf>> {
                     span: WasmSpan::from_offset(0),
                     id: None,
                     name: None,
-                    kind: ElemKind::Active { table: table_id.to_wasm_index(0), offset: Expression {
-                        instrs: vec![
-                            Instruction::I32Const(idx.try_into().unwrap()),
-                        ].into(),
-                    }},
+                    kind: ElemKind::Active {
+                        table: table_id.to_wasm_index(0),
+                        offset: Expression {
+                            instrs: vec![Instruction::I32Const(idx.try_into().unwrap())].into(),
+                        },
+                    },
                     payload: ElemPayload::Exprs {
                         ty: RefType {
                             nullable: true,
@@ -1342,10 +1353,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, WasmTy<'buf>> {
         result
     }
 
-    fn generate_builtin(
-        &self,
-        key: BuiltinFuncKey,
-    ) -> wast::core::Func<'static> {
+    fn generate_builtin(&self, key: BuiltinFuncKey) -> wast::core::Func<'static> {
         let span = trace_span!("generate_builtin", ?key);
         let _span = span.enter();
 
@@ -1418,6 +1426,15 @@ where
         }
     }
 
+    fn vtable_idx_to_offset(&self) -> Vec<wast::core::Instruction<'static>> {
+        use wast::core::*;
+
+        vec![
+            Instruction::I32Const(4),
+            Instruction::I32Mul,
+        ]
+    }
+
     fn virtual_dispatch<'a>(
         &self,
         self_local_id: LocalId<'a, 'buf>,
@@ -1449,6 +1466,7 @@ where
         instrs.push(method_id.to_i32_const());
         instrs.push(Instruction::I32Add);
         // stack: <Self::<method>::idx: i32>
+        instrs.extend(self.vtable_idx_to_offset());
         instrs.push(Instruction::I32Load(self.vtable_mem_arg(0)));
         instrs.push(Instruction::TableGet(
             method_table_id.table_id().to_table_arg(0),
