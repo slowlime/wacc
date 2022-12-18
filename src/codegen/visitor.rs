@@ -461,7 +461,7 @@ impl<'buf> AstVisitor<'buf> for CodegenVisitor<'_, '_, 'buf> {
     }
 
     fn visit_expr(&mut self, expr: &ast::Expr<'buf>) -> Self::Output {
-        match expr {
+        let mut instrs = match expr {
             ast::Expr::Assignment(expr) => self.visit_assignment(expr),
             ast::Expr::Call(expr) => self.visit_call(expr),
             ast::Expr::If(expr) => self.visit_if(expr),
@@ -476,7 +476,12 @@ impl<'buf> AstVisitor<'buf> for CodegenVisitor<'_, '_, 'buf> {
             ast::Expr::Int(expr) => self.visit_int_lit(expr),
             ast::Expr::String(expr) => self.visit_string_lit(expr),
             ast::Expr::Bool(expr) => self.visit_bool_lit(expr),
-        }
+        };
+
+        let ty_id = self.ty_id_for_resolved_ty(expr.unwrap_res_ty().into_owned());
+        instrs.push(Instruction::RefCast(ty_id.to_wasm_index(expr.pos())));
+
+        instrs
     }
 
     fn visit_assignment(&mut self, expr: &ast::Assignment<'buf>) -> Self::Output {
@@ -494,6 +499,7 @@ impl<'buf> AstVisitor<'buf> for CodegenVisitor<'_, '_, 'buf> {
                 result.extend(self.push_self(expr.pos()));
                 result.extend(self.visit_expr(&expr.expr));
                 result.push(field_id.wasm_set(expr.pos()));
+                result.extend(self.push_self(expr.pos()));
                 result.push(field_id.wasm_get(expr.pos()));
             }
         }
@@ -646,7 +652,9 @@ impl<'buf> AstVisitor<'buf> for CodegenVisitor<'_, '_, 'buf> {
             },
         }));
         result.extend(self.visit_expr(&expr.scrutinee));
-        // stack: [block:0 -> ty_id] <scrutinee>
+        let scrutinee_ty_id = self.ty_id_for_resolved_ty(expr.scrutinee.unwrap_res_ty().into_owned());
+        let scrutinee_local_id = self.locals.bind(None, scrutinee_ty_id);
+        result.push(scrutinee_local_id.wasm_set(expr.scrutinee.pos()));
 
         for (idx, arm) in expr.arms.iter().enumerate() {
             let arm_ty_id = self.ty_id_for_resolved_ty(arm.binding_ty.unwrap_res_ty().into_owned());
@@ -661,25 +669,25 @@ impl<'buf> AstVisitor<'buf> for CodegenVisitor<'_, '_, 'buf> {
                             params: Box::new([]),
                             results: Box::new([ValType::Ref(RefType {
                                 nullable: true,
-                                heap: self.make_ty_ref(ty_id, arm.pos()),
+                                heap: self.make_ty_ref(scrutinee_ty_id, arm.pos()),
                             })]),
                         }),
                     },
                 }));
-
-                // stack: [block:1 -> ty_id] <scrutinee> [block:0 scrutinee_ty_id -> ty_id]
+                result.push(scrutinee_local_id.wasm_get(0));
                 result.push(Instruction::BrOnCastFail(BrOnCast {
                     label: WasmIndex::Num(0, WasmSpan::from_offset(arm.pos())),
                     r#type: arm_ty_id.to_wasm_index(arm.binding_ty_name.pos()),
                 }));
-                // stack: [block:1 -> ty_id] [block:0 scrutinee_ty_id -> ty_id] <scrutinee: arm_ty_id>
             } else {
+                result.push(scrutinee_local_id.wasm_get(0));
                 result.push(Instruction::RefCast(
                     arm_ty_id.to_wasm_index(arm.binding_ty_name.pos()),
                 ));
             }
 
             let arm_local_id = self.locals.bind(Some(arm.name.0.value.clone()), arm_ty_id);
+            result.push(arm_local_id.wasm_set(arm.name.pos()));
             result.extend(self.visit_expr(&arm.expr));
             drop(arm_local_id);
             result.push(Instruction::RefCast(ty_id.to_wasm_index(arm.expr.pos())));
@@ -690,6 +698,7 @@ impl<'buf> AstVisitor<'buf> for CodegenVisitor<'_, '_, 'buf> {
                     WasmSpan::from_offset(arm.pos()),
                 )));
                 result.push(Instruction::End(None));
+                result.push(Instruction::Drop);
             }
         }
 
