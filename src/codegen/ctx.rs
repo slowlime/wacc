@@ -64,16 +64,29 @@ impl From<TyId> for TyKind {
     }
 }
 
-pub trait TyIndexEntry<'buf>: private::Sealed + 'buf {}
+pub trait TyIndexEntry<'buf>: private::Sealed + Hash + Eq + 'buf
+where
+    WasmTy<'buf>: Equivalent<Self>,
+{
+    fn wasm_ty(&self) -> &WasmTy<'buf>;
+}
 
 #[derive(Debug, Clone)]
-pub struct TyIndex<'buf, T: TyIndexEntry<'buf>> {
+pub struct TyIndex<'buf, T: TyIndexEntry<'buf>>
+where
+    WasmTy<'buf>: Equivalent<T>,
+{
     types: IndexSet<T>,
     _marker: PhantomData<&'buf mut ()>,
 }
 
 impl private::Sealed for WasmTy<'_> {}
-impl<'buf> TyIndexEntry<'buf> for WasmTy<'buf> {}
+
+impl<'buf> TyIndexEntry<'buf> for WasmTy<'buf> {
+    fn wasm_ty(&self) -> &WasmTy<'buf> {
+        self
+    }
+}
 
 #[derive(Debug)]
 pub struct CompleteWasmTy<'buf> {
@@ -103,7 +116,12 @@ impl<'buf> Equivalent<CompleteWasmTy<'buf>> for WasmTy<'buf> {
 }
 
 impl private::Sealed for CompleteWasmTy<'_> {}
-impl<'buf> TyIndexEntry<'buf> for CompleteWasmTy<'buf> {}
+
+impl<'buf> TyIndexEntry<'buf> for CompleteWasmTy<'buf> {
+    fn wasm_ty(&self) -> &WasmTy<'buf> {
+        &self.wasm_ty
+    }
+}
 
 impl<'buf> TyIndex<'buf, WasmTy<'buf>> {
     pub fn new() -> Self {
@@ -123,14 +141,6 @@ impl<'buf> TyIndex<'buf, WasmTy<'buf>> {
         let (idx, _) = self.types.insert_full(ty);
 
         TyId(idx)
-    }
-
-    pub fn get_by_ty(&self, ty: &WasmTy<'buf>) -> Option<TyId> {
-        self.types.get_index_of(ty).map(TyId)
-    }
-
-    pub fn get_by_id(&self, id: TyId) -> Option<&WasmTy<'buf>> {
-        self.types.get_index(id.0)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (TyId, &WasmTy<'buf>)> {
@@ -169,14 +179,6 @@ impl<'buf> TyIndex<'buf, CompleteWasmTy<'buf>> {
         TyId(idx)
     }
 
-    pub fn get_by_wasm_ty(&self, ty: &WasmTy<'buf>) -> Option<TyId> {
-        self.types.get_index_of(ty).map(TyId)
-    }
-
-    pub fn get_by_id(&self, id: TyId) -> Option<&CompleteWasmTy<'buf>> {
-        self.types.get_index(id.0)
-    }
-
     pub fn extract_completed_tys(
         self,
     ) -> (
@@ -206,6 +208,19 @@ impl<'buf> TyIndex<'buf, CompleteWasmTy<'buf>> {
                 _marker: Default::default(),
             },
         )
+    }
+}
+
+impl<'buf, T: TyIndexEntry<'buf>> TyIndex<'buf, T>
+where
+    WasmTy<'buf>: Equivalent<T>,
+{
+    pub fn get_by_wasm_ty(&self, ty: &WasmTy<'buf>) -> Option<TyId> {
+        self.types.get_index_of(ty).map(TyId)
+    }
+
+    pub fn get_by_id(&self, id: TyId) -> Option<&T> {
+        self.types.get_index(id.0)
     }
 }
 

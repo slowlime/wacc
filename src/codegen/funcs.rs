@@ -130,8 +130,28 @@ define_special_funcs! {
             ret: Some(RegularTy::ByteArray),
         },
 
-        Start => "start": WasmTy::Func {
+        Run => "run": WasmTy::Func {
             params: vec![],
+            ret: None,
+        },
+
+        BytesNew => "bytes_new": WasmTy::Func {
+            params: vec![RegularTy::I32],
+            ret: Some(RegularTy::ByteArray),
+        },
+
+        BytesLen => "bytes_len": WasmTy::Func {
+            params: vec![RegularTy::ByteArray],
+            ret: Some(RegularTy::I32),
+        },
+
+        BytesGet => "bytes_get": WasmTy::Func {
+            params: vec![RegularTy::ByteArray, RegularTy::I32],
+            ret: Some(RegularTy::I32),
+        },
+
+        BytesSet => "bytes_set": WasmTy::Func {
+            params: vec![RegularTy::ByteArray, RegularTy::I32, RegularTy::I32],
             ret: None,
         },
     }
@@ -147,6 +167,16 @@ macro_rules! define_special_methods {
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
         pub enum SpecialMethodKey {
             $( $key, )*
+        }
+
+        impl SpecialMethodKey {
+            pub fn as_str(&self) -> &'static str {
+                match self {
+                    $(
+                        Self::$key => std::str::from_utf8($name).unwrap(),
+                    )*
+                }
+            }
         }
 
         static SPECIAL_METHOD_MAP: Lazy<IndexMap<SpecialMethodKey, SpecialMethod>> = Lazy::new(|| {

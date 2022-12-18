@@ -89,7 +89,7 @@ pub fn enumerate_methods<'buf>(
         let _class_span = class_span.enter();
 
         let wasm_ty = class.clone().into();
-        let Some(ty_id) = ty_index.get_by_ty(&wasm_ty) else {
+        let Some(ty_id) = ty_index.get_by_wasm_ty(&wasm_ty) else {
             panic!("The type of the class {} is not present in the type index", class);
         };
         let class_index = ty_ctx
@@ -98,7 +98,7 @@ pub fn enumerate_methods<'buf>(
 
         if let Some(parent) = class_index.parent() {
             let super_wasm_ty = parent.clone().into();
-            let Some(super_ty_id) = ty_index.get_by_ty(&super_wasm_ty) else {
+            let Some(super_ty_id) = ty_index.get_by_wasm_ty(&super_wasm_ty) else {
                 panic!("While processing the class {}, the type of its superclass {} was not found in the type index",
                     class, parent);
             };
@@ -106,7 +106,7 @@ pub fn enumerate_methods<'buf>(
         }
 
         for (key, func) in SPECIAL_METHODS.iter() {
-            let method_ty_id = ty_index.get_by_ty(&func.ty).unwrap();
+            let method_ty_id = ty_index.get_by_wasm_ty(&func.ty).unwrap();
             let method_id = method_index.insert(ty_id, Cow::Borrowed(func.name), method_ty_id);
 
             trace!(?key, ?method_ty_id, ?method_id, "Inserted a special method");
@@ -114,7 +114,7 @@ pub fn enumerate_methods<'buf>(
 
         for (method_name, _, _) in class_index.methods() {
             let wasm_method_ty = get_method_ty(ty_ctx, class, method_name);
-            let Some(method_ty_id) = ty_index.get_by_ty(&wasm_method_ty) else {
+            let Some(method_ty_id) = ty_index.get_by_wasm_ty(&wasm_method_ty) else {
                 panic!("While processing the class {}, the type of the method {} was not found in the type index",
                     class, slice_formatter(method_name));
             };
@@ -136,13 +136,13 @@ pub fn create_method_table<'buf>(
 
     for (class_name, class_index) in ty_ctx.iter() {
         let wasm_ty = class_name.clone().into();
-        let Some(ty_id) = ty_index.get_by_ty(&wasm_ty) else {
+        let Some(ty_id) = ty_index.get_by_wasm_ty(&wasm_ty) else {
             panic!("The class {} was not found in the type index", class_name);
         };
 
         for (_, func) in SPECIAL_METHODS.iter() {
             let method_id = method_index.get_by_name(ty_id, func.name).unwrap();
-            let method_ty_id = ty_index.get_by_ty(&func.ty).unwrap();
+            let method_ty_id = ty_index.get_by_wasm_ty(&func.ty).unwrap();
             method_table.insert(method_ty_id, method_id);
         }
 
@@ -174,7 +174,7 @@ pub fn create_vtable<'buf>(
 
     for (class_name, _) in ty_ctx.iter() {
         let wasm_ty = class_name.clone().into();
-        let Some(ty_id) = ty_index.get_by_ty(&wasm_ty) else {
+        let Some(ty_id) = ty_index.get_by_wasm_ty(&wasm_ty) else {
             panic!("The class {} was not found in the type index", class_name);
         };
         let Some(methods) = method_index.methods(ty_id) else {

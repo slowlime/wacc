@@ -5,6 +5,7 @@ use std::hash::Hash;
 use std::iter::successors;
 
 use itertools::{Either, Itertools};
+use indexmap::IndexMap;
 
 use crate::analysis::error::{
     IllegalSelfTypePosition, MultipleDefinitionKind, TypeckError, UnrecognizedTy,
@@ -275,9 +276,9 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
         indexes: impl IntoIterator<Item = (&'cls TyName<'buf>, ClassIndex<'buf>)>,
         excluded: &mut HashSet<&'cls TyName<'buf>>,
     ) -> impl Iterator<Item = (&'cls TyName<'buf>, ClassIndex<'buf>)> {
-        use std::collections::hash_map::Entry;
+        use indexmap::map::Entry;
 
-        let mut map = HashMap::new();
+        let mut map = IndexMap::new();
 
         for (ty_name, index) in indexes {
             match map.entry(ty_name.0.as_slice()) {
@@ -306,14 +307,14 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
     /// Returns names of classes excluded from the context due to inheritance cycles.
     fn add_to_ctx(
         &mut self,
-        ty_indexes: HashMap<&'cls TyName<'buf>, ClassIndex<'buf>>,
+        ty_indexes: IndexMap<&'cls TyName<'buf>, ClassIndex<'buf>>,
         ignored: &mut HashSet<&'cls TyName<'buf>>,
     ) -> Vec<ClassName<'buf>> {
         // perform a toposort on the indexes;
         // if a cycle is detected, remove the offending nodes and repeat
 
         struct Indexes<'cls, 'buf> {
-            ty_indexes: HashMap<&'cls TyName<'buf>, ClassIndex<'buf>>,
+            ty_indexes: IndexMap<&'cls TyName<'buf>, ClassIndex<'buf>>,
             name_map: HashMap<ClassName<'buf>, &'cls TyName<'buf>>,
         }
 
@@ -575,7 +576,7 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
         'buf: 'a,
         T: 'a,
     {
-        use std::collections::hash_map::Entry;
+        use indexmap::map::Entry;
 
         struct NameKey<'a, 'buf>(&'a Name<'buf>);
 
@@ -593,7 +594,7 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
             }
         }
 
-        let mut map = HashMap::new();
+        let mut map = IndexMap::new();
 
         for (name, location, ty) in items {
             match map.entry(NameKey(name)) {

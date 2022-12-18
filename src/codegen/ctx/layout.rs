@@ -24,7 +24,7 @@ fn make_ref_type<'buf>(
         WasmTy::Regular(RegularTy::I32) => panic!("Tried to make a reference to i32"),
         _ => RefType {
             nullable,
-            heap: HeapType::Index(ty_index.get_by_ty(ty).unwrap().to_wasm_index(pos)),
+            heap: HeapType::Index(ty_index.get_by_wasm_ty(ty).unwrap().to_wasm_index(pos)),
         },
     }
 }
@@ -84,7 +84,7 @@ fn complete_class<'buf>(
     };
 
     let byte_array_id = ty_index
-        .get_by_ty(&RegularTy::ByteArray.into())
+        .get_by_wasm_ty(&RegularTy::ByteArray.into())
         .expect("the byte array type must be defined in the type index");
     let Some(class_index) = ty_ctx.get_class(class_name) else {
         panic!("The class {} was not found in the type context", class_name);
@@ -105,7 +105,7 @@ fn complete_class<'buf>(
             fields.push(StructField {
                 id: None,
                 mutable: true,
-                ty: make_storage_type(ty_index, &RegularTy::ByteArray.into(), false, 0),
+                ty: make_storage_type(ty_index, &RegularTy::ByteArray.into(), true, 0),
             });
         }
 
@@ -118,7 +118,7 @@ fn complete_class<'buf>(
 
             for (field_name, _, field_ty) in defined_fields {
                 let field_wasm_ty = field_ty.clone().into();
-                let Some(field_ty_id) = ty_index.get_by_ty(&field_wasm_ty) else {
+                let Some(field_ty_id) = ty_index.get_by_wasm_ty(&field_wasm_ty) else {
                     panic!("The type of the field {} of the class {} was not found in the type index",
                         slice_formatter(field_name), class_name);
                 };
@@ -137,7 +137,7 @@ fn complete_class<'buf>(
 
     let parent = class_index.parent().map(|parent_name| {
         let parent_wasm_ty = parent_name.clone().into();
-        let Some(parent_ty_id) = ty_index.get_by_ty(&parent_wasm_ty) else {
+        let Some(parent_ty_id) = ty_index.get_by_wasm_ty(&parent_wasm_ty) else {
             panic!("The parent class {} of the class {} was not found in the type index",
                 parent_name, class_name);
         };

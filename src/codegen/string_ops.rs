@@ -13,17 +13,17 @@ use super::Codegen;
 impl<'buf> Codegen<'_, 'buf, WasmTy<'buf>> {
     pub(super) fn generate_string_eq(&self) -> wast::core::Func<'static> {
         let func = BUILTIN_FUNCS.get(BuiltinFuncKey::StringEq);
-        let func_ty_id = self.ty_index.get_by_ty(&func.ty).unwrap();
+        let func_ty_id = self.ty_index.get_by_wasm_ty(&func.ty).unwrap();
         let bytes_ty_id = self
             .ty_index
-            .get_by_ty(&RegularTy::ByteArray.into())
+            .get_by_wasm_ty(&RegularTy::ByteArray.into())
             .unwrap();
 
         let locals = LocalCtx::new();
 
         let func_to_i32_ty_id = self
             .ty_index
-            .get_by_ty(&WELL_KNOWN_TYS.get(WellKnownTyKey::FuncToI32))
+            .get_by_wasm_ty(&WELL_KNOWN_TYS.get(WellKnownTyKey::FuncToI32))
             .unwrap();
 
         quote_wat! {
@@ -86,17 +86,17 @@ impl<'buf> Codegen<'_, 'buf, WasmTy<'buf>> {
 
     pub(super) fn generate_string_concat(&self) -> wast::core::Func<'static> {
         let func = BUILTIN_FUNCS.get(BuiltinFuncKey::StringConcat);
-        let func_ty_id = self.ty_index.get_by_ty(&func.ty).unwrap();
+        let func_ty_id = self.ty_index.get_by_wasm_ty(&func.ty).unwrap();
         let bytes_ty_id = self
             .ty_index
-            .get_by_ty(&RegularTy::ByteArray.into())
+            .get_by_wasm_ty(&RegularTy::ByteArray.into())
             .unwrap();
 
         let locals = LocalCtx::new();
 
         let func_empty_ty_id = self
             .ty_index
-            .get_by_ty(&WELL_KNOWN_TYS.get(WellKnownTyKey::FuncEmpty))
+            .get_by_wasm_ty(&WELL_KNOWN_TYS.get(WellKnownTyKey::FuncEmpty))
             .unwrap();
 
         quote_wat! {
@@ -178,18 +178,18 @@ impl<'buf> Codegen<'_, 'buf, WasmTy<'buf>> {
 
     pub(super) fn generate_string_substr(&self) -> wast::core::Func<'static> {
         let func = BUILTIN_FUNCS.get(BuiltinFuncKey::StringSubstr);
-        let func_ty_id = self.ty_index.get_by_ty(&func.ty).unwrap();
+        let func_ty_id = self.ty_index.get_by_wasm_ty(&func.ty).unwrap();
         let bytes_ty_id = self
             .ty_index
-            .get_by_ty(&RegularTy::ByteArray.into())
+            .get_by_wasm_ty(&RegularTy::ByteArray.into())
             .unwrap();
 
         let locals = LocalCtx::new();
 
-        let func_to_i32_ty_id = self.ty_index.get_by_ty(&WELL_KNOWN_TYS.get(WellKnownTyKey::FuncToI32)).unwrap();
+        let func_to_i32_ty_id = self.ty_index.get_by_wasm_ty(&WELL_KNOWN_TYS.get(WellKnownTyKey::FuncToI32)).unwrap();
         let func_empty_ty_id = self
             .ty_index
-            .get_by_ty(&WELL_KNOWN_TYS.get(WellKnownTyKey::FuncEmpty))
+            .get_by_wasm_ty(&WELL_KNOWN_TYS.get(WellKnownTyKey::FuncEmpty))
             .unwrap();
 
         quote_wat! {
@@ -251,6 +251,96 @@ impl<'buf> Codegen<'_, 'buf, WasmTy<'buf>> {
 
               // this is technically unreachable
               (local.get :result_local)) // <result: $bytes>
+        }
+    }
+
+    pub(super) fn generate_bytes_new(&self) -> wast::core::Func<'static> {
+        let func = BUILTIN_FUNCS.get(BuiltinFuncKey::BytesNew);
+        let func_ty_id = self.ty_index.get_by_wasm_ty(&func.ty).unwrap();
+        let bytes_ty_id = self
+            .ty_index
+            .get_by_wasm_ty(&RegularTy::ByteArray.into())
+            .unwrap();
+
+        let locals = LocalCtx::new();
+
+        quote_wat! {
+            (pre {
+                let len_local = locals.bind(None, TyKind::I32);
+            })
+            (span 0)
+            (func (type :func_ty_id) (local {process_locals(locals, 1, 0)})
+              (local.get :len_local)
+              (array.new_canon_default :bytes_ty_id))
+        }
+    }
+
+    pub(super) fn generate_bytes_len(&self) -> wast::core::Func<'static> {
+        let func = BUILTIN_FUNCS.get(BuiltinFuncKey::BytesLen);
+        let func_ty_id = self.ty_index.get_by_wasm_ty(&func.ty).unwrap();
+        let bytes_ty_id = self
+            .ty_index
+            .get_by_wasm_ty(&RegularTy::ByteArray.into())
+            .unwrap();
+
+        let locals = LocalCtx::new();
+
+        quote_wat! {
+            (pre {
+                let bytes_local = locals.bind(None, bytes_ty_id);
+            })
+            (span 0)
+            (func (type :func_ty_id) (local {process_locals(locals, 1, 0)})
+              (local.get :bytes_local)
+              (array.len))
+        }
+    }
+
+    pub(super) fn generate_bytes_get(&self) -> wast::core::Func<'static> {
+        let func = BUILTIN_FUNCS.get(BuiltinFuncKey::BytesGet);
+        let func_ty_id = self.ty_index.get_by_wasm_ty(&func.ty).unwrap();
+        let bytes_ty_id = self
+            .ty_index
+            .get_by_wasm_ty(&RegularTy::ByteArray.into())
+            .unwrap();
+
+        let locals = LocalCtx::new();
+
+        quote_wat! {
+            (pre {
+                let bytes_local = locals.bind(None, bytes_ty_id);
+                let idx_local = locals.bind(None, TyKind::I32);
+            })
+            (span 0)
+            (func (type :func_ty_id) (local {process_locals(locals, 2, 0)})
+              (local.get :bytes_local)
+              (local.get :idx_local)
+              (array.get_u :bytes_ty_id))
+        }
+    }
+
+    pub(super) fn generate_bytes_set(&self) -> wast::core::Func<'static> {
+        let func = BUILTIN_FUNCS.get(BuiltinFuncKey::BytesSet);
+        let func_ty_id = self.ty_index.get_by_wasm_ty(&func.ty).unwrap();
+        let bytes_ty_id = self
+            .ty_index
+            .get_by_wasm_ty(&RegularTy::ByteArray.into())
+            .unwrap();
+
+        let locals = LocalCtx::new();
+
+        quote_wat! {
+            (pre {
+                let bytes_local = locals.bind(None, bytes_ty_id);
+                let idx_local = locals.bind(None, TyKind::I32);
+                let value_local = locals.bind(None, TyKind::I32);
+            })
+            (span 0)
+            (func (type :func_ty_id) (local {process_locals(locals, 3, 0)})
+              (local.get :bytes_local)
+              (local.get :idx_local)
+              (local.get :value_local)
+              (array.set :bytes_ty_id))
         }
     }
 }
