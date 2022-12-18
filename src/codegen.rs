@@ -565,6 +565,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
             instrs.push(x_local_id.wasm_get(0));
             instrs.extend(visitor.unbox(&BuiltinClass::String.into(), 0));
             // stack: <x: bytes>
+            instrs.push(Instruction::ExternExternalize);
             instrs.push(Instruction::Call(print_bytes_func_id.to_wasm_index(0)));
             instrs.push(self_local_id.wasm_get(0));
             // stack: <self>
@@ -625,6 +626,10 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
             .func_registry
             .get_by_name(&read_line_func.name)
             .unwrap();
+        let bytes_ty_id = self
+            .ty_index
+            .get_by_wasm_ty(&RegularTy::ByteArray.into())
+            .unwrap();
 
         let mut instrs = vec![];
         let locals = LocalCtx::new();
@@ -634,6 +639,9 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
             let visitor = CodegenVisitor::new(self, method_id, &locals, None);
 
             instrs.push(Instruction::Call(read_line_func_id.to_wasm_index(0)));
+            instrs.push(Instruction::ExternInternalize);
+            instrs.push(Instruction::RefAsData);
+            instrs.push(Instruction::RefCast(bytes_ty_id.to_wasm_index(0)));
             instrs.extend(visitor.r#box(&BuiltinClass::String.into(), 0));
             // stack: <string: String>
         }
@@ -891,8 +899,12 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
         match ty_kind {
             TyKind::I32 => vec![Instruction::I32Const(0)],
 
+            TyKind::Extern => vec![Instruction::RefNull(HeapType::Extern)],
+
             TyKind::Id(ty_id) => match self.ty_index.get_by_id(ty_id).unwrap().wasm_ty {
                 WasmTy::Regular(RegularTy::I32) => unreachable!(),
+
+                WasmTy::Regular(RegularTy::Extern) => unreachable!(),
 
                 WasmTy::Regular(RegularTy::Class(ClassName::Builtin(
                     BuiltinClass::Int | BuiltinClass::String | BuiltinClass::Bool,
@@ -1429,10 +1441,7 @@ where
     fn vtable_idx_to_offset(&self) -> Vec<wast::core::Instruction<'static>> {
         use wast::core::*;
 
-        vec![
-            Instruction::I32Const(4),
-            Instruction::I32Mul,
-        ]
+        vec![Instruction::I32Const(4), Instruction::I32Mul]
     }
 
     fn virtual_dispatch<'a>(

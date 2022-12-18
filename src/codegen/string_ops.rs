@@ -271,7 +271,8 @@ impl<'buf> Codegen<'_, 'buf, WasmTy<'buf>> {
             (span 0)
             (func (type :func_ty_id) (local {process_locals(locals, 1, 0)})
               (local.get :len_local)
-              (array.new_canon_default :bytes_ty_id))
+              (array.new_canon_default :bytes_ty_id)
+              (extern.externalize))
         }
     }
 
@@ -287,11 +288,14 @@ impl<'buf> Codegen<'_, 'buf, WasmTy<'buf>> {
 
         quote_wat! {
             (pre {
-                let bytes_local = locals.bind(None, bytes_ty_id);
+                let bytes_local = locals.bind(None, TyKind::Extern);
             })
             (span 0)
             (func (type :func_ty_id) (local {process_locals(locals, 1, 0)})
               (local.get :bytes_local)
+              (extern.internalize)
+              (ref.as_data)
+              (ref.cast :bytes_ty_id)
               (array.len))
         }
     }
@@ -308,12 +312,15 @@ impl<'buf> Codegen<'_, 'buf, WasmTy<'buf>> {
 
         quote_wat! {
             (pre {
-                let bytes_local = locals.bind(None, bytes_ty_id);
+                let bytes_local = locals.bind(None, TyKind::Extern);
                 let idx_local = locals.bind(None, TyKind::I32);
             })
             (span 0)
             (func (type :func_ty_id) (local {process_locals(locals, 2, 0)})
               (local.get :bytes_local)
+              (extern.internalize)
+              (ref.as_data)
+              (ref.cast :bytes_ty_id)
               (local.get :idx_local)
               (array.get_u :bytes_ty_id))
         }
@@ -338,6 +345,9 @@ impl<'buf> Codegen<'_, 'buf, WasmTy<'buf>> {
             (span 0)
             (func (type :func_ty_id) (local {process_locals(locals, 3, 0)})
               (local.get :bytes_local)
+              (extern.internalize)
+              (ref.as_data)
+              (ref.cast :bytes_ty_id)
               (local.get :idx_local)
               (local.get :value_local)
               (array.set :bytes_ty_id))

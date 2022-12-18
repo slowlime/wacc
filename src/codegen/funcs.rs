@@ -94,7 +94,7 @@ define_special_funcs! {
         },
 
         PrintBytes => "print_bytes": WasmTy::Func {
-            params: vec![RegularTy::ByteArray],
+            params: vec![RegularTy::Extern],
             ret: None,
         },
 
@@ -105,7 +105,7 @@ define_special_funcs! {
 
         ReadLine => "read_line": WasmTy::Func {
             params: vec![],
-            ret: Some(RegularTy::ByteArray),
+            ret: Some(RegularTy::Extern),
         },
 
         ReadInt => "read_int": WasmTy::Func {
@@ -137,21 +137,21 @@ define_special_funcs! {
 
         BytesNew => "bytes_new": WasmTy::Func {
             params: vec![RegularTy::I32],
-            ret: Some(RegularTy::ByteArray),
+            ret: Some(RegularTy::Extern),
         },
 
         BytesLen => "bytes_len": WasmTy::Func {
-            params: vec![RegularTy::ByteArray],
+            params: vec![RegularTy::Extern],
             ret: Some(RegularTy::I32),
         },
 
         BytesGet => "bytes_get": WasmTy::Func {
-            params: vec![RegularTy::ByteArray, RegularTy::I32],
+            params: vec![RegularTy::Extern, RegularTy::I32],
             ret: Some(RegularTy::I32),
         },
 
         BytesSet => "bytes_set": WasmTy::Func {
-            params: vec![RegularTy::ByteArray, RegularTy::I32, RegularTy::I32],
+            params: vec![RegularTy::Extern, RegularTy::I32, RegularTy::I32],
             ret: None,
         },
     }

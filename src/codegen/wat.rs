@@ -30,10 +30,13 @@ macro_rules! quote_wat {
         ty: quote_wat!([$pos] val_ty @ $ty),
     }, $binding));
 
+    ([$pos:expr] heap_type @ extern) => (HeapType::Extern);
+    ([$pos:expr] heap_type @ :$binding:ident) => (HeapType::Index($binding.to_wasm_index($pos)));
+
     ([$pos:expr] val_ty @ i32) => (ValType::I32);
-    ([$pos:expr] val_ty @ (ref $($null:ident)? :$binding:ident)) => (ValType::Ref(RefType {
+    ([$pos:expr] val_ty @ (ref $($null:ident)? $($heap_ty:tt)+)) => (ValType::Ref(RefType {
         nullable: quote_wat!(null @ $($null)?),
-        heap: HeapType::Index($binding.to_wasm_index($pos)),
+        heap: quote_wat!([$pos] heap_type @ $($heap_ty)+),
     }));
 
     (null @ null) => (true);
@@ -89,6 +92,14 @@ macro_rules! quote_wat {
     ([$pos:expr] instr $instrs:ident @ (array.new_canon_default :$ty_id:ident)) => ($instrs.push(Instruction::ArrayNewDefault(
         $ty_id.to_wasm_index($pos),
     )));
+    ([$pos:expr] instr $instrs:ident @ (ref.cast :$binding:ident)) => ($instrs.push(
+        Instruction::RefCast($binding.to_wasm_index($pos))
+    ));
+    ([$pos:expr] instr $instrs:ident @ (ref.as_data)) => ($instrs.push(
+        Instruction::RefAsData,
+    ));
+    ([$pos:expr] instr $instrs:ident @ (extern.externalize)) => ($instrs.push(Instruction::ExternExternalize));
+    ([$pos:expr] instr $instrs:ident @ (extern.internalize)) => ($instrs.push(Instruction::ExternInternalize));
 
     ([$pos:expr] instr $instrs:ident @ (br $idx:literal)) => ($instrs.push(Instruction::Br(WasmIndex::Num(
         $idx, WasmSpan::from_offset($pos)

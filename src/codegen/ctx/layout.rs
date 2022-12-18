@@ -22,7 +22,13 @@ fn make_ref_type<'buf>(
 
     match ty {
         WasmTy::Regular(RegularTy::I32) => panic!("Tried to make a reference to i32"),
-        _ => RefType {
+
+        WasmTy::Regular(RegularTy::Extern) => RefType {
+            nullable,
+            heap: HeapType::Extern,
+        },
+
+        WasmTy::Regular(RegularTy::Class(_) | RegularTy::ByteArray) | WasmTy::Func { .. } => RefType {
             nullable,
             heap: HeapType::Index(ty_index.get_by_wasm_ty(ty).unwrap().to_wasm_index(pos)),
         },
@@ -213,6 +219,7 @@ fn complete_wasm_ty<'buf>(
 ) -> wast::core::Type<'static> {
     match wasm_ty {
         WasmTy::Regular(RegularTy::I32) => unreachable!(),
+        WasmTy::Regular(RegularTy::Extern) => unreachable!(),
         WasmTy::Regular(RegularTy::ByteArray) => complete_byte_array(),
         WasmTy::Regular(RegularTy::Class(_)) => {
             complete_class(ty_ctx, ty_index, field_table, ty_id)

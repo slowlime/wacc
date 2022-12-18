@@ -10,6 +10,10 @@ use crate::util::slice_formatter;
 pub enum RegularTy<'buf> {
     /// The unboxed i32 type.
     I32,
+
+    /// An opaque reference to an external value.
+    Extern,
+
     ByteArray,
     Class(ClassName<'buf>),
 }
@@ -32,7 +36,7 @@ impl<'buf> RegularTy<'buf> {
 
 impl<'buf> WasmTy<'buf> {
     pub fn is_boxed(&self) -> bool {
-        !matches!(self, Self::Regular(RegularTy::I32))
+        !matches!(self, Self::Regular(RegularTy::I32 | RegularTy::Extern))
     }
 
     pub fn class_name(&self) -> Option<&ClassName<'buf>> {

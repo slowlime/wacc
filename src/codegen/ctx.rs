@@ -43,16 +43,25 @@ impl TyId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum TyKind {
     I32,
+    Extern,
     Id(TyId),
 }
 
 impl TyKind {
     pub fn to_val_type(&self, pos: usize, nullable: bool) -> wast::core::ValType<'static> {
+        use wast::core::*;
+
         match self {
-            Self::I32 => wast::core::ValType::I32,
-            Self::Id(ty_id) => wast::core::ValType::Ref(wast::core::RefType {
+            Self::I32 => ValType::I32,
+
+            Self::Extern => ValType::Ref(RefType {
                 nullable,
-                heap: wast::core::HeapType::Index(ty_id.to_wasm_index(pos)),
+                heap: HeapType::Extern,
+            }),
+
+            Self::Id(ty_id) => ValType::Ref(RefType {
+                nullable,
+                heap: HeapType::Index(ty_id.to_wasm_index(pos)),
             }),
         }
     }
