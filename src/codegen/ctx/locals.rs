@@ -108,14 +108,21 @@ impl Drop for LocalId<'_, '_> {
         trace!("Dropped a reference to a local {:?}", def);
 
         if def.ref_count == 0 {
-            trace!(gen = def.gen, "The reference count has reached zero, incrementing the generation");
+            trace!(
+                gen = def.gen,
+                "The reference count has reached zero, incrementing the generation"
+            );
             def.gen += 1;
         }
 
         if let Some(binding_idx) = self.binding_idx {
             let mut bindings = self.ctx.bindings.borrow_mut();
             let Some((_, bindings)) = bindings.get_index_mut(binding_idx) else { return };
-            let idx = bindings.iter().enumerate().rfind(|&(_, binding)| binding == &r#ref).map(|(idx, _)| idx);
+            let idx = bindings
+                .iter()
+                .enumerate()
+                .rfind(|&(_, binding)| binding == &r#ref)
+                .map(|(idx, _)| idx);
 
             if idx.is_none() {
                 error!(
@@ -166,7 +173,12 @@ impl<'buf> LocalCtx<'buf> {
 
         if def.is_ref_valid(&local_ref) {
             let id = def.make_id(self, Some(binding_idx));
-            self.bindings.borrow_mut().get_index_mut(binding_idx).unwrap().1.push(def.make_ref());
+            self.bindings
+                .borrow_mut()
+                .get_index_mut(binding_idx)
+                .unwrap()
+                .1
+                .push(def.make_ref());
 
             Some(id)
         } else {

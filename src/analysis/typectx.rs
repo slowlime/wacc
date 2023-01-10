@@ -5,7 +5,7 @@ use std::fmt::{self, Debug, Display};
 use std::iter::successors;
 
 use byte_string::ByteStr;
-use indexmap::{IndexMap, map as index_map};
+use indexmap::{map as index_map, IndexMap};
 use itertools::Itertools;
 
 use crate::ast::ty::{BuiltinClass, FunctionTy, ResolvedTy, Ty, UnresolvedTy};

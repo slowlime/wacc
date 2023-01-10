@@ -425,7 +425,9 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
         result.push(Instruction::I32Add);
         // stack: <receiver> <args...> <receiver.vtable_base + offset>
         result.extend(self.cg.vtable_idx_to_offset());
-        result.push(Instruction::I32Load(self.cg.vtable_mem_arg(expr.method.pos())));
+        result.push(Instruction::I32Load(
+            self.cg.vtable_mem_arg(expr.method.pos()),
+        ));
         // stack: <receiver> <args...> <method_table_method_idx>
         result.push(Instruction::TableGet(
             method_table_id.to_table_arg(expr.method.pos()),
@@ -655,7 +657,8 @@ impl<'buf> AstVisitor<'buf> for CodegenVisitor<'_, '_, 'buf> {
             },
         }));
         result.extend(self.visit_expr(&expr.scrutinee));
-        let scrutinee_ty_id = self.ty_id_for_resolved_ty(expr.scrutinee.unwrap_res_ty().into_owned());
+        let scrutinee_ty_id =
+            self.ty_id_for_resolved_ty(expr.scrutinee.unwrap_res_ty().into_owned());
         let scrutinee_local_id = self.locals.bind(None, scrutinee_ty_id);
         result.push(scrutinee_local_id.wasm_set(expr.scrutinee.pos()));
 

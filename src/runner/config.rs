@@ -155,7 +155,6 @@ pub fn parse_args_or_exit() -> WaccConfig {
             .arg(
                 arg!(-f --format <FORMAT> "the output format")
                     .value_parser(value_parser!(OutputFormat)),
-
             )
     }
 
@@ -165,7 +164,11 @@ pub fn parse_args_or_exit() -> WaccConfig {
         let mut command = command();
         let matches = command.get_matches_mut();
 
-        let paths = matches.get_many::<PathBuf>("files").expect("files").cloned().collect();
+        let paths = matches
+            .get_many::<PathBuf>("files")
+            .expect("files")
+            .cloned()
+            .collect();
 
         let mut stage = matches.get_one::<CompilationStage>("stage").copied();
         let format = matches.get_one::<OutputFormat>("format").copied();
@@ -178,8 +181,10 @@ pub fn parse_args_or_exit() -> WaccConfig {
                         None => Ok(Default::default()),
                     };
 
-                    OutputKind::Lexer(format.map_err(|msg| command.error(ErrorKind::ValueValidation, msg))?)
-                },
+                    OutputKind::Lexer(
+                        format.map_err(|msg| command.error(ErrorKind::ValueValidation, msg))?,
+                    )
+                }
 
                 (Some(CompilationStage::Parser), format) => {
                     let format = match format {
@@ -187,7 +192,9 @@ pub fn parse_args_or_exit() -> WaccConfig {
                         None => Ok(Default::default()),
                     };
 
-                    OutputKind::Parser(format.map_err(|msg| command.error(ErrorKind::ValueValidation, msg))?)
+                    OutputKind::Parser(
+                        format.map_err(|msg| command.error(ErrorKind::ValueValidation, msg))?,
+                    )
                 }
 
                 (Some(CompilationStage::Typeck), format) => {
@@ -196,7 +203,9 @@ pub fn parse_args_or_exit() -> WaccConfig {
                         None => Ok(Default::default()),
                     };
 
-                    OutputKind::Typeck(format.map_err(|msg| command.error(ErrorKind::ValueValidation, msg))?)
+                    OutputKind::Typeck(
+                        format.map_err(|msg| command.error(ErrorKind::ValueValidation, msg))?,
+                    )
                 }
 
                 (Some(CompilationStage::Codegen), format) => {
@@ -205,7 +214,9 @@ pub fn parse_args_or_exit() -> WaccConfig {
                         None => Ok(Default::default()),
                     };
 
-                    OutputKind::Codegen(format.map_err(|msg| command.error(ErrorKind::ValueValidation, msg))?)
+                    OutputKind::Codegen(
+                        format.map_err(|msg| command.error(ErrorKind::ValueValidation, msg))?,
+                    )
                 }
 
                 (None, Some(OutputFormat::Coolc)) => OutputKind::Typeck(TypeckOutputFormat::Coolc),
@@ -218,13 +229,10 @@ pub fn parse_args_or_exit() -> WaccConfig {
                     stage = Some(Default::default());
                     continue;
                 }
-            }
+            };
         };
 
-        Ok(WaccConfig {
-            paths,
-            output,
-        })
+        Ok(WaccConfig { paths, output })
     }
 
     match parse_args() {

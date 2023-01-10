@@ -4,8 +4,8 @@ use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 use std::iter::successors;
 
-use itertools::{Either, Itertools};
 use indexmap::IndexMap;
+use itertools::{Either, Itertools};
 
 use crate::analysis::error::{
     IllegalSelfTypePosition, MultipleDefinitionKind, TypeckError, UnrecognizedTy,
@@ -502,10 +502,7 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
             BuiltinClass::IO.into(),
         ];
 
-        builtins
-            .into_iter()
-            .chain(sorted.into_iter())
-            .collect()
+        builtins.into_iter().chain(sorted.into_iter()).collect()
     }
 
     /// Resolves a type name using the list of available classes.

@@ -201,7 +201,11 @@ pub fn create_vtable<'buf>(
             };
             method_table_ids.push(table_id);
 
-            trace!(?table_id, "Pushing the method {}", slice_formatter(method_name));
+            trace!(
+                ?table_id,
+                "Pushing the method {}",
+                slice_formatter(method_name)
+            );
         }
 
         let method_count = method_table_ids.len();
