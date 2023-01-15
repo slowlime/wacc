@@ -1,13 +1,15 @@
 use std::borrow::Cow;
 use std::fmt::{self, Display};
 
+use serde::Serialize;
+
 use crate::try_match;
 use crate::util::{slice_formatter, CloneStatic};
 
 use super::TyName;
 
 /// A potentially-unresolved type.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Ty<'buf> {
     Unresolved(UnresolvedTy<'buf>),
     Resolved(ResolvedTy<'buf>),
@@ -34,7 +36,7 @@ impl<'buf> From<ResolvedTy<'buf>> for Ty<'buf> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum UnresolvedTy<'buf> {
     Named(TyName<'buf>),
 
@@ -132,7 +134,7 @@ impl<'buf> TyExt<'buf> for Ty<'buf> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ResolvedTy<'buf> {
     Builtin(BuiltinClass),
 
@@ -197,7 +199,7 @@ impl Display for ResolvedTy<'_> {
 }
 
 /// A built-in class type.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Serialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BuiltinClass {
     Int,
     String,
@@ -232,7 +234,7 @@ impl<'buf> From<BuiltinClass> for ResolvedTy<'buf> {
 }
 
 /// A function type, used to represent method types.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FunctionTy<'buf> {
     pub params: Vec<ResolvedTy<'buf>>,
     pub ret: Box<ResolvedTy<'buf>>,

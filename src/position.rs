@@ -3,6 +3,8 @@ use std::fmt;
 use std::num::NonZeroU32;
 use std::path::Path;
 
+use serde::Serialize;
+
 use crate::source::{Source, SourceFile, SourceId};
 use crate::util::{try_max, try_min};
 
@@ -42,7 +44,7 @@ impl fmt::Display for PositionPath<'_> {
     }
 }
 
-#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Serialize, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct Position {
     pub src: Option<SourceId>,
     pub byte: usize,
@@ -110,7 +112,7 @@ impl fmt::Debug for Position {
 }
 
 /// A span between two positions, inclusive on the both ends.
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Serialize, Clone, Hash, PartialEq, Eq)]
 pub struct Span {
     pub start: Position,
     pub end: Position,
@@ -228,7 +230,7 @@ pub trait HasSpan {
     fn span(&self) -> Cow<'_, Span>;
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Serialize, Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Spanned<T> {
     pub value: T,
     pub span: Span,

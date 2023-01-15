@@ -4,6 +4,8 @@ mod visit;
 use std::borrow::Cow;
 use std::fmt;
 
+use serde::Serialize;
+
 use self::ty::{BuiltinClass, HasExplicitTy, HasTy, ResolvedTy, Ty};
 use crate::parse::token::Symbol;
 use crate::position::{HasSpan, Span, Spanned};
@@ -105,7 +107,7 @@ macro_rules! impl_clone_static {
 
 macro_rules! define_op_kind {
     ($name:ident { $( $op:ident => $symbol:ident, )+ }) => {
-        #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+        #[derive(Serialize, Debug, Clone, Copy, Eq, PartialEq, Hash)]
         pub enum $name {
             $( $op, )+
         }
@@ -131,7 +133,7 @@ macro_rules! define_op_kind {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Program<'buf> {
     pub classes: Vec<Class<'buf>>,
     pub span: Span,
@@ -154,7 +156,7 @@ impl_recurse!(|self: Program<'buf>, visitor| {
 
 impl_has_span!(Program<'_>);
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Class<'buf> {
     pub name: TyName<'buf>,
     pub inherits: Option<TyName<'buf>>,
@@ -200,7 +202,7 @@ impl_recurse!(|self: Class<'buf>, visitor| {
 impl_has_span!(Class<'_>);
 impl_has_ty!(Class<'buf>);
 
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Clone, Eq, PartialEq, Hash)]
 pub struct Name<'buf>(pub Spanned<Cow<'buf, [u8]>>);
 
 impl<'buf> Name<'buf> {
@@ -232,7 +234,7 @@ impl fmt::Display for Name<'_> {
 }
 
 /// A name occuring in a type position.
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Clone, Eq, PartialEq, Hash)]
 pub struct TyName<'buf>(pub Name<'buf>);
 
 impl_clone_static!(|&self: TyName| TyName(self.0.clone_static()));
@@ -259,7 +261,7 @@ impl fmt::Display for TyName<'_> {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Feature<'buf> {
     Method(Method<'buf>),
     Field(Field<'buf>),
@@ -292,7 +294,7 @@ impl_has_ty!(|&self: Feature<'buf>| match self {
     Self::Field(field) => field.explicit_ty(),
 });
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Method<'buf> {
     pub name: Name<'buf>,
     pub params: Vec<Formal<'buf>>,
@@ -338,7 +340,7 @@ impl_recurse!(|self: Method<'buf>, visitor| {
 impl_has_span!(Method<'_>);
 impl_has_ty!(Method<'buf>);
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Formal<'buf> {
     pub name: Name<'buf>,
     pub ty_name: TyName<'buf>,
@@ -368,7 +370,7 @@ impl_recurse!(|self: Formal<'buf>, visitor| {
 impl_has_span!(Formal<'_>);
 impl_has_ty!(Formal<'buf>);
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Field<'buf>(pub Binding<'buf>);
 
 impl_clone_static!(|&self: Field| Field(self.0.clone_static()));
@@ -381,7 +383,7 @@ impl_recurse!(|self: Field<'buf>, visitor| {
 impl_has_span!(|&self: Field<'_>| &self.0.span);
 impl_has_ty!(|&self: Field<'buf>| self.0.explicit_ty());
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Binding<'buf> {
     pub name: Name<'buf>,
     pub ty_name: TyName<'buf>,
@@ -421,7 +423,7 @@ impl_recurse!(|self: Binding<'buf>, visitor| {
 impl_has_span!(Binding<'_>);
 impl_has_ty!(Binding<'buf>);
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Expr<'buf> {
     Assignment(Assignment<'buf>),
     Call(Call<'buf>),
@@ -526,7 +528,7 @@ impl_has_ty!(? |&self: Expr<'buf>| match self {
     Self::Bool(expr) => expr.ty(),
 });
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Assignment<'buf> {
     pub name: Name<'buf>,
     pub expr: Box<Expr<'buf>>,
@@ -554,7 +556,7 @@ impl_recurse!(|self: Assignment<'buf>, visitor| {
 impl_has_span!(Assignment<'_>);
 impl_has_ty!(? |&self: Assignment<'buf>| self.expr.ty());
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Call<'buf> {
     pub receiver: Receiver<'buf>,
     pub method: Name<'buf>,
@@ -598,7 +600,7 @@ impl_recurse!(|self: Call<'buf>, visitor| {
 impl_has_span!(Call<'_>);
 impl_has_ty!(?Call<'buf>);
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Receiver<'buf> {
     SelfType {
         ty: Ty<'buf>,
@@ -669,7 +671,7 @@ impl_has_ty!(? |&self: Receiver<'buf>| match self {
     Self::Static { ty, .. } => Some(Cow::Borrowed(ty)),
 });
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct If<'buf> {
     pub antecedent: Box<Expr<'buf>>,
     pub consequent: Box<Expr<'buf>>,
@@ -703,7 +705,7 @@ impl_recurse!(|self: If<'buf>, visitor| {
 impl_has_span!(If<'_>);
 impl_has_ty!(?If<'buf>);
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct While<'buf> {
     pub condition: Box<Expr<'buf>>,
     pub body: Box<Expr<'buf>>,
@@ -731,7 +733,7 @@ impl_recurse!(|self: While<'buf>, visitor| {
 impl_has_span!(While<'_>);
 impl_has_ty!(|&self: While<'buf>| Cow::Owned(ResolvedTy::Builtin(BuiltinClass::Object).into()));
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Block<'buf> {
     pub body: Vec<Box<Expr<'buf>>>,
     pub span: Span,
@@ -759,7 +761,7 @@ impl_recurse!(|self: Block<'buf>, visitor| {
 impl_has_span!(Block<'_>);
 impl_has_ty!(? |&self: Block<'buf>| self.body.last().unwrap().ty());
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Let<'buf> {
     pub binding: Binding<'buf>,
     pub expr: Box<Expr<'buf>>,
@@ -787,7 +789,7 @@ impl_recurse!(|self: Let<'buf>, visitor| {
 impl_has_span!(Let<'_>);
 impl_has_ty!(? |&self: Let<'buf>| self.expr.ty());
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Case<'buf> {
     pub scrutinee: Box<Expr<'buf>>,
     pub arms: Vec<CaseArm<'buf>>,
@@ -823,7 +825,7 @@ impl_recurse!(|self: Case<'buf>, visitor| {
 impl_has_span!(Case<'_>);
 impl_has_ty!(?Case<'buf>);
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct CaseArm<'buf> {
     pub name: Name<'buf>,
     pub binding_ty_name: TyName<'buf>,
@@ -857,7 +859,7 @@ impl_recurse!(|self: CaseArm<'buf>, visitor| {
 impl_has_span!(CaseArm<'_>);
 impl_has_ty!(? |&self: CaseArm<'buf>| self.expr.ty());
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct New<'buf> {
     pub ty_name: TyName<'buf>,
     pub span: Span,
@@ -878,7 +880,7 @@ impl_recurse!(|self: New<'buf>, visitor| {
 impl_has_span!(New<'_>);
 impl_has_ty!(New<'buf>);
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct BinOpExpr<'buf> {
     pub op: BinOpKind,
     pub lhs: Box<Expr<'buf>>,
@@ -920,7 +922,7 @@ define_op_kind!(BinOpKind {
     Equals => Equals,
 });
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct UnOpExpr<'buf> {
     pub op: UnOpKind,
     pub expr: Box<Expr<'buf>>,
@@ -949,7 +951,7 @@ define_op_kind!(UnOpKind {
     Not => Not,
 });
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct NameExpr<'buf> {
     pub name: Name<'buf>,
     pub ty: Option<Ty<'buf>>,
@@ -968,13 +970,13 @@ impl_recurse!(|self: NameExpr<'buf>, visitor| {
 impl_has_span!(&self: NameExpr<'_> => self.name.span());
 impl_has_ty!(?NameExpr<'buf>);
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct IntLit(pub Spanned<i32>);
 
 impl_has_span!(|&self: IntLit| &self.0.span);
 impl_has_ty!(|&self: IntLit| Cow::Owned(ResolvedTy::Builtin(BuiltinClass::Int).into()));
 
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Clone, Eq, PartialEq, Hash)]
 pub struct StringLit<'buf>(pub Spanned<Cow<'buf, [u8]>>);
 
 impl fmt::Debug for StringLit<'_> {
@@ -994,7 +996,7 @@ impl_clone_static!(|&self: StringLit| StringLit(Spanned {
 impl_has_span!(|&self: StringLit<'_>| &self.0.span);
 impl_has_ty!(|&self: StringLit<'buf>| Cow::Owned(ResolvedTy::Builtin(BuiltinClass::String).into()));
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct BoolLit(pub Spanned<bool>);
 
 impl_has_span!(|&self: BoolLit| &self.0.span);

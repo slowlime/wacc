@@ -4,8 +4,9 @@ use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 
 use elsa::FrozenVec;
+use serde::Serialize;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Serialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SourceId(NonZeroUsize);
 
 #[derive(Default)]
