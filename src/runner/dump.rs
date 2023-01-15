@@ -1,3 +1,5 @@
+use std::error::Error;
+use std::fmt::{self, Display};
 use std::io::{self, Write};
 
 use wacc::ast;
@@ -10,10 +12,40 @@ use wacc::util::slice_formatter;
 
 use super::config::LexerOutputFormat;
 
+#[derive(Debug)]
+pub enum AstDumpError {
+    Io(io::Error),
+    Ron(ron::Error),
+}
+
+impl Display for AstDumpError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Io(err) => err.fmt(f),
+            Self::Ron(err) => err.fmt(f),
+        }
+    }
+}
+
+impl Error for AstDumpError {}
+
+impl From<io::Error> for AstDumpError {
+    fn from(err: io::Error) -> Self {
+        Self::Io(err)
+    }
+}
+
+impl From<ron::Error> for AstDumpError {
+    fn from(err: ron::Error) -> Self {
+        Self::Ron(err)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AstDumpFormat {
     Coolc,
     Debug,
+    Ron,
 }
 
 pub fn dump_tokens<'buf, I>(
@@ -21,14 +53,16 @@ pub fn dump_tokens<'buf, I>(
     source: &Source<'buf>,
     tokens: I,
     mut out: impl Write,
-) -> io::Result<()>
+) -> Result<(), AstDumpError>
 where
     I: Iterator<Item = Result<Token<'buf>, LexerError>>,
 {
     match format {
-        LexerOutputFormat::Coolc => dump_tokens_coolc(source, tokens, out),
-        LexerOutputFormat::Debug => writeln!(out, "{:#?}", tokens.collect::<Vec<_>>()),
+        LexerOutputFormat::Coolc => dump_tokens_coolc(source, tokens, out)?,
+        LexerOutputFormat::Debug => writeln!(out, "{:#?}", tokens.collect::<Vec<_>>())?,
     }
+
+    Ok(())
 }
 
 fn dump_tokens_coolc<'buf, I>(
@@ -133,11 +167,24 @@ pub fn dump_ast<'buf>(
     format: AstDumpFormat,
     ast: ast::Program<'buf>,
     mut out: impl Write,
-) -> io::Result<()> {
+) -> Result<(), AstDumpError> {
     match format {
-        AstDumpFormat::Coolc => dump_ast_coolc(source, ast, out),
-        AstDumpFormat::Debug => writeln!(out, "{:#?}", ast),
+        AstDumpFormat::Coolc => dump_ast_coolc(source, ast, out)?,
+        AstDumpFormat::Debug => writeln!(out, "{:#?}", ast)?,
+        AstDumpFormat::Ron => dump_ast_ron(ast, out)?,
     }
+
+    Ok(())
+}
+
+fn dump_ast_ron<'buf>(ast: ast::Program<'buf>, out: impl Write) -> Result<(), ron::Error> {
+    use ron::{extensions::Extensions, ser::PrettyConfig};
+
+    ron::Options::default().to_writer_pretty(
+        out,
+        &ast,
+        PrettyConfig::new().extensions(Extensions::IMPLICIT_SOME | Extensions::UNWRAP_NEWTYPES),
+    )
 }
 
 fn dump_ast_coolc<'buf>(

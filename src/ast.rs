@@ -4,7 +4,7 @@ mod visit;
 use std::borrow::Cow;
 use std::fmt;
 
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 
 use self::ty::{BuiltinClass, HasExplicitTy, HasTy, ResolvedTy, Ty};
 use crate::parse::token::Symbol;
@@ -12,6 +12,18 @@ use crate::position::{HasSpan, Span, Spanned};
 use crate::util::{slice_formatter, CloneStatic};
 
 pub use self::visit::{AstRecurse, DefaultVisitor, DefaultVisitorMut, Visitor, VisitorMut};
+
+fn serialize_name_as_string<S>(name: &Spanned<Cow<'_, [u8]>>, ser: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let substitute = Spanned {
+        value: String::from_utf8_lossy(&name.value),
+        span: name.span.clone(),
+    };
+
+    substitute.serialize(ser)
+}
 
 macro_rules! impl_recurse {
     (|$s:ident: $type:ty, $visitor:ident| { const => $body_const:expr, mut => $body_mut:expr $(,)?}) => {
@@ -203,7 +215,10 @@ impl_has_span!(Class<'_>);
 impl_has_ty!(Class<'buf>);
 
 #[derive(Serialize, Clone, Eq, PartialEq, Hash)]
-pub struct Name<'buf>(pub Spanned<Cow<'buf, [u8]>>);
+pub struct Name<'buf>(
+    #[serde(serialize_with = "serialize_name_as_string")]
+    pub Spanned<Cow<'buf, [u8]>>
+);
 
 impl<'buf> Name<'buf> {
     pub fn as_slice(&self) -> &[u8] {
@@ -977,7 +992,10 @@ impl_has_span!(|&self: IntLit| &self.0.span);
 impl_has_ty!(|&self: IntLit| Cow::Owned(ResolvedTy::Builtin(BuiltinClass::Int).into()));
 
 #[derive(Serialize, Clone, Eq, PartialEq, Hash)]
-pub struct StringLit<'buf>(pub Spanned<Cow<'buf, [u8]>>);
+pub struct StringLit<'buf>(
+    #[serde(serialize_with = "serialize_name_as_string")]
+    pub Spanned<Cow<'buf, [u8]>>
+);
 
 impl fmt::Debug for StringLit<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

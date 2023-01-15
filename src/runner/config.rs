@@ -26,6 +26,7 @@ impl Default for CompilationStage {
 pub enum OutputFormat {
     Coolc,
     Debug,
+    Ron,
     Wasm,
     Wat,
 }
@@ -58,6 +59,7 @@ impl Default for LexerOutputFormat {
 pub enum ParserOutputFormat {
     Coolc,
     Debug,
+    Ron,
 }
 
 impl TryFrom<OutputFormat> for ParserOutputFormat {
@@ -67,6 +69,7 @@ impl TryFrom<OutputFormat> for ParserOutputFormat {
         match format {
             OutputFormat::Coolc => Ok(Self::Coolc),
             OutputFormat::Debug => Ok(Self::Debug),
+            OutputFormat::Ron => Ok(Self::Ron),
             _ => Err("this format cannot be used for the current compilation stage"),
         }
     }
@@ -82,6 +85,7 @@ impl Default for ParserOutputFormat {
 pub enum TypeckOutputFormat {
     Coolc,
     Debug,
+    Ron,
 }
 
 impl TryFrom<OutputFormat> for TypeckOutputFormat {
@@ -91,6 +95,7 @@ impl TryFrom<OutputFormat> for TypeckOutputFormat {
         match format {
             OutputFormat::Coolc => Ok(Self::Coolc),
             OutputFormat::Debug => Ok(Self::Debug),
+            OutputFormat::Ron => Ok(Self::Ron),
             _ => Err("this format cannot be used for the current compilation stage"),
         }
     }
@@ -219,7 +224,11 @@ pub fn parse_args_or_exit() -> WaccConfig {
                     )
                 }
 
-                (None, Some(OutputFormat::Coolc)) => OutputKind::Typeck(TypeckOutputFormat::Coolc),
+                (None, Some(OutputFormat::Coolc | OutputFormat::Ron)) => {
+                    stage = Some(CompilationStage::Typeck);
+                    continue;
+                }
+
                 (None, Some(OutputFormat::Wasm | OutputFormat::Wat)) => {
                     stage = Some(CompilationStage::Codegen);
                     continue;

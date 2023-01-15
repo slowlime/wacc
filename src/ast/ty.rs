@@ -8,6 +8,13 @@ use crate::util::{slice_formatter, CloneStatic};
 
 use super::TyName;
 
+fn serialize_bytes_as_string<S>(bytes: &[u8], ser: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    String::from_utf8_lossy(bytes).serialize(ser)
+}
+
 /// A potentially-unresolved type.
 #[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Ty<'buf> {
@@ -146,6 +153,7 @@ pub enum ResolvedTy<'buf> {
     /// A user-defined class.
     Class(
         /// The name of the class.
+        #[serde(serialize_with = "serialize_bytes_as_string")]
         Cow<'buf, [u8]>,
     ),
 

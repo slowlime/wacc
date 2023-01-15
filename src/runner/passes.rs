@@ -100,6 +100,7 @@ pub fn dump_asts_if_asked<'buf>(
     let format = match format {
         ParserOutputFormat::Coolc => AstDumpFormat::Coolc,
         ParserOutputFormat::Debug => AstDumpFormat::Debug,
+        ParserOutputFormat::Ron => AstDumpFormat::Ron,
     };
 
     for ast in asts.drain(..) {
@@ -170,6 +171,7 @@ pub fn dump_types_if_asked<'buf>(
     let format = match format {
         TypeckOutputFormat::Coolc => AstDumpFormat::Coolc,
         TypeckOutputFormat::Debug => AstDumpFormat::Debug,
+        TypeckOutputFormat::Ron => AstDumpFormat::Ron,
     };
 
     let span = classes
