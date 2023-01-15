@@ -1,8 +1,8 @@
 use owo_colors::{OwoColorize, Stream};
 
-use crate::errors::{Diagnostic, DiagnosticMessage, Level};
-use crate::position::Span;
-use crate::source::Source;
+use wacc::errors::{Diagnostic, DiagnosticMessage, Level};
+use wacc::position::Span;
+use wacc::source::Source;
 
 fn format_level(level: Level) -> String {
     match level {

@@ -1,12 +1,12 @@
 use std::io::{self, Write};
 
-use crate::ast;
-use crate::ast::ty::{HasTy, ResolvedTy, Ty};
-use crate::parse::token::{write_escaped_string, Symbol, SymbolCategory, Token, TokenValue};
-use crate::parse::LexerError;
-use crate::position::{HasSpan, PositionPath, Span, Spanned};
-use crate::source::Source;
-use crate::util::slice_formatter;
+use wacc::ast;
+use wacc::ast::ty::{HasTy, ResolvedTy, Ty};
+use wacc::parse::token::{write_escaped_string, Symbol, SymbolCategory, Token, TokenValue};
+use wacc::parse::LexerError;
+use wacc::position::{HasSpan, PositionPath, Span, Spanned};
+use wacc::source::Source;
+use wacc::util::slice_formatter;
 
 use super::config::LexerOutputFormat;
 

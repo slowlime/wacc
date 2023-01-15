@@ -1,16 +1,16 @@
 use std::borrow::Cow;
 use std::io::{self, Write};
 
-use crate::analysis::{self, ClassName, TypeChecker, TypeCtx, TypeckResult};
-use crate::ast::{Class, Program};
-use crate::codegen::ctx::ty::WasmTy;
-use crate::codegen::ctx::{
+use wacc::analysis::{self, ClassName, TypeChecker, TypeCtx, TypeckResult};
+use wacc::ast::{Class, Program};
+use wacc::codegen::ctx::ty::WasmTy;
+use wacc::codegen::ctx::{
     CompleteWasmTy, FieldTable, MethodIndex, MethodTable, StringTable, TyIndex, Vtable,
 };
-use crate::codegen::{passes as cg_passes, CodegenOutput};
-use crate::parse::{Cursor, Lexer, Parser};
-use crate::position::HasSpan;
-use crate::util::CloneStatic;
+use wacc::codegen::{passes as cg_passes, CodegenOutput};
+use wacc::parse::{Cursor, Lexer, Parser};
+use wacc::position::HasSpan;
+use wacc::util::CloneStatic;
 
 use super::config::{CodegenOutputFormat, OutputKind, ParserOutputFormat, TypeckOutputFormat};
 use super::dump::{dump_ast, dump_tokens, AstDumpFormat};

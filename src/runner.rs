@@ -2,8 +2,8 @@ use std::cell::RefCell;
 use std::process::ExitCode;
 use std::rc::Rc;
 
-use crate::errors::Diagnostics;
-use crate::source::{Source, SourceBuffer};
+use wacc::errors::Diagnostics;
+use wacc::source::{Source, SourceBuffer};
 
 use self::config::{parse_args_or_exit, WaccConfig};
 use self::errors::print_diagnostic;

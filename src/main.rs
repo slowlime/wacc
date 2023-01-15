@@ -1,12 +1,4 @@
-pub mod analysis;
-pub mod ast;
-pub mod codegen;
-pub mod errors;
-pub mod parse;
-pub mod position;
 mod runner;
-pub mod source;
-pub mod util;
 
 use std::io;
 use std::process::ExitCode;
