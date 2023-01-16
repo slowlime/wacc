@@ -5,16 +5,17 @@ use std::io::{self, Write};
 use itertools::Itertools;
 use once_cell::sync::OnceCell;
 use phf::phf_map;
+use serde::Serialize;
 
 use crate::position::{HasSpan, Span, Spanned};
 use crate::try_match;
-use crate::util::{slice_formatter, CloneStatic};
+use crate::util::{serialize_bytes_as_string, slice_formatter, CloneStatic};
 
 pub const BACKSPACE: u8 = 8;
 pub const VERTICAL_TAB: u8 = 11;
 pub const FORM_FEED: u8 = 12;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Token<'buf> {
     pub span: Span,
     pub value: TokenValue<'buf>,
@@ -41,7 +42,7 @@ impl CloneStatic<Token<'static>> for Token<'_> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Serialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TokenType {
     Int,
     Symbol(Symbol),
@@ -66,12 +67,18 @@ impl Display for TokenType {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Serialize, Clone, PartialEq, Eq, Hash)]
 pub enum TokenValue<'buf> {
     Int(i32),
     Symbol(Symbol),
-    Ident(Cow<'buf, [u8]>),
-    String(Cow<'buf, [u8]>),
+    Ident(
+        #[serde(serialize_with = "serialize_bytes_as_string")]
+        Cow<'buf, [u8]>,
+    ),
+    String(
+        #[serde(serialize_with = "serialize_bytes_as_string")]
+        Cow<'buf, [u8]>,
+    ),
     Eof,
 }
 
@@ -168,12 +175,12 @@ impl<'buf> TryFrom<Token<'buf>> for Spanned<bool> {
 
 macro_rules! symbols {
     ($( $cat:ident : { $( $lit:literal => $variant:ident ),+ $(,)? } )+) => {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        #[derive(Serialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
         pub enum Symbol {
             $( $( $variant, )+ )+
         }
 
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        #[derive(Serialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
         pub enum SymbolCategory {
             $( $cat, )+
         }

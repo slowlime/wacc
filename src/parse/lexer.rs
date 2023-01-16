@@ -4,6 +4,8 @@ use std::fmt::Display;
 use std::iter::FusedIterator;
 use std::num::{IntErrorKind, ParseIntError};
 
+use serde::Serialize;
+
 use crate::parse::cursor::Cursor;
 use crate::parse::token::{Symbol, Token, TokenValue, BACKSPACE, FORM_FEED, VERTICAL_TAB};
 use crate::position::{HasSpan, Position, Span};
@@ -95,7 +97,7 @@ fn process_escapes(input: &[u8]) -> Vec<u8> {
         .collect()
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Serialize, Debug, Clone, Copy, Eq, PartialEq)]
 pub enum LexerErrorKind {
     NumberTooLarge,
     UnterminatedComment,
@@ -158,7 +160,7 @@ impl PosLexerError {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Serialize, Debug, Clone, Eq, PartialEq)]
 pub struct LexerError {
     span: Span,
     kind: LexerErrorKind,

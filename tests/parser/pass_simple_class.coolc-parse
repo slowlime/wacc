@@ -1,0 +1,17 @@
+#1
+_program
+  #1
+  _class
+    Main
+    Object
+    "tests/parser/pass_simple_class.cl"
+    (
+    #2
+    _method
+      main
+      Int
+      #3
+      _int
+        0
+      : _no_type
+    )

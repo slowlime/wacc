@@ -1,0 +1,57 @@
+#1
+_program
+  #1
+  _class
+    Main
+    Object
+    "tests/parser/pass_priority_assign.cl"
+    (
+    #2
+    _attr
+      y
+      Bool
+      #0
+      _no_expr
+      : _no_type
+    #3
+    _attr
+      z
+      Bool
+      #0
+      _no_expr
+      : _no_type
+    #5
+    _method
+      main
+      Object
+      #6
+      _assign
+        y
+        #6
+        _assign
+          z
+          #6
+          _assign
+            y
+            #6
+            _assign
+              z
+              #6
+              _assign
+                y
+                #6
+                _comp
+                  #6
+                  _comp
+                    #6
+                    _bool
+                      1
+                    : _no_type
+                  : _no_type
+                : _no_type
+              : _no_type
+            : _no_type
+          : _no_type
+        : _no_type
+      : _no_type
+    )

@@ -46,6 +46,13 @@ pub fn slice_formatter(slice: &[u8]) -> impl Debug + Display + '_ {
     SliceFormatter { slice }
 }
 
+pub fn serialize_bytes_as_string<S>(bytes: &[u8], ser: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serde::Serialize::serialize(&String::from_utf8_lossy(bytes), ser)
+}
+
 pub trait CloneStatic<T>
 where
     T: 'static,

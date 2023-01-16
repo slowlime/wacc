@@ -1,0 +1,27 @@
+---
+source: tests/parser.rs
+description: ""
+expression: parse_result
+---
+Err(UnexpectedToken(
+  expected: [
+    Symbol(Class),
+  ],
+  actual: Token(
+    span: Span(
+      start: Position(
+        src: Some(SourceId(1)),
+        byte: 0,
+        line: 1,
+        col: 1,
+      ),
+      end: Position(
+        src: Some(SourceId(1)),
+        byte: 0,
+        line: 1,
+        col: 1,
+      ),
+    ),
+    value: Eof,
+  ),
+))

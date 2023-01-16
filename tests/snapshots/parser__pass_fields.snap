@@ -1,0 +1,595 @@
+---
+source: tests/parser.rs
+description: "class Base {\n    x : Int <- 42;\n    y : Bool <- true;\n\n    uninit : Object;\n};\n\nclass Derived inherits Base {\n    z : Int <- if y then x + 1 else 1 - x fi;\n};\n"
+expression: parse_result
+---
+Ok(Program(
+  classes: [
+    Class(
+      name: TyName(Name(Spanned(
+        value: "Base",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 6,
+            line: 1,
+            col: 7,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 9,
+            line: 1,
+            col: 10,
+          ),
+        ),
+      ))),
+      inherits: None,
+      features: [
+        Field(Field(Binding(
+          name: Name(Spanned(
+            value: "x",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 17,
+                line: 2,
+                col: 5,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 17,
+                line: 2,
+                col: 5,
+              ),
+            ),
+          )),
+          ty_name: TyName(Name(Spanned(
+            value: "Int",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 21,
+                line: 2,
+                col: 9,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 23,
+                line: 2,
+                col: 11,
+              ),
+            ),
+          ))),
+          init: Some(Int(IntLit(Spanned(
+            value: 42,
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 28,
+                line: 2,
+                col: 16,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 29,
+                line: 2,
+                col: 17,
+              ),
+            ),
+          )))),
+          span: Span(
+            start: Position(
+              src: Some(SourceId(1)),
+              byte: 17,
+              line: 2,
+              col: 5,
+            ),
+            end: Position(
+              src: Some(SourceId(1)),
+              byte: 17,
+              line: 2,
+              col: 5,
+            ),
+          ),
+          ty: Unresolved(Named(TyName(Name(Spanned(
+            value: "Int",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 21,
+                line: 2,
+                col: 9,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 23,
+                line: 2,
+                col: 11,
+              ),
+            ),
+          ))))),
+        ))),
+        Field(Field(Binding(
+          name: Name(Spanned(
+            value: "y",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 36,
+                line: 3,
+                col: 5,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 36,
+                line: 3,
+                col: 5,
+              ),
+            ),
+          )),
+          ty_name: TyName(Name(Spanned(
+            value: "Bool",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 40,
+                line: 3,
+                col: 9,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 43,
+                line: 3,
+                col: 12,
+              ),
+            ),
+          ))),
+          init: Some(Bool(BoolLit(Spanned(
+            value: true,
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 48,
+                line: 3,
+                col: 17,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 51,
+                line: 3,
+                col: 20,
+              ),
+            ),
+          )))),
+          span: Span(
+            start: Position(
+              src: Some(SourceId(1)),
+              byte: 36,
+              line: 3,
+              col: 5,
+            ),
+            end: Position(
+              src: Some(SourceId(1)),
+              byte: 36,
+              line: 3,
+              col: 5,
+            ),
+          ),
+          ty: Unresolved(Named(TyName(Name(Spanned(
+            value: "Bool",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 40,
+                line: 3,
+                col: 9,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 43,
+                line: 3,
+                col: 12,
+              ),
+            ),
+          ))))),
+        ))),
+        Field(Field(Binding(
+          name: Name(Spanned(
+            value: "uninit",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 59,
+                line: 5,
+                col: 5,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 64,
+                line: 5,
+                col: 10,
+              ),
+            ),
+          )),
+          ty_name: TyName(Name(Spanned(
+            value: "Object",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 68,
+                line: 5,
+                col: 14,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 73,
+                line: 5,
+                col: 19,
+              ),
+            ),
+          ))),
+          init: None,
+          span: Span(
+            start: Position(
+              src: Some(SourceId(1)),
+              byte: 59,
+              line: 5,
+              col: 5,
+            ),
+            end: Position(
+              src: Some(SourceId(1)),
+              byte: 64,
+              line: 5,
+              col: 10,
+            ),
+          ),
+          ty: Unresolved(Named(TyName(Name(Spanned(
+            value: "Object",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 68,
+                line: 5,
+                col: 14,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 73,
+                line: 5,
+                col: 19,
+              ),
+            ),
+          ))))),
+        ))),
+      ],
+      span: Span(
+        start: Position(
+          src: Some(SourceId(1)),
+          byte: 0,
+          line: 1,
+          col: 1,
+        ),
+        end: Position(
+          src: Some(SourceId(1)),
+          byte: 4,
+          line: 1,
+          col: 5,
+        ),
+      ),
+      ty: Unresolved(Named(TyName(Name(Spanned(
+        value: "Base",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 6,
+            line: 1,
+            col: 7,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 9,
+            line: 1,
+            col: 10,
+          ),
+        ),
+      ))))),
+    ),
+    Class(
+      name: TyName(Name(Spanned(
+        value: "Derived",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 86,
+            line: 8,
+            col: 7,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 92,
+            line: 8,
+            col: 13,
+          ),
+        ),
+      ))),
+      inherits: Some(TyName(Name(Spanned(
+        value: "Base",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 103,
+            line: 8,
+            col: 24,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 106,
+            line: 8,
+            col: 27,
+          ),
+        ),
+      )))),
+      features: [
+        Field(Field(Binding(
+          name: Name(Spanned(
+            value: "z",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 114,
+                line: 9,
+                col: 5,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 114,
+                line: 9,
+                col: 5,
+              ),
+            ),
+          )),
+          ty_name: TyName(Name(Spanned(
+            value: "Int",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 118,
+                line: 9,
+                col: 9,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 120,
+                line: 9,
+                col: 11,
+              ),
+            ),
+          ))),
+          init: Some(If(If(
+            antecedent: Name(NameExpr(
+              name: Name(Spanned(
+                value: "y",
+                span: Span(
+                  start: Position(
+                    src: Some(SourceId(1)),
+                    byte: 128,
+                    line: 9,
+                    col: 19,
+                  ),
+                  end: Position(
+                    src: Some(SourceId(1)),
+                    byte: 128,
+                    line: 9,
+                    col: 19,
+                  ),
+                ),
+              )),
+              ty: None,
+            )),
+            consequent: BinOp(BinOpExpr(
+              op: Add,
+              lhs: Name(NameExpr(
+                name: Name(Spanned(
+                  value: "x",
+                  span: Span(
+                    start: Position(
+                      src: Some(SourceId(1)),
+                      byte: 135,
+                      line: 9,
+                      col: 26,
+                    ),
+                    end: Position(
+                      src: Some(SourceId(1)),
+                      byte: 135,
+                      line: 9,
+                      col: 26,
+                    ),
+                  ),
+                )),
+                ty: None,
+              )),
+              rhs: Int(IntLit(Spanned(
+                value: 1,
+                span: Span(
+                  start: Position(
+                    src: Some(SourceId(1)),
+                    byte: 139,
+                    line: 9,
+                    col: 30,
+                  ),
+                  end: Position(
+                    src: Some(SourceId(1)),
+                    byte: 139,
+                    line: 9,
+                    col: 30,
+                  ),
+                ),
+              ))),
+              span: Span(
+                start: Position(
+                  src: Some(SourceId(1)),
+                  byte: 135,
+                  line: 9,
+                  col: 26,
+                ),
+                end: Position(
+                  src: Some(SourceId(1)),
+                  byte: 135,
+                  line: 9,
+                  col: 26,
+                ),
+              ),
+              ty: None,
+            )),
+            alternative: BinOp(BinOpExpr(
+              op: Subtract,
+              lhs: Int(IntLit(Spanned(
+                value: 1,
+                span: Span(
+                  start: Position(
+                    src: Some(SourceId(1)),
+                    byte: 146,
+                    line: 9,
+                    col: 37,
+                  ),
+                  end: Position(
+                    src: Some(SourceId(1)),
+                    byte: 146,
+                    line: 9,
+                    col: 37,
+                  ),
+                ),
+              ))),
+              rhs: Name(NameExpr(
+                name: Name(Spanned(
+                  value: "x",
+                  span: Span(
+                    start: Position(
+                      src: Some(SourceId(1)),
+                      byte: 150,
+                      line: 9,
+                      col: 41,
+                    ),
+                    end: Position(
+                      src: Some(SourceId(1)),
+                      byte: 150,
+                      line: 9,
+                      col: 41,
+                    ),
+                  ),
+                )),
+                ty: None,
+              )),
+              span: Span(
+                start: Position(
+                  src: Some(SourceId(1)),
+                  byte: 146,
+                  line: 9,
+                  col: 37,
+                ),
+                end: Position(
+                  src: Some(SourceId(1)),
+                  byte: 146,
+                  line: 9,
+                  col: 37,
+                ),
+              ),
+              ty: None,
+            )),
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 125,
+                line: 9,
+                col: 16,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 126,
+                line: 9,
+                col: 17,
+              ),
+            ),
+            ty: None,
+          ))),
+          span: Span(
+            start: Position(
+              src: Some(SourceId(1)),
+              byte: 114,
+              line: 9,
+              col: 5,
+            ),
+            end: Position(
+              src: Some(SourceId(1)),
+              byte: 114,
+              line: 9,
+              col: 5,
+            ),
+          ),
+          ty: Unresolved(Named(TyName(Name(Spanned(
+            value: "Int",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 118,
+                line: 9,
+                col: 9,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 120,
+                line: 9,
+                col: 11,
+              ),
+            ),
+          ))))),
+        ))),
+      ],
+      span: Span(
+        start: Position(
+          src: Some(SourceId(1)),
+          byte: 80,
+          line: 8,
+          col: 1,
+        ),
+        end: Position(
+          src: Some(SourceId(1)),
+          byte: 84,
+          line: 8,
+          col: 5,
+        ),
+      ),
+      ty: Unresolved(Named(TyName(Name(Spanned(
+        value: "Derived",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 86,
+            line: 8,
+            col: 7,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 92,
+            line: 8,
+            col: 13,
+          ),
+        ),
+      ))))),
+    ),
+  ],
+  span: Span(
+    start: Position(
+      src: Some(SourceId(1)),
+      byte: 0,
+      line: 1,
+      col: 1,
+    ),
+    end: Position(
+      src: Some(SourceId(1)),
+      byte: 4,
+      line: 1,
+      col: 5,
+    ),
+  ),
+))

@@ -1,0 +1,38 @@
+#1
+_program
+  #1
+  _class
+    A
+    Object
+    "tests/parser/pass_multi_class.cl"
+    (
+    )
+  #3
+  _class
+    B
+    A
+    "tests/parser/pass_multi_class.cl"
+    (
+    )
+  #5
+  _class
+    C
+    A
+    "tests/parser/pass_multi_class.cl"
+    (
+    )
+  #7
+  _class
+    Main
+    Object
+    "tests/parser/pass_multi_class.cl"
+    (
+    #8
+    _method
+      main
+      Int
+      #9
+      _int
+        42
+      : _no_type
+    )

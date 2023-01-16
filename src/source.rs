@@ -40,17 +40,23 @@ impl<'buf> Source<'buf> {
         }
     }
 
-    pub fn load(&mut self, path: PathBuf) -> io::Result<SourceId> {
+    pub fn load_from_string(&mut self, path: PathBuf, buf: Vec<u8>) -> SourceId {
         let idx = self.files.len();
         assert_eq!(self.buf.0.len(), idx);
         let id = SourceId((idx + 1).try_into().unwrap());
 
-        self.buf.0.push(fs::read(&path)?);
+        self.buf.0.push(buf);
         let buf: &'buf [u8] = &self.buf.0[idx];
 
         self.files.push(SourceFile { id, path, buf });
 
-        Ok(id)
+        id
+    }
+
+    pub fn load(&mut self, path: PathBuf) -> io::Result<SourceId> {
+        let buf = fs::read(&path)?;
+
+        Ok(self.load_from_string(path, buf))
     }
 
     pub fn get(&self, id: SourceId) -> Option<&SourceFile<'buf>> {

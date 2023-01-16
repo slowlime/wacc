@@ -5,6 +5,7 @@ use std::fmt::{self, Display};
 
 use itertools::{Itertools, PeekNth};
 use tracing::{instrument, trace};
+use serde::Serialize;
 
 use crate::ast::ty::UnresolvedTy;
 use crate::ast::{self, BinOpKind, Expr, Name, TyName, UnOpKind};
@@ -13,7 +14,7 @@ use crate::parse::token::{Symbol, Token, TokenType};
 use crate::position::{HasSpan, Span, Spanned};
 use crate::util::CloneStatic;
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Serialize, Debug, Clone, Eq, PartialEq)]
 pub enum ParserError<'buf> {
     UnexpectedToken {
         expected: Cow<'static, [TokenType]>,

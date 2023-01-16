@@ -4,16 +4,9 @@ use std::fmt::{self, Display};
 use serde::Serialize;
 
 use crate::try_match;
-use crate::util::{slice_formatter, CloneStatic};
+use crate::util::{serialize_bytes_as_string, slice_formatter, CloneStatic};
 
 use super::TyName;
-
-fn serialize_bytes_as_string<S>(bytes: &[u8], ser: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    String::from_utf8_lossy(bytes).serialize(ser)
-}
 
 /// A potentially-unresolved type.
 #[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash)]

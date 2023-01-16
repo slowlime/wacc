@@ -1,0 +1,248 @@
+#1
+_program
+  #1
+  _class
+    Main
+    Object
+    "tests/parser/pass_arith.cl"
+    (
+    #2
+    _method
+      main
+      Object
+      #2
+      _block
+        #3
+        _let
+          add_const
+          Int
+          #3
+          _plus
+            #3
+            _int
+              1
+            : _no_type
+            #3
+            _int
+              2
+            : _no_type
+          : _no_type
+          #4
+          _let
+            sub_const
+            Int
+            #4
+            _sub
+              #4
+              _int
+                3
+              : _no_type
+              #4
+              _int
+                1
+              : _no_type
+            : _no_type
+            #5
+            _let
+              mul_const
+              Int
+              #5
+              _mul
+                #5
+                _int
+                  2
+                : _no_type
+                #5
+                _int
+                  3
+                : _no_type
+              : _no_type
+              #6
+              _let
+                div_const
+                Int
+                #6
+                _divide
+                  #6
+                  _int
+                    4
+                  : _no_type
+                  #6
+                  _int
+                    2
+                  : _no_type
+                : _no_type
+                #6
+                _int
+                  0
+                : _no_type
+              : _no_type
+            : _no_type
+          : _no_type
+        : _no_type
+        #8
+        _let
+          x
+          Int
+          #8
+          _int
+            42
+          : _no_type
+          #9
+          _let
+            y
+            Int
+            #9
+            _plus
+              #9
+              _neg
+                #9
+                _int
+                  37
+                : _no_type
+              : _no_type
+              #9
+              _int
+                1
+              : _no_type
+            : _no_type
+            #10
+            _let
+              add_var
+              Int
+              #10
+              _plus
+                #10
+                _object
+                  x
+                : _no_type
+                #10
+                _object
+                  y
+                : _no_type
+              : _no_type
+              #11
+              _let
+                sub_var
+                Int
+                #11
+                _sub
+                  #11
+                  _object
+                    x
+                  : _no_type
+                  #11
+                  _object
+                    y
+                  : _no_type
+                : _no_type
+                #12
+                _let
+                  mul_var
+                  Int
+                  #12
+                  _mul
+                    #12
+                    _object
+                      x
+                    : _no_type
+                    #12
+                    _object
+                      y
+                    : _no_type
+                  : _no_type
+                  #13
+                  _let
+                    div_var
+                    Int
+                    #13
+                    _divide
+                      #13
+                      _object
+                        x
+                      : _no_type
+                      #13
+                      _object
+                        y
+                      : _no_type
+                    : _no_type
+                    #13
+                    _int
+                      0
+                    : _no_type
+                  : _no_type
+                : _no_type
+              : _no_type
+            : _no_type
+          : _no_type
+        : _no_type
+        #15
+        _let
+          compl
+          Int
+          #15
+          _neg
+            #15
+            _int
+              42
+            : _no_type
+          : _no_type
+          #15
+          _int
+            0
+          : _no_type
+        : _no_type
+        #17
+        _let
+          cmp_lt
+          Int
+          #17
+          _lt
+            #17
+            _int
+              3
+            : _no_type
+            #17
+            _int
+              6
+            : _no_type
+          : _no_type
+          #18
+          _let
+            cmp_le
+            Int
+            #18
+            _leq
+              #18
+              _int
+                6
+              : _no_type
+              #18
+              _int
+                6
+              : _no_type
+            : _no_type
+            #19
+            _let
+              cmp_eq
+              Int
+              #19
+              _eq
+                #19
+                _int
+                  6
+                : _no_type
+                #19
+                _int
+                  6
+                : _no_type
+              : _no_type
+              #19
+              _int
+                0
+              : _no_type
+            : _no_type
+          : _no_type
+        : _no_type
+      : _no_type
+    )
