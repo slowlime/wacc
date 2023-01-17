@@ -1,0 +1,23 @@
+---
+source: tests/typeck.rs
+description: "class Main {\n    not_main(): Object {\n        0\n    };\n};\n"
+expression: "&diagnostics"
+---
+[
+    Diagnostic {
+        level: Error,
+        message: DiagnosticMessage {
+            span: Some(
+                Span(1:1-5, bytes 0-4 in Some(SourceId(1))),
+            ),
+            message: "the `Main` class must define a method named `main`",
+        },
+        source: Some(
+            NoMainMethod {
+                class_location: UserCode(
+                    Span(1:1-5, bytes 0-4 in Some(SourceId(1))),
+                ),
+            },
+        ),
+    },
+]

@@ -1,0 +1,6 @@
+---
+source: tests/typeck.rs
+description: "class Main {\n    main(): Object {\n        let object : Object <- new Object,\n            int : Int <- new Int,\n            string : String <- new String,\n            io : IO <- new IO,\n            bool : Bool <- new Bool,\n            main : Main <- new Main,\n            self_ : SELF_TYPE <- new SELF_TYPE in 0\n    };\n};\n"
+expression: "&diagnostics"
+---
+[]

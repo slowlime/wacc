@@ -187,6 +187,10 @@ impl<'e> Diagnostics<'e> {
         (self.emitter)(&diagnostic);
         self.diagnostics.push(diagnostic);
     }
+
+    pub fn into_vec(self) -> Vec<Diagnostic> {
+        self.diagnostics
+    }
 }
 
 impl Default for Diagnostics<'_> {

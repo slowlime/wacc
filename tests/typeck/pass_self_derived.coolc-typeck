@@ -1,0 +1,75 @@
+#1
+_program
+  #1
+  _class
+    Base
+    Object
+    "tests/typeck/pass_self_derived.cl"
+    (
+    #2
+    _attr
+      x
+      SELF_TYPE
+      #2
+      _object
+        self
+      : SELF_TYPE
+    #3
+    _attr
+      x_id
+      SELF_TYPE
+      #3
+      _dispatch
+        #3
+        _object
+          self
+        : SELF_TYPE
+        id
+        (
+        )
+      : SELF_TYPE
+    #5
+    _method
+      id
+      SELF_TYPE
+      #6
+      _object
+        self
+      : SELF_TYPE
+    )
+  #10
+  _class
+    Main
+    Base
+    "tests/typeck/pass_self_derived.cl"
+    (
+    #11
+    _method
+      main
+      SELF_TYPE
+      #11
+      _block
+        #12
+        _assign
+          x
+          #12
+          _object
+            self
+          : SELF_TYPE
+        : SELF_TYPE
+        #13
+        _assign
+          x_id
+          #13
+          _dispatch
+            #13
+            _object
+              self
+            : SELF_TYPE
+            id
+            (
+            )
+          : SELF_TYPE
+        : SELF_TYPE
+      : SELF_TYPE
+    )

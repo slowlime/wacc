@@ -1,0 +1,33 @@
+---
+source: tests/typeck.rs
+description: "class Main {\n    main(this_isnt_supposed_to_go_here : Int): Int {\n        0\n    };\n};\n"
+expression: "&diagnostics"
+---
+[
+    Diagnostic {
+        level: Error,
+        message: DiagnosticMessage {
+            span: Some(
+                Span(2:5-8, bytes 17-20 in Some(SourceId(1))),
+            ),
+            message: "the method `Main.main` has an invalid signature",
+        },
+        source: Some(
+            InvalidMainSignature {
+                method_location: UserCode(
+                    Span(2:5-8, bytes 17-20 in Some(SourceId(1))),
+                ),
+                method_ty: FunctionTy {
+                    params: [
+                        Builtin(
+                            Int,
+                        ),
+                    ],
+                    ret: Builtin(
+                        Int,
+                    ),
+                },
+            },
+        ),
+    },
+]

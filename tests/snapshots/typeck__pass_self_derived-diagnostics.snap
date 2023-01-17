@@ -1,0 +1,6 @@
+---
+source: tests/typeck.rs
+description: "class Base {\n    x : SELF_TYPE <- self;\n    x_id : SELF_TYPE <- id();\n\n    id(): SELF_TYPE {\n        self\n    };\n};\n\nclass Main inherits Base {\n    main(): SELF_TYPE {{\n        x <- self;\n        x_id <- id();\n    }};\n};\n"
+expression: "&diagnostics"
+---
+[]

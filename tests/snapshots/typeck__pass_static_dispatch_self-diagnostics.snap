@@ -1,0 +1,6 @@
+---
+source: tests/typeck.rs
+description: "class Main inherits IO {\n    main(): Main {\n        self@IO.out_int(42)\n    };\n};\n"
+expression: "&diagnostics"
+---
+[]

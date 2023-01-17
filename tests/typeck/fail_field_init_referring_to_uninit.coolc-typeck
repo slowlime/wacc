@@ -1,0 +1,49 @@
+#1
+_program
+  #1
+  _class
+    Main
+    Object
+    "tests/typeck/fail_field_init_referring_to_uninit.cl"
+    (
+    #2
+    _attr
+      x
+      Int
+      #2
+      _object
+        x
+      : Int
+    #3
+    _attr
+      y1
+      SELF_TYPE
+      #3
+      _object
+        y2
+      : SELF_TYPE
+    #4
+    _attr
+      y2
+      SELF_TYPE
+      #4
+      _object
+        y3
+      : SELF_TYPE
+    #5
+    _attr
+      y3
+      SELF_TYPE
+      #5
+      _object
+        y1
+      : SELF_TYPE
+    #7
+    _method
+      main
+      Object
+      #8
+      _int
+        0
+      : Int
+    )

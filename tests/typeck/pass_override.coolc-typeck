@@ -1,0 +1,63 @@
+#1
+_program
+  #1
+  _class
+    Base
+    Object
+    "tests/typeck/pass_override.cl"
+    (
+    #2
+    _method
+      test
+      #2
+      _formal
+        x
+        Int
+      #2
+      _formal
+        y
+        Base
+      String
+      #3
+      _string
+        "hello world"
+      : String
+    )
+  #7
+  _class
+    Derived
+    Object
+    "tests/typeck/pass_override.cl"
+    (
+    #8
+    _method
+      test
+      #8
+      _formal
+        y
+        Int
+      #8
+      _formal
+        x
+        Base
+      String
+      #9
+      _string
+        "mic test"
+      : String
+    )
+  #13
+  _class
+    Main
+    Derived
+    "tests/typeck/pass_override.cl"
+    (
+    #14
+    _method
+      main
+      Object
+      #15
+      _int
+        0
+      : Int
+    )

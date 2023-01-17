@@ -1,0 +1,99 @@
+---
+source: tests/typeck.rs
+description: "class Base {\n    bad_ret(): Int {\n        0\n    };\n\n    bad_param(x : Int): Object {\n        self\n    };\n\n    too_many(x : Int): Object {\n        self\n    };\n\n    too_few(x : Int, y : Int): Object {\n        self\n    };\n};\n\nclass Derived inherits Base {\n    bad_ret(): String {\n        \"hey\"\n    };\n\n    bad_param(x : String): Object {\n        self\n    };\n\n    too_many(x : Int, y : Int): Object {\n        self\n    };\n\n    too_few(x : Int): Object {\n        self\n    };\n};\n\nclass Main inherits Derived {\n    main(): Object {\n        0\n    };\n};\n"
+expression: "&diagnostics"
+---
+[
+    Diagnostic {
+        level: Error,
+        message: DiagnosticMessage {
+            span: Some(
+                Span(20:5-11, bytes 257-263 in Some(SourceId(1))),
+            ),
+            message: "detected multiple definition: method `bad_ret` is already defined in a superclass",
+        },
+        source: Some(
+            MultipleDefinition {
+                kind: Method {
+                    inherited: true,
+                },
+                name: Name {
+                    span: Span(20:5-11, bytes 257-263 in Some(SourceId(1))),
+                    value: b"bad_ret",
+                },
+                previous: UserCode(
+                    Span(2:5-11, bytes 17-23 in Some(SourceId(1))),
+                ),
+            },
+        ),
+    },
+    Diagnostic {
+        level: Error,
+        message: DiagnosticMessage {
+            span: Some(
+                Span(24:5-13, bytes 303-311 in Some(SourceId(1))),
+            ),
+            message: "detected multiple definition: method `bad_param` is already defined in a superclass",
+        },
+        source: Some(
+            MultipleDefinition {
+                kind: Method {
+                    inherited: true,
+                },
+                name: Name {
+                    span: Span(24:5-13, bytes 303-311 in Some(SourceId(1))),
+                    value: b"bad_param",
+                },
+                previous: UserCode(
+                    Span(6:5-13, bytes 56-64 in Some(SourceId(1))),
+                ),
+            },
+        ),
+    },
+    Diagnostic {
+        level: Error,
+        message: DiagnosticMessage {
+            span: Some(
+                Span(28:5-12, bytes 360-367 in Some(SourceId(1))),
+            ),
+            message: "detected multiple definition: method `too_many` is already defined in a superclass",
+        },
+        source: Some(
+            MultipleDefinition {
+                kind: Method {
+                    inherited: true,
+                },
+                name: Name {
+                    span: Span(28:5-12, bytes 360-367 in Some(SourceId(1))),
+                    value: b"too_many",
+                },
+                previous: UserCode(
+                    Span(10:5-12, bytes 110-117 in Some(SourceId(1))),
+                ),
+            },
+        ),
+    },
+    Diagnostic {
+        level: Error,
+        message: DiagnosticMessage {
+            span: Some(
+                Span(32:5-11, bytes 422-428 in Some(SourceId(1))),
+            ),
+            message: "detected multiple definition: method `too_few` is already defined in a superclass",
+        },
+        source: Some(
+            MultipleDefinition {
+                kind: Method {
+                    inherited: true,
+                },
+                name: Name {
+                    span: Span(32:5-11, bytes 422-428 in Some(SourceId(1))),
+                    value: b"too_few",
+                },
+                previous: UserCode(
+                    Span(14:5-11, bytes 163-169 in Some(SourceId(1))),
+                ),
+            },
+        ),
+    },
+]

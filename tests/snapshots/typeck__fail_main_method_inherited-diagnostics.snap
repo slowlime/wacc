@@ -1,0 +1,29 @@
+---
+source: tests/typeck.rs
+description: "class Base {\n    main(): Int {\n        0\n    };\n};\n\nclass Main inherits Base {\n    not_main(): Int {\n        0\n    };\n};\n"
+expression: "&diagnostics"
+---
+[
+    Diagnostic {
+        level: Error,
+        message: DiagnosticMessage {
+            span: Some(
+                Span(7:1-5, bytes 52-56 in Some(SourceId(1))),
+            ),
+            message: "the `main` method is inherited from `Base`; must be defined in the `Main` class",
+        },
+        source: Some(
+            MainMethodInherited {
+                main_class_location: UserCode(
+                    Span(7:1-5, bytes 52-56 in Some(SourceId(1))),
+                ),
+                def_class: Named(
+                    b"Base",
+                ),
+                def_location: UserCode(
+                    Span(2:5-8, bytes 17-20 in Some(SourceId(1))),
+                ),
+            },
+        ),
+    },
+]

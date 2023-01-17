@@ -1,0 +1,28 @@
+#1
+_program
+  #1
+  _class
+    Main
+    IO
+    "tests/typeck/pass_static_dispatch_self.cl"
+    (
+    #2
+    _method
+      main
+      Main
+      #3
+      _static_dispatch
+        #3
+        _object
+          self
+        : SELF_TYPE
+        IO
+        out_int
+        (
+        #3
+        _int
+          42
+        : Int
+        )
+      : SELF_TYPE
+    )

@@ -1,0 +1,1259 @@
+---
+source: tests/typeck.rs
+description: "class Base {\n    bad_ret(): Int {\n        0\n    };\n\n    bad_param(x : Int): Object {\n        self\n    };\n\n    too_many(x : Int): Object {\n        self\n    };\n\n    too_few(x : Int, y : Int): Object {\n        self\n    };\n};\n\nclass Derived inherits Base {\n    bad_ret(): String {\n        \"hey\"\n    };\n\n    bad_param(x : String): Object {\n        self\n    };\n\n    too_many(x : Int, y : Int): Object {\n        self\n    };\n\n    too_few(x : Int): Object {\n        self\n    };\n};\n\nclass Main inherits Derived {\n    main(): Object {\n        0\n    };\n};\n"
+expression: "SnapshotData { failed, classes: &classes }"
+---
+SnapshotData(
+  failed: true,
+  classes: [
+    Class(
+      name: TyName(Name(Spanned(
+        value: "Base",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 6,
+            line: 1,
+            col: 7,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 9,
+            line: 1,
+            col: 10,
+          ),
+        ),
+      ))),
+      inherits: None,
+      features: [
+        Method(Method(
+          name: Name(Spanned(
+            value: "bad_ret",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 17,
+                line: 2,
+                col: 5,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 23,
+                line: 2,
+                col: 11,
+              ),
+            ),
+          )),
+          params: [],
+          return_ty: TyName(Name(Spanned(
+            value: "Int",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 28,
+                line: 2,
+                col: 16,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 30,
+                line: 2,
+                col: 18,
+              ),
+            ),
+          ))),
+          body: Int(IntLit(Spanned(
+            value: 0,
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 42,
+                line: 3,
+                col: 9,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 42,
+                line: 3,
+                col: 9,
+              ),
+            ),
+          ))),
+          span: Span(
+            start: Position(
+              src: Some(SourceId(1)),
+              byte: 17,
+              line: 2,
+              col: 5,
+            ),
+            end: Position(
+              src: Some(SourceId(1)),
+              byte: 23,
+              line: 2,
+              col: 11,
+            ),
+          ),
+          ty: Resolved(Function(FunctionTy(
+            params: [],
+            ret: Builtin(Int),
+          ))),
+        )),
+        Method(Method(
+          name: Name(Spanned(
+            value: "bad_param",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 56,
+                line: 6,
+                col: 5,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 64,
+                line: 6,
+                col: 13,
+              ),
+            ),
+          )),
+          params: [
+            Formal(
+              name: Name(Spanned(
+                value: "x",
+                span: Span(
+                  start: Position(
+                    src: Some(SourceId(1)),
+                    byte: 66,
+                    line: 6,
+                    col: 15,
+                  ),
+                  end: Position(
+                    src: Some(SourceId(1)),
+                    byte: 66,
+                    line: 6,
+                    col: 15,
+                  ),
+                ),
+              )),
+              ty_name: TyName(Name(Spanned(
+                value: "Int",
+                span: Span(
+                  start: Position(
+                    src: Some(SourceId(1)),
+                    byte: 70,
+                    line: 6,
+                    col: 19,
+                  ),
+                  end: Position(
+                    src: Some(SourceId(1)),
+                    byte: 72,
+                    line: 6,
+                    col: 21,
+                  ),
+                ),
+              ))),
+              span: Span(
+                start: Position(
+                  src: Some(SourceId(1)),
+                  byte: 66,
+                  line: 6,
+                  col: 15,
+                ),
+                end: Position(
+                  src: Some(SourceId(1)),
+                  byte: 66,
+                  line: 6,
+                  col: 15,
+                ),
+              ),
+              ty: Resolved(Builtin(Int)),
+            ),
+          ],
+          return_ty: TyName(Name(Spanned(
+            value: "Object",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 76,
+                line: 6,
+                col: 25,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 81,
+                line: 6,
+                col: 30,
+              ),
+            ),
+          ))),
+          body: Name(NameExpr(
+            name: Name(Spanned(
+              value: "self",
+              span: Span(
+                start: Position(
+                  src: Some(SourceId(1)),
+                  byte: 93,
+                  line: 7,
+                  col: 9,
+                ),
+                end: Position(
+                  src: Some(SourceId(1)),
+                  byte: 96,
+                  line: 7,
+                  col: 12,
+                ),
+              ),
+            )),
+            ty: Some(Resolved(SelfType(
+              enclosed: Class("Base"),
+            ))),
+          )),
+          span: Span(
+            start: Position(
+              src: Some(SourceId(1)),
+              byte: 56,
+              line: 6,
+              col: 5,
+            ),
+            end: Position(
+              src: Some(SourceId(1)),
+              byte: 64,
+              line: 6,
+              col: 13,
+            ),
+          ),
+          ty: Resolved(Function(FunctionTy(
+            params: [
+              Builtin(Int),
+            ],
+            ret: Builtin(Object),
+          ))),
+        )),
+        Method(Method(
+          name: Name(Spanned(
+            value: "too_many",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 110,
+                line: 10,
+                col: 5,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 117,
+                line: 10,
+                col: 12,
+              ),
+            ),
+          )),
+          params: [
+            Formal(
+              name: Name(Spanned(
+                value: "x",
+                span: Span(
+                  start: Position(
+                    src: Some(SourceId(1)),
+                    byte: 119,
+                    line: 10,
+                    col: 14,
+                  ),
+                  end: Position(
+                    src: Some(SourceId(1)),
+                    byte: 119,
+                    line: 10,
+                    col: 14,
+                  ),
+                ),
+              )),
+              ty_name: TyName(Name(Spanned(
+                value: "Int",
+                span: Span(
+                  start: Position(
+                    src: Some(SourceId(1)),
+                    byte: 123,
+                    line: 10,
+                    col: 18,
+                  ),
+                  end: Position(
+                    src: Some(SourceId(1)),
+                    byte: 125,
+                    line: 10,
+                    col: 20,
+                  ),
+                ),
+              ))),
+              span: Span(
+                start: Position(
+                  src: Some(SourceId(1)),
+                  byte: 119,
+                  line: 10,
+                  col: 14,
+                ),
+                end: Position(
+                  src: Some(SourceId(1)),
+                  byte: 119,
+                  line: 10,
+                  col: 14,
+                ),
+              ),
+              ty: Resolved(Builtin(Int)),
+            ),
+          ],
+          return_ty: TyName(Name(Spanned(
+            value: "Object",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 129,
+                line: 10,
+                col: 24,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 134,
+                line: 10,
+                col: 29,
+              ),
+            ),
+          ))),
+          body: Name(NameExpr(
+            name: Name(Spanned(
+              value: "self",
+              span: Span(
+                start: Position(
+                  src: Some(SourceId(1)),
+                  byte: 146,
+                  line: 11,
+                  col: 9,
+                ),
+                end: Position(
+                  src: Some(SourceId(1)),
+                  byte: 149,
+                  line: 11,
+                  col: 12,
+                ),
+              ),
+            )),
+            ty: Some(Resolved(SelfType(
+              enclosed: Class("Base"),
+            ))),
+          )),
+          span: Span(
+            start: Position(
+              src: Some(SourceId(1)),
+              byte: 110,
+              line: 10,
+              col: 5,
+            ),
+            end: Position(
+              src: Some(SourceId(1)),
+              byte: 117,
+              line: 10,
+              col: 12,
+            ),
+          ),
+          ty: Resolved(Function(FunctionTy(
+            params: [
+              Builtin(Int),
+            ],
+            ret: Builtin(Object),
+          ))),
+        )),
+        Method(Method(
+          name: Name(Spanned(
+            value: "too_few",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 163,
+                line: 14,
+                col: 5,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 169,
+                line: 14,
+                col: 11,
+              ),
+            ),
+          )),
+          params: [
+            Formal(
+              name: Name(Spanned(
+                value: "x",
+                span: Span(
+                  start: Position(
+                    src: Some(SourceId(1)),
+                    byte: 171,
+                    line: 14,
+                    col: 13,
+                  ),
+                  end: Position(
+                    src: Some(SourceId(1)),
+                    byte: 171,
+                    line: 14,
+                    col: 13,
+                  ),
+                ),
+              )),
+              ty_name: TyName(Name(Spanned(
+                value: "Int",
+                span: Span(
+                  start: Position(
+                    src: Some(SourceId(1)),
+                    byte: 175,
+                    line: 14,
+                    col: 17,
+                  ),
+                  end: Position(
+                    src: Some(SourceId(1)),
+                    byte: 177,
+                    line: 14,
+                    col: 19,
+                  ),
+                ),
+              ))),
+              span: Span(
+                start: Position(
+                  src: Some(SourceId(1)),
+                  byte: 171,
+                  line: 14,
+                  col: 13,
+                ),
+                end: Position(
+                  src: Some(SourceId(1)),
+                  byte: 171,
+                  line: 14,
+                  col: 13,
+                ),
+              ),
+              ty: Resolved(Builtin(Int)),
+            ),
+            Formal(
+              name: Name(Spanned(
+                value: "y",
+                span: Span(
+                  start: Position(
+                    src: Some(SourceId(1)),
+                    byte: 180,
+                    line: 14,
+                    col: 22,
+                  ),
+                  end: Position(
+                    src: Some(SourceId(1)),
+                    byte: 180,
+                    line: 14,
+                    col: 22,
+                  ),
+                ),
+              )),
+              ty_name: TyName(Name(Spanned(
+                value: "Int",
+                span: Span(
+                  start: Position(
+                    src: Some(SourceId(1)),
+                    byte: 184,
+                    line: 14,
+                    col: 26,
+                  ),
+                  end: Position(
+                    src: Some(SourceId(1)),
+                    byte: 186,
+                    line: 14,
+                    col: 28,
+                  ),
+                ),
+              ))),
+              span: Span(
+                start: Position(
+                  src: Some(SourceId(1)),
+                  byte: 180,
+                  line: 14,
+                  col: 22,
+                ),
+                end: Position(
+                  src: Some(SourceId(1)),
+                  byte: 180,
+                  line: 14,
+                  col: 22,
+                ),
+              ),
+              ty: Resolved(Builtin(Int)),
+            ),
+          ],
+          return_ty: TyName(Name(Spanned(
+            value: "Object",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 190,
+                line: 14,
+                col: 32,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 195,
+                line: 14,
+                col: 37,
+              ),
+            ),
+          ))),
+          body: Name(NameExpr(
+            name: Name(Spanned(
+              value: "self",
+              span: Span(
+                start: Position(
+                  src: Some(SourceId(1)),
+                  byte: 207,
+                  line: 15,
+                  col: 9,
+                ),
+                end: Position(
+                  src: Some(SourceId(1)),
+                  byte: 210,
+                  line: 15,
+                  col: 12,
+                ),
+              ),
+            )),
+            ty: Some(Resolved(SelfType(
+              enclosed: Class("Base"),
+            ))),
+          )),
+          span: Span(
+            start: Position(
+              src: Some(SourceId(1)),
+              byte: 163,
+              line: 14,
+              col: 5,
+            ),
+            end: Position(
+              src: Some(SourceId(1)),
+              byte: 169,
+              line: 14,
+              col: 11,
+            ),
+          ),
+          ty: Resolved(Function(FunctionTy(
+            params: [
+              Builtin(Int),
+              Builtin(Int),
+            ],
+            ret: Builtin(Object),
+          ))),
+        )),
+      ],
+      span: Span(
+        start: Position(
+          src: Some(SourceId(1)),
+          byte: 0,
+          line: 1,
+          col: 1,
+        ),
+        end: Position(
+          src: Some(SourceId(1)),
+          byte: 4,
+          line: 1,
+          col: 5,
+        ),
+      ),
+      ty: Resolved(Class("Base")),
+    ),
+    Class(
+      name: TyName(Name(Spanned(
+        value: "Derived",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 229,
+            line: 19,
+            col: 7,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 235,
+            line: 19,
+            col: 13,
+          ),
+        ),
+      ))),
+      inherits: Some(TyName(Name(Spanned(
+        value: "Base",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 246,
+            line: 19,
+            col: 24,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 249,
+            line: 19,
+            col: 27,
+          ),
+        ),
+      )))),
+      features: [
+        Method(Method(
+          name: Name(Spanned(
+            value: "bad_ret",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 257,
+                line: 20,
+                col: 5,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 263,
+                line: 20,
+                col: 11,
+              ),
+            ),
+          )),
+          params: [],
+          return_ty: TyName(Name(Spanned(
+            value: "String",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 268,
+                line: 20,
+                col: 16,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 273,
+                line: 20,
+                col: 21,
+              ),
+            ),
+          ))),
+          body: String(StringLit(Spanned(
+            value: "hey",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 285,
+                line: 21,
+                col: 9,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 289,
+                line: 21,
+                col: 13,
+              ),
+            ),
+          ))),
+          span: Span(
+            start: Position(
+              src: Some(SourceId(1)),
+              byte: 257,
+              line: 20,
+              col: 5,
+            ),
+            end: Position(
+              src: Some(SourceId(1)),
+              byte: 263,
+              line: 20,
+              col: 11,
+            ),
+          ),
+          ty: Resolved(Function(FunctionTy(
+            params: [],
+            ret: Builtin(String),
+          ))),
+        )),
+        Method(Method(
+          name: Name(Spanned(
+            value: "bad_param",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 303,
+                line: 24,
+                col: 5,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 311,
+                line: 24,
+                col: 13,
+              ),
+            ),
+          )),
+          params: [
+            Formal(
+              name: Name(Spanned(
+                value: "x",
+                span: Span(
+                  start: Position(
+                    src: Some(SourceId(1)),
+                    byte: 313,
+                    line: 24,
+                    col: 15,
+                  ),
+                  end: Position(
+                    src: Some(SourceId(1)),
+                    byte: 313,
+                    line: 24,
+                    col: 15,
+                  ),
+                ),
+              )),
+              ty_name: TyName(Name(Spanned(
+                value: "String",
+                span: Span(
+                  start: Position(
+                    src: Some(SourceId(1)),
+                    byte: 317,
+                    line: 24,
+                    col: 19,
+                  ),
+                  end: Position(
+                    src: Some(SourceId(1)),
+                    byte: 322,
+                    line: 24,
+                    col: 24,
+                  ),
+                ),
+              ))),
+              span: Span(
+                start: Position(
+                  src: Some(SourceId(1)),
+                  byte: 313,
+                  line: 24,
+                  col: 15,
+                ),
+                end: Position(
+                  src: Some(SourceId(1)),
+                  byte: 313,
+                  line: 24,
+                  col: 15,
+                ),
+              ),
+              ty: Resolved(Builtin(String)),
+            ),
+          ],
+          return_ty: TyName(Name(Spanned(
+            value: "Object",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 326,
+                line: 24,
+                col: 28,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 331,
+                line: 24,
+                col: 33,
+              ),
+            ),
+          ))),
+          body: Name(NameExpr(
+            name: Name(Spanned(
+              value: "self",
+              span: Span(
+                start: Position(
+                  src: Some(SourceId(1)),
+                  byte: 343,
+                  line: 25,
+                  col: 9,
+                ),
+                end: Position(
+                  src: Some(SourceId(1)),
+                  byte: 346,
+                  line: 25,
+                  col: 12,
+                ),
+              ),
+            )),
+            ty: Some(Resolved(SelfType(
+              enclosed: Class("Derived"),
+            ))),
+          )),
+          span: Span(
+            start: Position(
+              src: Some(SourceId(1)),
+              byte: 303,
+              line: 24,
+              col: 5,
+            ),
+            end: Position(
+              src: Some(SourceId(1)),
+              byte: 311,
+              line: 24,
+              col: 13,
+            ),
+          ),
+          ty: Resolved(Function(FunctionTy(
+            params: [
+              Builtin(String),
+            ],
+            ret: Builtin(Object),
+          ))),
+        )),
+        Method(Method(
+          name: Name(Spanned(
+            value: "too_many",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 360,
+                line: 28,
+                col: 5,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 367,
+                line: 28,
+                col: 12,
+              ),
+            ),
+          )),
+          params: [
+            Formal(
+              name: Name(Spanned(
+                value: "x",
+                span: Span(
+                  start: Position(
+                    src: Some(SourceId(1)),
+                    byte: 369,
+                    line: 28,
+                    col: 14,
+                  ),
+                  end: Position(
+                    src: Some(SourceId(1)),
+                    byte: 369,
+                    line: 28,
+                    col: 14,
+                  ),
+                ),
+              )),
+              ty_name: TyName(Name(Spanned(
+                value: "Int",
+                span: Span(
+                  start: Position(
+                    src: Some(SourceId(1)),
+                    byte: 373,
+                    line: 28,
+                    col: 18,
+                  ),
+                  end: Position(
+                    src: Some(SourceId(1)),
+                    byte: 375,
+                    line: 28,
+                    col: 20,
+                  ),
+                ),
+              ))),
+              span: Span(
+                start: Position(
+                  src: Some(SourceId(1)),
+                  byte: 369,
+                  line: 28,
+                  col: 14,
+                ),
+                end: Position(
+                  src: Some(SourceId(1)),
+                  byte: 369,
+                  line: 28,
+                  col: 14,
+                ),
+              ),
+              ty: Resolved(Builtin(Int)),
+            ),
+            Formal(
+              name: Name(Spanned(
+                value: "y",
+                span: Span(
+                  start: Position(
+                    src: Some(SourceId(1)),
+                    byte: 378,
+                    line: 28,
+                    col: 23,
+                  ),
+                  end: Position(
+                    src: Some(SourceId(1)),
+                    byte: 378,
+                    line: 28,
+                    col: 23,
+                  ),
+                ),
+              )),
+              ty_name: TyName(Name(Spanned(
+                value: "Int",
+                span: Span(
+                  start: Position(
+                    src: Some(SourceId(1)),
+                    byte: 382,
+                    line: 28,
+                    col: 27,
+                  ),
+                  end: Position(
+                    src: Some(SourceId(1)),
+                    byte: 384,
+                    line: 28,
+                    col: 29,
+                  ),
+                ),
+              ))),
+              span: Span(
+                start: Position(
+                  src: Some(SourceId(1)),
+                  byte: 378,
+                  line: 28,
+                  col: 23,
+                ),
+                end: Position(
+                  src: Some(SourceId(1)),
+                  byte: 378,
+                  line: 28,
+                  col: 23,
+                ),
+              ),
+              ty: Resolved(Builtin(Int)),
+            ),
+          ],
+          return_ty: TyName(Name(Spanned(
+            value: "Object",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 388,
+                line: 28,
+                col: 33,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 393,
+                line: 28,
+                col: 38,
+              ),
+            ),
+          ))),
+          body: Name(NameExpr(
+            name: Name(Spanned(
+              value: "self",
+              span: Span(
+                start: Position(
+                  src: Some(SourceId(1)),
+                  byte: 405,
+                  line: 29,
+                  col: 9,
+                ),
+                end: Position(
+                  src: Some(SourceId(1)),
+                  byte: 408,
+                  line: 29,
+                  col: 12,
+                ),
+              ),
+            )),
+            ty: Some(Resolved(SelfType(
+              enclosed: Class("Derived"),
+            ))),
+          )),
+          span: Span(
+            start: Position(
+              src: Some(SourceId(1)),
+              byte: 360,
+              line: 28,
+              col: 5,
+            ),
+            end: Position(
+              src: Some(SourceId(1)),
+              byte: 367,
+              line: 28,
+              col: 12,
+            ),
+          ),
+          ty: Resolved(Function(FunctionTy(
+            params: [
+              Builtin(Int),
+              Builtin(Int),
+            ],
+            ret: Builtin(Object),
+          ))),
+        )),
+        Method(Method(
+          name: Name(Spanned(
+            value: "too_few",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 422,
+                line: 32,
+                col: 5,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 428,
+                line: 32,
+                col: 11,
+              ),
+            ),
+          )),
+          params: [
+            Formal(
+              name: Name(Spanned(
+                value: "x",
+                span: Span(
+                  start: Position(
+                    src: Some(SourceId(1)),
+                    byte: 430,
+                    line: 32,
+                    col: 13,
+                  ),
+                  end: Position(
+                    src: Some(SourceId(1)),
+                    byte: 430,
+                    line: 32,
+                    col: 13,
+                  ),
+                ),
+              )),
+              ty_name: TyName(Name(Spanned(
+                value: "Int",
+                span: Span(
+                  start: Position(
+                    src: Some(SourceId(1)),
+                    byte: 434,
+                    line: 32,
+                    col: 17,
+                  ),
+                  end: Position(
+                    src: Some(SourceId(1)),
+                    byte: 436,
+                    line: 32,
+                    col: 19,
+                  ),
+                ),
+              ))),
+              span: Span(
+                start: Position(
+                  src: Some(SourceId(1)),
+                  byte: 430,
+                  line: 32,
+                  col: 13,
+                ),
+                end: Position(
+                  src: Some(SourceId(1)),
+                  byte: 430,
+                  line: 32,
+                  col: 13,
+                ),
+              ),
+              ty: Resolved(Builtin(Int)),
+            ),
+          ],
+          return_ty: TyName(Name(Spanned(
+            value: "Object",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 440,
+                line: 32,
+                col: 23,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 445,
+                line: 32,
+                col: 28,
+              ),
+            ),
+          ))),
+          body: Name(NameExpr(
+            name: Name(Spanned(
+              value: "self",
+              span: Span(
+                start: Position(
+                  src: Some(SourceId(1)),
+                  byte: 457,
+                  line: 33,
+                  col: 9,
+                ),
+                end: Position(
+                  src: Some(SourceId(1)),
+                  byte: 460,
+                  line: 33,
+                  col: 12,
+                ),
+              ),
+            )),
+            ty: Some(Resolved(SelfType(
+              enclosed: Class("Derived"),
+            ))),
+          )),
+          span: Span(
+            start: Position(
+              src: Some(SourceId(1)),
+              byte: 422,
+              line: 32,
+              col: 5,
+            ),
+            end: Position(
+              src: Some(SourceId(1)),
+              byte: 428,
+              line: 32,
+              col: 11,
+            ),
+          ),
+          ty: Resolved(Function(FunctionTy(
+            params: [
+              Builtin(Int),
+            ],
+            ret: Builtin(Object),
+          ))),
+        )),
+      ],
+      span: Span(
+        start: Position(
+          src: Some(SourceId(1)),
+          byte: 223,
+          line: 19,
+          col: 1,
+        ),
+        end: Position(
+          src: Some(SourceId(1)),
+          byte: 227,
+          line: 19,
+          col: 5,
+        ),
+      ),
+      ty: Resolved(Class("Derived")),
+    ),
+    Class(
+      name: TyName(Name(Spanned(
+        value: "Main",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 479,
+            line: 37,
+            col: 7,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 482,
+            line: 37,
+            col: 10,
+          ),
+        ),
+      ))),
+      inherits: Some(TyName(Name(Spanned(
+        value: "Derived",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 493,
+            line: 37,
+            col: 21,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 499,
+            line: 37,
+            col: 27,
+          ),
+        ),
+      )))),
+      features: [
+        Method(Method(
+          name: Name(Spanned(
+            value: "main",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 507,
+                line: 38,
+                col: 5,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 510,
+                line: 38,
+                col: 8,
+              ),
+            ),
+          )),
+          params: [],
+          return_ty: TyName(Name(Spanned(
+            value: "Object",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 515,
+                line: 38,
+                col: 13,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 520,
+                line: 38,
+                col: 18,
+              ),
+            ),
+          ))),
+          body: Int(IntLit(Spanned(
+            value: 0,
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 532,
+                line: 39,
+                col: 9,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 532,
+                line: 39,
+                col: 9,
+              ),
+            ),
+          ))),
+          span: Span(
+            start: Position(
+              src: Some(SourceId(1)),
+              byte: 507,
+              line: 38,
+              col: 5,
+            ),
+            end: Position(
+              src: Some(SourceId(1)),
+              byte: 510,
+              line: 38,
+              col: 8,
+            ),
+          ),
+          ty: Resolved(Function(FunctionTy(
+            params: [],
+            ret: Builtin(Object),
+          ))),
+        )),
+      ],
+      span: Span(
+        start: Position(
+          src: Some(SourceId(1)),
+          byte: 473,
+          line: 37,
+          col: 1,
+        ),
+        end: Position(
+          src: Some(SourceId(1)),
+          byte: 477,
+          line: 37,
+          col: 5,
+        ),
+      ),
+      ty: Resolved(Class("Main")),
+    ),
+  ],
+)

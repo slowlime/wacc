@@ -1,0 +1,82 @@
+---
+source: tests/typeck.rs
+description: "class Main {\n    x : Int <- x;\n    y1 : SELF_TYPE <- y2;\n    y2 : SELF_TYPE <- y3;\n    y3 : SELF_TYPE <- y1;\n\n    main(): Object {\n        0\n    };\n};\n"
+expression: "&diagnostics"
+---
+[
+    Diagnostic {
+        level: Error,
+        message: DiagnosticMessage {
+            span: Some(
+                Span(2:16, 28 bytes into Some(SourceId(1))),
+            ),
+            message: "unrecognized name `x`",
+        },
+        source: Some(
+            UnrecognizedName(
+                UnrecognizedName {
+                    name: Name {
+                        span: Span(2:16, 28 bytes into Some(SourceId(1))),
+                        value: b"x",
+                    },
+                    class_name: Named(
+                        b"Main",
+                    ),
+                    position: Field(
+                        b"x",
+                    ),
+                },
+            ),
+        ),
+    },
+    Diagnostic {
+        level: Error,
+        message: DiagnosticMessage {
+            span: Some(
+                Span(3:23-24, bytes 53-54 in Some(SourceId(1))),
+            ),
+            message: "unrecognized name `y2`",
+        },
+        source: Some(
+            UnrecognizedName(
+                UnrecognizedName {
+                    name: Name {
+                        span: Span(3:23-24, bytes 53-54 in Some(SourceId(1))),
+                        value: b"y2",
+                    },
+                    class_name: Named(
+                        b"Main",
+                    ),
+                    position: Field(
+                        b"y1",
+                    ),
+                },
+            ),
+        ),
+    },
+    Diagnostic {
+        level: Error,
+        message: DiagnosticMessage {
+            span: Some(
+                Span(4:23-24, bytes 79-80 in Some(SourceId(1))),
+            ),
+            message: "unrecognized name `y3`",
+        },
+        source: Some(
+            UnrecognizedName(
+                UnrecognizedName {
+                    name: Name {
+                        span: Span(4:23-24, bytes 79-80 in Some(SourceId(1))),
+                        value: b"y3",
+                    },
+                    class_name: Named(
+                        b"Main",
+                    ),
+                    position: Field(
+                        b"y2",
+                    ),
+                },
+            ),
+        ),
+    },
+]

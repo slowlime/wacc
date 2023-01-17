@@ -1,0 +1,53 @@
+---
+source: tests/typeck.rs
+description: "class Base {\n    test(): Int {\n        42\n    };\n};\n\nclass Dervied inherits Base {\n    test(): Object {\n        42\n    };\n};\n\nclass Main inherits Derived {\n    main(): Object {\n        0\n    };\n};\n"
+expression: "&diagnostics"
+---
+[
+    Diagnostic {
+        level: Error,
+        message: DiagnosticMessage {
+            span: Some(
+                Span(8:5-8, bytes 87-90 in Some(SourceId(1))),
+            ),
+            message: "detected multiple definition: method `test` is already defined in a superclass",
+        },
+        source: Some(
+            MultipleDefinition {
+                kind: Method {
+                    inherited: true,
+                },
+                name: Name {
+                    span: Span(8:5-8, bytes 87-90 in Some(SourceId(1))),
+                    value: b"test",
+                },
+                previous: UserCode(
+                    Span(2:5-8, bytes 17-20 in Some(SourceId(1))),
+                ),
+            },
+        ),
+    },
+    Diagnostic {
+        level: Error,
+        message: DiagnosticMessage {
+            span: Some(
+                Span(13:21-27, bytes 146-152 in Some(SourceId(1))),
+            ),
+            message: "the type name `Derived` is not recognized",
+        },
+        source: Some(
+            UnrecognizedTy(
+                UnrecognizedTy {
+                    ty_name: TyName {
+                        span: Span(13:21-27, bytes 146-152 in Some(SourceId(1))),
+                        value: b"Derived",
+                    },
+                    class_name: Named(
+                        b"Main",
+                    ),
+                    position: Inherits,
+                },
+            ),
+        ),
+    },
+]

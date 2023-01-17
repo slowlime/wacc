@@ -1,0 +1,39 @@
+#1
+_program
+  #1
+  _class
+    Main
+    Object
+    "tests/typeck/pass_coexisting_field_method_names.cl"
+    (
+    #2
+    _attr
+      x
+      Int
+      #2
+      _int
+        42
+      : Int
+    #4
+    _method
+      x
+      Int
+      #5
+      _object
+        x
+      : Int
+    #8
+    _method
+      main
+      Object
+      #9
+      _dispatch
+        #9
+        _object
+          self
+        : SELF_TYPE
+        x
+        (
+        )
+      : Int
+    )

@@ -1,0 +1,119 @@
+---
+source: tests/typeck.rs
+description: "class Main {\n    not_main(): Object {\n        0\n    };\n};\n"
+expression: "SnapshotData { failed, classes: &classes }"
+---
+SnapshotData(
+  failed: true,
+  classes: [
+    Class(
+      name: TyName(Name(Spanned(
+        value: "Main",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 6,
+            line: 1,
+            col: 7,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 9,
+            line: 1,
+            col: 10,
+          ),
+        ),
+      ))),
+      inherits: None,
+      features: [
+        Method(Method(
+          name: Name(Spanned(
+            value: "not_main",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 17,
+                line: 2,
+                col: 5,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 24,
+                line: 2,
+                col: 12,
+              ),
+            ),
+          )),
+          params: [],
+          return_ty: TyName(Name(Spanned(
+            value: "Object",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 29,
+                line: 2,
+                col: 17,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 34,
+                line: 2,
+                col: 22,
+              ),
+            ),
+          ))),
+          body: Int(IntLit(Spanned(
+            value: 0,
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 46,
+                line: 3,
+                col: 9,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 46,
+                line: 3,
+                col: 9,
+              ),
+            ),
+          ))),
+          span: Span(
+            start: Position(
+              src: Some(SourceId(1)),
+              byte: 17,
+              line: 2,
+              col: 5,
+            ),
+            end: Position(
+              src: Some(SourceId(1)),
+              byte: 24,
+              line: 2,
+              col: 12,
+            ),
+          ),
+          ty: Resolved(Function(FunctionTy(
+            params: [],
+            ret: Builtin(Object),
+          ))),
+        )),
+      ],
+      span: Span(
+        start: Position(
+          src: Some(SourceId(1)),
+          byte: 0,
+          line: 1,
+          col: 1,
+        ),
+        end: Position(
+          src: Some(SourceId(1)),
+          byte: 4,
+          line: 1,
+          col: 5,
+        ),
+      ),
+      ty: Resolved(Class("Main")),
+    ),
+  ],
+)

@@ -1,0 +1,6 @@
+---
+source: tests/typeck.rs
+description: "class Base {\n    test(x : Int, y : Base): String {\n        \"hello world\"\n    };\n};\n\nclass Derived {\n    test(y : Int, x : Base): String {\n        \"mic test\"\n    };\n};\n\nclass Main inherits Derived {\n    main(): Object {\n        0\n    };\n};\n"
+expression: "&diagnostics"
+---
+[]

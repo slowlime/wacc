@@ -1,0 +1,244 @@
+---
+source: tests/typeck.rs
+description: "class Base {\n    main(): Int {\n        0\n    };\n};\n\nclass Main inherits Base {\n    not_main(): Int {\n        0\n    };\n};\n"
+expression: "SnapshotData { failed, classes: &classes }"
+---
+SnapshotData(
+  failed: true,
+  classes: [
+    Class(
+      name: TyName(Name(Spanned(
+        value: "Base",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 6,
+            line: 1,
+            col: 7,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 9,
+            line: 1,
+            col: 10,
+          ),
+        ),
+      ))),
+      inherits: None,
+      features: [
+        Method(Method(
+          name: Name(Spanned(
+            value: "main",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 17,
+                line: 2,
+                col: 5,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 20,
+                line: 2,
+                col: 8,
+              ),
+            ),
+          )),
+          params: [],
+          return_ty: TyName(Name(Spanned(
+            value: "Int",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 25,
+                line: 2,
+                col: 13,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 27,
+                line: 2,
+                col: 15,
+              ),
+            ),
+          ))),
+          body: Int(IntLit(Spanned(
+            value: 0,
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 39,
+                line: 3,
+                col: 9,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 39,
+                line: 3,
+                col: 9,
+              ),
+            ),
+          ))),
+          span: Span(
+            start: Position(
+              src: Some(SourceId(1)),
+              byte: 17,
+              line: 2,
+              col: 5,
+            ),
+            end: Position(
+              src: Some(SourceId(1)),
+              byte: 20,
+              line: 2,
+              col: 8,
+            ),
+          ),
+          ty: Resolved(Function(FunctionTy(
+            params: [],
+            ret: Builtin(Int),
+          ))),
+        )),
+      ],
+      span: Span(
+        start: Position(
+          src: Some(SourceId(1)),
+          byte: 0,
+          line: 1,
+          col: 1,
+        ),
+        end: Position(
+          src: Some(SourceId(1)),
+          byte: 4,
+          line: 1,
+          col: 5,
+        ),
+      ),
+      ty: Resolved(Class("Base")),
+    ),
+    Class(
+      name: TyName(Name(Spanned(
+        value: "Main",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 58,
+            line: 7,
+            col: 7,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 61,
+            line: 7,
+            col: 10,
+          ),
+        ),
+      ))),
+      inherits: Some(TyName(Name(Spanned(
+        value: "Base",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 72,
+            line: 7,
+            col: 21,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 75,
+            line: 7,
+            col: 24,
+          ),
+        ),
+      )))),
+      features: [
+        Method(Method(
+          name: Name(Spanned(
+            value: "not_main",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 83,
+                line: 8,
+                col: 5,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 90,
+                line: 8,
+                col: 12,
+              ),
+            ),
+          )),
+          params: [],
+          return_ty: TyName(Name(Spanned(
+            value: "Int",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 95,
+                line: 8,
+                col: 17,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 97,
+                line: 8,
+                col: 19,
+              ),
+            ),
+          ))),
+          body: Int(IntLit(Spanned(
+            value: 0,
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 109,
+                line: 9,
+                col: 9,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 109,
+                line: 9,
+                col: 9,
+              ),
+            ),
+          ))),
+          span: Span(
+            start: Position(
+              src: Some(SourceId(1)),
+              byte: 83,
+              line: 8,
+              col: 5,
+            ),
+            end: Position(
+              src: Some(SourceId(1)),
+              byte: 90,
+              line: 8,
+              col: 12,
+            ),
+          ),
+          ty: Resolved(Function(FunctionTy(
+            params: [],
+            ret: Builtin(Int),
+          ))),
+        )),
+      ],
+      span: Span(
+        start: Position(
+          src: Some(SourceId(1)),
+          byte: 52,
+          line: 7,
+          col: 1,
+        ),
+        end: Position(
+          src: Some(SourceId(1)),
+          byte: 56,
+          line: 7,
+          col: 5,
+        ),
+      ),
+      ty: Resolved(Class("Main")),
+    ),
+  ],
+)

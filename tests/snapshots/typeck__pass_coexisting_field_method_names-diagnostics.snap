@@ -1,0 +1,6 @@
+---
+source: tests/typeck.rs
+description: "class Main {\n    x : Int <- 42;\n\n    x(): Int {\n        x\n    };\n\n    main(): Object {\n        x()\n    };\n};\n"
+expression: "&diagnostics"
+---
+[]

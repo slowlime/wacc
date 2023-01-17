@@ -16,6 +16,5 @@ else
 endif
 endif
 
-
 coolc-parse-clean:
 	-rm $(COOL_PARSER_OUT)

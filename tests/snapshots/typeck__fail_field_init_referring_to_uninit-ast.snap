@@ -1,0 +1,411 @@
+---
+source: tests/typeck.rs
+description: "class Main {\n    x : Int <- x;\n    y1 : SELF_TYPE <- y2;\n    y2 : SELF_TYPE <- y3;\n    y3 : SELF_TYPE <- y1;\n\n    main(): Object {\n        0\n    };\n};\n"
+expression: "SnapshotData { failed, classes: &classes }"
+---
+SnapshotData(
+  failed: true,
+  classes: [
+    Class(
+      name: TyName(Name(Spanned(
+        value: "Main",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 6,
+            line: 1,
+            col: 7,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 9,
+            line: 1,
+            col: 10,
+          ),
+        ),
+      ))),
+      inherits: None,
+      features: [
+        Field(Field(Binding(
+          name: Name(Spanned(
+            value: "x",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 17,
+                line: 2,
+                col: 5,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 17,
+                line: 2,
+                col: 5,
+              ),
+            ),
+          )),
+          ty_name: TyName(Name(Spanned(
+            value: "Int",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 21,
+                line: 2,
+                col: 9,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 23,
+                line: 2,
+                col: 11,
+              ),
+            ),
+          ))),
+          init: Some(Name(NameExpr(
+            name: Name(Spanned(
+              value: "x",
+              span: Span(
+                start: Position(
+                  src: Some(SourceId(1)),
+                  byte: 28,
+                  line: 2,
+                  col: 16,
+                ),
+                end: Position(
+                  src: Some(SourceId(1)),
+                  byte: 28,
+                  line: 2,
+                  col: 16,
+                ),
+              ),
+            )),
+            ty: Some(Resolved(Bottom)),
+          ))),
+          span: Span(
+            start: Position(
+              src: Some(SourceId(1)),
+              byte: 17,
+              line: 2,
+              col: 5,
+            ),
+            end: Position(
+              src: Some(SourceId(1)),
+              byte: 17,
+              line: 2,
+              col: 5,
+            ),
+          ),
+          ty: Resolved(Builtin(Int)),
+        ))),
+        Field(Field(Binding(
+          name: Name(Spanned(
+            value: "y1",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 35,
+                line: 3,
+                col: 5,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 36,
+                line: 3,
+                col: 6,
+              ),
+            ),
+          )),
+          ty_name: TyName(Name(Spanned(
+            value: "SELF_TYPE",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 40,
+                line: 3,
+                col: 10,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 48,
+                line: 3,
+                col: 18,
+              ),
+            ),
+          ))),
+          init: Some(Name(NameExpr(
+            name: Name(Spanned(
+              value: "y2",
+              span: Span(
+                start: Position(
+                  src: Some(SourceId(1)),
+                  byte: 53,
+                  line: 3,
+                  col: 23,
+                ),
+                end: Position(
+                  src: Some(SourceId(1)),
+                  byte: 54,
+                  line: 3,
+                  col: 24,
+                ),
+              ),
+            )),
+            ty: Some(Resolved(Bottom)),
+          ))),
+          span: Span(
+            start: Position(
+              src: Some(SourceId(1)),
+              byte: 35,
+              line: 3,
+              col: 5,
+            ),
+            end: Position(
+              src: Some(SourceId(1)),
+              byte: 36,
+              line: 3,
+              col: 6,
+            ),
+          ),
+          ty: Resolved(SelfType(
+            enclosed: Class("Main"),
+          )),
+        ))),
+        Field(Field(Binding(
+          name: Name(Spanned(
+            value: "y2",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 61,
+                line: 4,
+                col: 5,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 62,
+                line: 4,
+                col: 6,
+              ),
+            ),
+          )),
+          ty_name: TyName(Name(Spanned(
+            value: "SELF_TYPE",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 66,
+                line: 4,
+                col: 10,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 74,
+                line: 4,
+                col: 18,
+              ),
+            ),
+          ))),
+          init: Some(Name(NameExpr(
+            name: Name(Spanned(
+              value: "y3",
+              span: Span(
+                start: Position(
+                  src: Some(SourceId(1)),
+                  byte: 79,
+                  line: 4,
+                  col: 23,
+                ),
+                end: Position(
+                  src: Some(SourceId(1)),
+                  byte: 80,
+                  line: 4,
+                  col: 24,
+                ),
+              ),
+            )),
+            ty: Some(Resolved(Bottom)),
+          ))),
+          span: Span(
+            start: Position(
+              src: Some(SourceId(1)),
+              byte: 61,
+              line: 4,
+              col: 5,
+            ),
+            end: Position(
+              src: Some(SourceId(1)),
+              byte: 62,
+              line: 4,
+              col: 6,
+            ),
+          ),
+          ty: Resolved(SelfType(
+            enclosed: Class("Main"),
+          )),
+        ))),
+        Field(Field(Binding(
+          name: Name(Spanned(
+            value: "y3",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 87,
+                line: 5,
+                col: 5,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 88,
+                line: 5,
+                col: 6,
+              ),
+            ),
+          )),
+          ty_name: TyName(Name(Spanned(
+            value: "SELF_TYPE",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 92,
+                line: 5,
+                col: 10,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 100,
+                line: 5,
+                col: 18,
+              ),
+            ),
+          ))),
+          init: Some(Name(NameExpr(
+            name: Name(Spanned(
+              value: "y1",
+              span: Span(
+                start: Position(
+                  src: Some(SourceId(1)),
+                  byte: 105,
+                  line: 5,
+                  col: 23,
+                ),
+                end: Position(
+                  src: Some(SourceId(1)),
+                  byte: 106,
+                  line: 5,
+                  col: 24,
+                ),
+              ),
+            )),
+            ty: Some(Resolved(SelfType(
+              enclosed: Class("Main"),
+            ))),
+          ))),
+          span: Span(
+            start: Position(
+              src: Some(SourceId(1)),
+              byte: 87,
+              line: 5,
+              col: 5,
+            ),
+            end: Position(
+              src: Some(SourceId(1)),
+              byte: 88,
+              line: 5,
+              col: 6,
+            ),
+          ),
+          ty: Resolved(SelfType(
+            enclosed: Class("Main"),
+          )),
+        ))),
+        Method(Method(
+          name: Name(Spanned(
+            value: "main",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 114,
+                line: 7,
+                col: 5,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 117,
+                line: 7,
+                col: 8,
+              ),
+            ),
+          )),
+          params: [],
+          return_ty: TyName(Name(Spanned(
+            value: "Object",
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 122,
+                line: 7,
+                col: 13,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 127,
+                line: 7,
+                col: 18,
+              ),
+            ),
+          ))),
+          body: Int(IntLit(Spanned(
+            value: 0,
+            span: Span(
+              start: Position(
+                src: Some(SourceId(1)),
+                byte: 139,
+                line: 8,
+                col: 9,
+              ),
+              end: Position(
+                src: Some(SourceId(1)),
+                byte: 139,
+                line: 8,
+                col: 9,
+              ),
+            ),
+          ))),
+          span: Span(
+            start: Position(
+              src: Some(SourceId(1)),
+              byte: 114,
+              line: 7,
+              col: 5,
+            ),
+            end: Position(
+              src: Some(SourceId(1)),
+              byte: 117,
+              line: 7,
+              col: 8,
+            ),
+          ),
+          ty: Resolved(Function(FunctionTy(
+            params: [],
+            ret: Builtin(Object),
+          ))),
+        )),
+      ],
+      span: Span(
+        start: Position(
+          src: Some(SourceId(1)),
+          byte: 0,
+          line: 1,
+          col: 1,
+        ),
+        end: Position(
+          src: Some(SourceId(1)),
+          byte: 4,
+          line: 1,
+          col: 5,
+        ),
+      ),
+      ty: Resolved(Class("Main")),
+    ),
+  ],
+)

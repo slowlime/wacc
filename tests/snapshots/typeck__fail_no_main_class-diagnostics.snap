@@ -1,0 +1,17 @@
+---
+source: tests/typeck.rs
+description: "class NotMain {\n    main(): Object {\n        0\n    };\n};\n"
+expression: "&diagnostics"
+---
+[
+    Diagnostic {
+        level: Error,
+        message: DiagnosticMessage {
+            span: None,
+            message: "no `Main` class found",
+        },
+        source: Some(
+            NoMainClass,
+        ),
+    },
+]

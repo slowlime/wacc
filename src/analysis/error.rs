@@ -1,13 +1,13 @@
 use std::borrow::Cow;
 use std::error::Error;
-use std::fmt::{self, Display};
+use std::fmt::{self, Debug, Display};
 use std::ops::Deref;
 
 use crate::analysis::typectx::{ClassName, DefinitionLocation};
 use crate::ast::ty::{BuiltinClass, ResolvedTy};
 use crate::ast::{Name, TyName};
 use crate::position::{HasSpan, Span};
-use crate::util::CloneStatic;
+use crate::util::{CloneStatic, slice_formatter};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IllegalSelfTypePosition {
@@ -43,10 +43,19 @@ impl Display for IllegalSelfTypePosition {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum UnrecognizedNamePosition<'buf> {
     Method(Cow<'buf, [u8]>),
     Field(Cow<'buf, [u8]>),
+}
+
+impl Debug for UnrecognizedNamePosition<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Method(name) => f.debug_tuple("Method").field(&slice_formatter(name)).finish(),
+            Self::Field(name) => f.debug_tuple("Field").field(&slice_formatter(name)).finish(),
+        }
+    }
 }
 
 impl CloneStatic<UnrecognizedNamePosition<'static>> for UnrecognizedNamePosition<'_> {
@@ -75,11 +84,21 @@ impl CloneStatic<UnrecognizedName<'static>> for UnrecognizedName<'_> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum UnrecognizedTyPosition<'buf> {
     Inherits,
     Method(Cow<'buf, [u8]>),
     Field(Cow<'buf, [u8]>),
+}
+
+impl Debug for UnrecognizedTyPosition<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Inherits => f.write_str("Inherits"),
+            Self::Method(name) => f.debug_tuple("Method").field(&slice_formatter(name)).finish(),
+            Self::Field(name) => f.debug_tuple("Field").field(&slice_formatter(name)).finish(),
+        }
+    }
 }
 
 impl CloneStatic<UnrecognizedTyPosition<'static>> for UnrecognizedTyPosition<'_> {

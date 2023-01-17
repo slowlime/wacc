@@ -1,0 +1,80 @@
+#1
+_program
+  #1
+  _class
+    Main
+    Object
+    "tests/typeck/pass_new.cl"
+    (
+    #2
+    _method
+      main
+      Object
+      #3
+      _let
+        object
+        Object
+        #3
+        _new
+          Object
+        : Object
+        #4
+        _let
+          int
+          Int
+          #4
+          _new
+            Int
+          : Int
+          #5
+          _let
+            string
+            String
+            #5
+            _new
+              String
+            : String
+            #6
+            _let
+              io
+              IO
+              #6
+              _new
+                IO
+              : IO
+              #7
+              _let
+                bool
+                Bool
+                #7
+                _new
+                  Bool
+                : Bool
+                #8
+                _let
+                  main
+                  Main
+                  #8
+                  _new
+                    Main
+                  : Main
+                  #9
+                  _let
+                    self_
+                    SELF_TYPE
+                    #9
+                    _new
+                      SELF_TYPE
+                    : SELF_TYPE
+                    #9
+                    _int
+                      0
+                    : Int
+                  : Int
+                : Int
+              : Int
+            : Int
+          : Int
+        : Int
+      : Int
+    )

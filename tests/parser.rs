@@ -1,14 +1,16 @@
-use std::borrow::Cow;
+mod common;
+
 use std::path::Path;
 
 use insta::assert_ron_snapshot;
-use once_cell::unsync::OnceCell;
 use paste::paste;
 use pretty_assertions::assert_str_eq;
 
 use wacc::ast::dump::{dump_ast, AstDumpFormat};
 use wacc::parse::{Cursor, Lexer, Parser};
 use wacc::source::{Source, SourceBuffer};
+
+use self::common::Dump;
 
 macro_rules! run_parser_test {
     ($filename:expr) => ({
@@ -32,43 +34,6 @@ macro_rules! run_parser_test {
         }, {
             assert_ron_snapshot!(parse_result);
         });
-
-        struct Dump<'a> {
-            bytes: Cow<'a, [u8]>,
-            string: OnceCell<String>,
-        }
-
-        impl PartialEq for Dump<'_> {
-            fn eq(&self, other: &Dump) -> bool {
-                self.bytes == other.bytes
-            }
-        }
-
-        impl AsRef<str> for Dump<'_> {
-            fn as_ref(&self) -> &str {
-                self.string.get_or_init(|| {
-                    String::from_utf8_lossy(&self.bytes).into_owned()
-                })
-            }
-        }
-
-        impl<'a> From<&'a [u8]> for Dump<'a> {
-            fn from(bytes: &'a [u8]) -> Self {
-                Self {
-                    bytes: Cow::Borrowed(bytes),
-                    string: OnceCell::new(),
-                }
-            }
-        }
-
-        impl From<Vec<u8>> for Dump<'_> {
-            fn from(bytes: Vec<u8>) -> Self {
-                Self {
-                    bytes: Cow::Owned(bytes),
-                    string: OnceCell::new(),
-                }
-            }
-        }
 
         let coolc_actual = Dump::from(match parse_result {
             Ok(ast) => {
@@ -105,7 +70,7 @@ macro_rules! run_parser_test {
                 }
             }
         )+
-    }
+    };
 }
 
 run_parser_test! {
