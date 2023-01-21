@@ -622,9 +622,7 @@ impl<'buf> AstVisitor<'buf> for CodegenVisitor<'_, '_, 'buf> {
         if let Some(init) = &expr.binding.init {
             result.extend(self.visit_expr(init));
         } else {
-            result.push(Instruction::RefNull(
-                self.make_ty_ref(local_ty_id, expr.binding.pos()),
-            ));
+            result.extend(self.cg.default_initializer_for(local_ty_id.into(), expr.binding.pos()));
         }
 
         let local_id = self
@@ -723,6 +721,8 @@ impl<'buf> AstVisitor<'buf> for CodegenVisitor<'_, '_, 'buf> {
     }
 
     fn visit_bin_op(&mut self, expr: &ast::BinOpExpr<'buf>) -> Self::Output {
+        use wast::core::*;
+
         use ast::BinOpKind;
 
         let mut result = vec![];
@@ -736,9 +736,42 @@ impl<'buf> AstVisitor<'buf> for CodegenVisitor<'_, '_, 'buf> {
             BinOpKind::Add => result.push(Instruction::I32Add),
             BinOpKind::Subtract => result.push(Instruction::I32Sub),
             BinOpKind::Multiply => result.push(Instruction::I32Mul),
-            BinOpKind::Divide => result.push(Instruction::I32DivS),
             BinOpKind::LessThan => result.push(Instruction::I32LtS),
             BinOpKind::LessEquals => result.push(Instruction::I32LeS),
+
+            BinOpKind::Divide => {
+                // if lhs is -2147483648 and lhs is -1, the result is undefined in wasm
+                // I'm not exactly sure how it is defined in Cool but I'm guessing it's -2147483648
+                let lhs_local = self.locals.bind(None, TyKind::I32);
+                let rhs_local = self.locals.bind(None, TyKind::I32);
+                result.push(rhs_local.wasm_set(expr.pos()));
+                result.push(lhs_local.wasm_tee(expr.pos()));
+                result.push(Instruction::I32Const(i32::MIN));
+                result.push(Instruction::I32Eq);
+                result.push(rhs_local.wasm_get(expr.pos()));
+                result.push(Instruction::I32Const(-1));
+                result.push(Instruction::I32Eq);
+                result.push(Instruction::I32And);
+
+                result.push(Instruction::If(BlockType {
+                    label: None,
+                    label_name: None,
+                    ty: TypeUse {
+                        index: None,
+                        inline: Some(FunctionType {
+                            params: Box::new([]),
+                            results: Box::new([ValType::I32]),
+                        }),
+                    },
+                }));
+                result.push(Instruction::I32Const(i32::MIN));
+
+                result.push(Instruction::Else(None));
+                result.push(lhs_local.wasm_get(expr.pos()));
+                result.push(rhs_local.wasm_get(expr.pos()));
+                result.push(Instruction::I32DivS);
+                result.push(Instruction::End(None));
+            },
 
             BinOpKind::Equals => match *expr.lhs.unwrap_res_ty() {
                 ResolvedTy::Builtin(BuiltinClass::Int) => {

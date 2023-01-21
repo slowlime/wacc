@@ -1,0 +1,7 @@
+"hello, world", len 12
+"hell", len 4
+"hell", len 4
+"", len 0
+"", len 0
+"o,", len 2
+"", len 0

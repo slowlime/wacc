@@ -235,14 +235,22 @@ fn run_wasm(wasm: Vec<u8>, input: &'static [u8]) -> Dump<'static> {
     let result = script.run(scope)
         .and_then(|value| v8::Local::<v8::Promise>::try_from(value).ok());
 
-    if let Some(promise) = result {
-        while promise.state() == v8::PromiseState::Pending {
-            v8::Platform::pump_message_loop(&V8_PLATFORM, scope, true);
-            scope.perform_microtask_checkpoint();
-        }
-    }
+    let exc = 'exc: {
+        if let Some(promise) = result {
+            while promise.state() == v8::PromiseState::Pending {
+                v8::Platform::pump_message_loop(&V8_PLATFORM, scope, true);
+                scope.perform_microtask_checkpoint();
+            }
 
-    if let Some(exc) = scope.exception() {
+            if promise.state() == v8::PromiseState::Rejected {
+                break 'exc Some(promise.result(scope));
+            }
+        };
+
+        scope.exception()
+    };
+
+    if let Some(exc) = exc {
         let msg = exc
             .to_detail_string(scope)
             .unwrap()
@@ -356,4 +364,11 @@ macro_rules! run_codegen_tests {
 run_codegen_tests! {
     print_string,
     print_int,
+    inheritance,
+    default_init,
+    string_ops,
+    case,
+    isvoid,
+    arith,
+    eq,
 }
