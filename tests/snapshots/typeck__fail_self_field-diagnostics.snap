@@ -1,0 +1,24 @@
+---
+source: tests/typeck.rs
+description: "class Main {\n    self : SELF_TYPE <- new SELF_TYPE;\n\n    main(): Object {\n        0\n    };\n};\n"
+expression: "&diagnostics"
+---
+[
+    Diagnostic {
+        level: Error,
+        message: DiagnosticMessage {
+            span: Some(
+                Span(2:5-8, bytes 17-20 in Some(SourceId(1))),
+            ),
+            message: "`self` cannot be used here",
+        },
+        source: Some(
+            IllegalSelf(
+                Name {
+                    span: Span(2:5-8, bytes 17-20 in Some(SourceId(1))),
+                    value: b"self",
+                },
+            ),
+        ),
+    },
+]

@@ -1,0 +1,98 @@
+---
+source: tests/typeck.rs
+description: "class A {};\nclass A {};\n"
+expression: "SnapshotData { failed, classes: &classes }"
+---
+SnapshotData(
+  failed: true,
+  classes: [
+    Class(
+      name: TyName(Name(Spanned(
+        value: "A",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 6,
+            line: 1,
+            col: 7,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 6,
+            line: 1,
+            col: 7,
+          ),
+        ),
+      ))),
+      inherits: None,
+      features: [],
+      span: Span(
+        start: Position(
+          src: Some(SourceId(1)),
+          byte: 0,
+          line: 1,
+          col: 1,
+        ),
+        end: Position(
+          src: Some(SourceId(1)),
+          byte: 4,
+          line: 1,
+          col: 5,
+        ),
+      ),
+      ty: Resolved(Class("A")),
+    ),
+    Class(
+      name: TyName(Name(Spanned(
+        value: "A",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 18,
+            line: 2,
+            col: 7,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 18,
+            line: 2,
+            col: 7,
+          ),
+        ),
+      ))),
+      inherits: None,
+      features: [],
+      span: Span(
+        start: Position(
+          src: Some(SourceId(1)),
+          byte: 12,
+          line: 2,
+          col: 1,
+        ),
+        end: Position(
+          src: Some(SourceId(1)),
+          byte: 16,
+          line: 2,
+          col: 5,
+        ),
+      ),
+      ty: Unresolved(Named(TyName(Name(Spanned(
+        value: "A",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 18,
+            line: 2,
+            col: 7,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 18,
+            line: 2,
+            col: 7,
+          ),
+        ),
+      ))))),
+    ),
+  ],
+)

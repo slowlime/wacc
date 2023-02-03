@@ -1,0 +1,146 @@
+---
+source: tests/typeck.rs
+description: "class Spam inherits Eggs {};\nclass Test inherits Spam {};\n"
+expression: "SnapshotData { failed, classes: &classes }"
+---
+SnapshotData(
+  failed: true,
+  classes: [
+    Class(
+      name: TyName(Name(Spanned(
+        value: "Spam",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 6,
+            line: 1,
+            col: 7,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 9,
+            line: 1,
+            col: 10,
+          ),
+        ),
+      ))),
+      inherits: Some(TyName(Name(Spanned(
+        value: "Eggs",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 20,
+            line: 1,
+            col: 21,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 23,
+            line: 1,
+            col: 24,
+          ),
+        ),
+      )))),
+      features: [],
+      span: Span(
+        start: Position(
+          src: Some(SourceId(1)),
+          byte: 0,
+          line: 1,
+          col: 1,
+        ),
+        end: Position(
+          src: Some(SourceId(1)),
+          byte: 4,
+          line: 1,
+          col: 5,
+        ),
+      ),
+      ty: Unresolved(Named(TyName(Name(Spanned(
+        value: "Spam",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 6,
+            line: 1,
+            col: 7,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 9,
+            line: 1,
+            col: 10,
+          ),
+        ),
+      ))))),
+    ),
+    Class(
+      name: TyName(Name(Spanned(
+        value: "Test",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 35,
+            line: 2,
+            col: 7,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 38,
+            line: 2,
+            col: 10,
+          ),
+        ),
+      ))),
+      inherits: Some(TyName(Name(Spanned(
+        value: "Spam",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 49,
+            line: 2,
+            col: 21,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 52,
+            line: 2,
+            col: 24,
+          ),
+        ),
+      )))),
+      features: [],
+      span: Span(
+        start: Position(
+          src: Some(SourceId(1)),
+          byte: 29,
+          line: 2,
+          col: 1,
+        ),
+        end: Position(
+          src: Some(SourceId(1)),
+          byte: 33,
+          line: 2,
+          col: 5,
+        ),
+      ),
+      ty: Unresolved(Named(TyName(Name(Spanned(
+        value: "Test",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 35,
+            line: 2,
+            col: 7,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 38,
+            line: 2,
+            col: 10,
+          ),
+        ),
+      ))))),
+    ),
+  ],
+)

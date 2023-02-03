@@ -197,6 +197,10 @@ impl<'buf> Lexer<'buf> {
         Self { cursor, eof: false }
     }
 
+    pub fn pos(&self) -> Position {
+        self.cursor.pos()
+    }
+
     fn create_error_at_pos(&self, kind: LexerErrorKind) -> PosLexerError {
         PosLexerError {
             end: self.cursor.pos(),

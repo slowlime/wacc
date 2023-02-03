@@ -183,7 +183,7 @@ impl<'e> Diagnostics<'e> {
     }
 
     fn emit(&mut self, diagnostic: Diagnostic) {
-        self.has_errors = diagnostic.level <= Level::Error;
+        self.has_errors = self.has_errors || diagnostic.level <= Level::Error;
         (self.emitter)(&diagnostic);
         self.diagnostics.push(diagnostic);
     }

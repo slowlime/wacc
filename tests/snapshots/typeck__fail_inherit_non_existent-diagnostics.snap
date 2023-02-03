@@ -1,0 +1,30 @@
+---
+source: tests/typeck.rs
+description: "class Spam inherits Eggs {};\nclass Test inherits Spam {};\n"
+expression: "&diagnostics"
+---
+[
+    Diagnostic {
+        level: Error,
+        message: DiagnosticMessage {
+            span: Some(
+                Span(1:21-24, bytes 20-23 in Some(SourceId(1))),
+            ),
+            message: "the type name `Eggs` is not recognized",
+        },
+        source: Some(
+            UnrecognizedTy(
+                UnrecognizedTy {
+                    ty_name: TyName {
+                        span: Span(1:21-24, bytes 20-23 in Some(SourceId(1))),
+                        value: b"Eggs",
+                    },
+                    class_name: Named(
+                        b"Spam",
+                    ),
+                    position: Inherits,
+                },
+            ),
+        ),
+    },
+]

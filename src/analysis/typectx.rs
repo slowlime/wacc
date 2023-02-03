@@ -218,9 +218,8 @@ impl<'buf> ClassIndex<'buf> {
         match self.fields.entry(name) {
             index_map::Entry::Occupied(entry) => {
                 panic!(
-                    "the field {} (location: {:?}) has already been added",
+                    "the field {} has already been added",
                     slice_formatter(entry.key()),
-                    location, // TODO: remove
                 );
             }
 

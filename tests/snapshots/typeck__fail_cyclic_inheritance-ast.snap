@@ -1,0 +1,318 @@
+---
+source: tests/typeck.rs
+description: "class A inherits B {};\nclass B inherits A {};\nclass C inherits B {};\nclass D inherits D {};\nclass E {};\n"
+expression: "SnapshotData { failed, classes: &classes }"
+---
+SnapshotData(
+  failed: true,
+  classes: [
+    Class(
+      name: TyName(Name(Spanned(
+        value: "A",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 6,
+            line: 1,
+            col: 7,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 6,
+            line: 1,
+            col: 7,
+          ),
+        ),
+      ))),
+      inherits: Some(TyName(Name(Spanned(
+        value: "B",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 17,
+            line: 1,
+            col: 18,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 17,
+            line: 1,
+            col: 18,
+          ),
+        ),
+      )))),
+      features: [],
+      span: Span(
+        start: Position(
+          src: Some(SourceId(1)),
+          byte: 0,
+          line: 1,
+          col: 1,
+        ),
+        end: Position(
+          src: Some(SourceId(1)),
+          byte: 4,
+          line: 1,
+          col: 5,
+        ),
+      ),
+      ty: Unresolved(Named(TyName(Name(Spanned(
+        value: "A",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 6,
+            line: 1,
+            col: 7,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 6,
+            line: 1,
+            col: 7,
+          ),
+        ),
+      ))))),
+    ),
+    Class(
+      name: TyName(Name(Spanned(
+        value: "B",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 29,
+            line: 2,
+            col: 7,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 29,
+            line: 2,
+            col: 7,
+          ),
+        ),
+      ))),
+      inherits: Some(TyName(Name(Spanned(
+        value: "A",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 40,
+            line: 2,
+            col: 18,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 40,
+            line: 2,
+            col: 18,
+          ),
+        ),
+      )))),
+      features: [],
+      span: Span(
+        start: Position(
+          src: Some(SourceId(1)),
+          byte: 23,
+          line: 2,
+          col: 1,
+        ),
+        end: Position(
+          src: Some(SourceId(1)),
+          byte: 27,
+          line: 2,
+          col: 5,
+        ),
+      ),
+      ty: Unresolved(Named(TyName(Name(Spanned(
+        value: "B",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 29,
+            line: 2,
+            col: 7,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 29,
+            line: 2,
+            col: 7,
+          ),
+        ),
+      ))))),
+    ),
+    Class(
+      name: TyName(Name(Spanned(
+        value: "C",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 52,
+            line: 3,
+            col: 7,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 52,
+            line: 3,
+            col: 7,
+          ),
+        ),
+      ))),
+      inherits: Some(TyName(Name(Spanned(
+        value: "B",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 63,
+            line: 3,
+            col: 18,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 63,
+            line: 3,
+            col: 18,
+          ),
+        ),
+      )))),
+      features: [],
+      span: Span(
+        start: Position(
+          src: Some(SourceId(1)),
+          byte: 46,
+          line: 3,
+          col: 1,
+        ),
+        end: Position(
+          src: Some(SourceId(1)),
+          byte: 50,
+          line: 3,
+          col: 5,
+        ),
+      ),
+      ty: Unresolved(Named(TyName(Name(Spanned(
+        value: "C",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 52,
+            line: 3,
+            col: 7,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 52,
+            line: 3,
+            col: 7,
+          ),
+        ),
+      ))))),
+    ),
+    Class(
+      name: TyName(Name(Spanned(
+        value: "D",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 75,
+            line: 4,
+            col: 7,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 75,
+            line: 4,
+            col: 7,
+          ),
+        ),
+      ))),
+      inherits: Some(TyName(Name(Spanned(
+        value: "D",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 86,
+            line: 4,
+            col: 18,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 86,
+            line: 4,
+            col: 18,
+          ),
+        ),
+      )))),
+      features: [],
+      span: Span(
+        start: Position(
+          src: Some(SourceId(1)),
+          byte: 69,
+          line: 4,
+          col: 1,
+        ),
+        end: Position(
+          src: Some(SourceId(1)),
+          byte: 73,
+          line: 4,
+          col: 5,
+        ),
+      ),
+      ty: Unresolved(Named(TyName(Name(Spanned(
+        value: "D",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 75,
+            line: 4,
+            col: 7,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 75,
+            line: 4,
+            col: 7,
+          ),
+        ),
+      ))))),
+    ),
+    Class(
+      name: TyName(Name(Spanned(
+        value: "E",
+        span: Span(
+          start: Position(
+            src: Some(SourceId(1)),
+            byte: 98,
+            line: 5,
+            col: 7,
+          ),
+          end: Position(
+            src: Some(SourceId(1)),
+            byte: 98,
+            line: 5,
+            col: 7,
+          ),
+        ),
+      ))),
+      inherits: None,
+      features: [],
+      span: Span(
+        start: Position(
+          src: Some(SourceId(1)),
+          byte: 92,
+          line: 5,
+          col: 1,
+        ),
+        end: Position(
+          src: Some(SourceId(1)),
+          byte: 96,
+          line: 5,
+          col: 5,
+        ),
+      ),
+      ty: Resolved(Class("E")),
+    ),
+  ],
+)

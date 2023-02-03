@@ -318,10 +318,14 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
             name_map: HashMap<ClassName<'buf>, &'cls TyName<'buf>>,
         }
 
-        let name_map = ty_indexes
+        // it's important that the iterator over ty_indexes comes AFTER
+        // we process all the ignored entries:
+        // if a class is defined multiple times, the "right" one will be indexed
+        // so any uses of its name should refer to the "right" one
+        // (as if the duplicates didn't exist)
+        let name_map = ignored
             .iter()
-            .map(|(ty_name, _)| ty_name)
-            .chain(ignored.iter())
+            .chain(ty_indexes.iter().map(|(ty_name, _)| ty_name))
             .map(|&ty_name| (ty_name.into(), ty_name))
             .collect::<HashMap<_, _>>();
 
@@ -405,7 +409,7 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
                 .iter()
                 .map(|name| {
                     if self.ctx.get_class(name).is_some() {
-                        return (name.clone(), Unvisited);
+                        return (name.clone(), Visited);
                     }
 
                     let ty_name = indexes
@@ -423,6 +427,24 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
                     )
                 })
                 .collect::<HashMap<_, _>>();
+
+            // make sure children of ignored classes are also ignored
+            // (we pretend ignored classes do not exist)
+            for (name, &state) in &visited {
+                if state == Ignored {
+                    continue;
+                }
+
+                match get_parent(self, &indexes, name) {
+                    Some(parent) if visited[parent] == Ignored => {
+                        ignored.insert(indexes.name_map[name]);
+
+                        continue 'outer;
+                    }
+
+                    _ => {}
+                }
+            }
 
             let mut sorted = vec![];
 
@@ -455,7 +477,10 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
                             match get_parent(self, &indexes, &name)
                                 .map(|parent| (parent, visited[parent]))
                             {
-                                None | Some((_, Ignored | Visited)) => {}
+                                None => {}
+
+                                Some((_, Ignored | Visited)) => {}
+
                                 Some((parent, Unvisited)) => {
                                     discover(&mut stack, &mut visited, parent.clone())
                                 }
@@ -467,13 +492,15 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
                                 }
                             }
 
-                            *visited.get_mut(&name).unwrap() = Visited;
-
                             if self.ctx.get_class(&name).is_none() {
                                 chain.push(name.clone());
                             }
                         }
                     }
+                }
+
+                for name in &chain {
+                    *visited.get_mut(name).unwrap() = Visited;
                 }
 
                 sorted.extend(chain.into_iter().rev());
@@ -662,7 +689,7 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
         &mut self,
         class_ty: &ResolvedTy<'buf>,
         ast::Field(ast::Binding { name, ty_name, .. }): &'a ast::Field<'buf>,
-    ) -> (&'a Name<'buf>, DefinitionLocation, ResolvedTy<'buf>) {
+    ) -> Option<(&'a Name<'buf>, DefinitionLocation, ResolvedTy<'buf>)> {
         let ty = self.resolve_ty_name(
             ty_name,
             TyNameCtx::invariant()
@@ -673,7 +700,8 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
         );
         // ty can be Untyped
 
-        (name, name.span().into_owned().into(), ty)
+        // the error will be emitted by the main checker
+        (name.as_slice() != b"self").then_some((name, name.span().into_owned().into(), ty))
     }
 
     fn resolve_class<'a>(
@@ -738,7 +766,7 @@ impl<'dia, 'emt, 'buf, 'cls> ClassResolver<'dia, 'emt, 'buf, 'cls> {
 
         let fields = fields
             .into_iter()
-            .map(|field| self.resolve_field(&class_ty, field))
+            .flat_map(|field| self.resolve_field(&class_ty, field))
             .collect::<Vec<_>>();
         index.add_fields(self.check_duplicate_definitions(
             fields,

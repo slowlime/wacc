@@ -1,0 +1,54 @@
+---
+source: tests/typeck.rs
+description: "class A inherits B {};\nclass B inherits A {};\nclass C inherits B {};\nclass D inherits D {};\nclass E {};\n"
+expression: "&diagnostics"
+---
+[
+    Diagnostic {
+        level: Error,
+        message: DiagnosticMessage {
+            span: Some(
+                Span(1:7, 6 bytes into Some(SourceId(1))),
+            ),
+            message: "an inheritance cycle containing `A` has been detected",
+        },
+        source: Some(
+            InheritanceCycle {
+                ty_name: TyName {
+                    span: Span(1:7, 6 bytes into Some(SourceId(1))),
+                    value: b"A",
+                },
+                cycle: [
+                    Named(
+                        b"A",
+                    ),
+                    Named(
+                        b"B",
+                    ),
+                ],
+            },
+        ),
+    },
+    Diagnostic {
+        level: Error,
+        message: DiagnosticMessage {
+            span: Some(
+                Span(4:7, 75 bytes into Some(SourceId(1))),
+            ),
+            message: "an inheritance cycle containing `D` has been detected",
+        },
+        source: Some(
+            InheritanceCycle {
+                ty_name: TyName {
+                    span: Span(4:7, 75 bytes into Some(SourceId(1))),
+                    value: b"D",
+                },
+                cycle: [
+                    Named(
+                        b"D",
+                    ),
+                ],
+            },
+        ),
+    },
+]
