@@ -61,7 +61,7 @@ const imports = {
   },
 };
 
-async function run(url) {
+async function runWasm(url) {
   const module = await WebAssembly.instantiateStreaming(fetch(url), imports);
   exports = module.instance.exports;
 

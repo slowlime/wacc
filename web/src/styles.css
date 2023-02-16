@@ -1,0 +1,22 @@
+body {
+  display: grid;
+  grid: "header header" 2em "editor terminal" 1fr / 1fr 1fr;
+}
+
+header {
+  grid-area: header;
+}
+
+#editor {
+  grid-area: editor;
+}
+
+#editor-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+#terminal {
+  grid-area: terminal;
+}
