@@ -20,7 +20,8 @@
   "homepage": "https://github.com/slowlime/wacc#readme",
   "dependencies": {
     "ace-builds": "^1.15.1",
-    "xterm": "^5.1.0"
+    "xterm": "^5.1.0",
+    "xterm-addon-fit": "^0.7.0"
   },
   "devDependencies": {
     "@babel/core": "^7.20.12",

@@ -1,10 +1,15 @@
 body {
   display: grid;
   grid: "header header" 2em "editor terminal" 1fr / 1fr 1fr;
+  width: 100%;
+  height: 100vh;
+  margin: 0;
 }
 
 header {
   grid-area: header;
+  place-self: center stretch;
+  padding: 0.5em;
 }
 
 #editor {
@@ -17,6 +22,13 @@ header {
   height: 100%;
 }
 
-#terminal {
+#terminal-container {
   grid-area: terminal;
+  height: 100%;
+}
+
+#terminal {
+  position: absolute;
+  width: 100%;
+  height: 100%;
 }
