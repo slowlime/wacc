@@ -61,8 +61,8 @@ const imports = {
   },
 };
 
-async function runWasm(url) {
-  const module = await WebAssembly.instantiateStreaming(fetch(url), imports);
+export async function runCoolWasm(wasm) {
+  const module = await WebAssembly.instantiate(wasm, imports);
   exports = module.instance.exports;
 
   exports.run();
