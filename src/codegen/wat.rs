@@ -95,8 +95,8 @@ macro_rules! quote_wat {
     ([$pos:expr] instr $instrs:ident @ (ref.cast :$binding:ident)) => ($instrs.push(
         Instruction::RefCast($binding.to_wasm_index($pos))
     ));
-    ([$pos:expr] instr $instrs:ident @ (ref.as_data)) => ($instrs.push(
-        Instruction::RefAsData,
+    ([$pos:expr] instr $instrs:ident @ (ref.as_array)) => ($instrs.push(
+        Instruction::RefAsArray,
     ));
     ([$pos:expr] instr $instrs:ident @ (extern.externalize)) => ($instrs.push(Instruction::ExternExternalize));
     ([$pos:expr] instr $instrs:ident @ (extern.internalize)) => ($instrs.push(Instruction::ExternInternalize));
