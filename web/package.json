@@ -21,7 +21,8 @@
   "dependencies": {
     "ace-builds": "^1.15.1",
     "xterm": "^5.1.0",
-    "xterm-addon-fit": "^0.7.0"
+    "xterm-addon-fit": "^0.7.0",
+    "xterm-pty": "^0.9.4"
   },
   "devDependencies": {
     "@babel/core": "^7.20.12",

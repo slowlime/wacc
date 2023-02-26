@@ -25,6 +25,7 @@ header {
 #terminal-container {
   grid-area: terminal;
   height: 100%;
+  position: relative;
 }
 
 #terminal {
