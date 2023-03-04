@@ -1,0 +1,4 @@
+[env]
+# for some reason this option is critical for correct operation
+GN_ARGS = "v8_enable_shared_ro_heap=true"
+V8_FROM_SOURCE = "1"
