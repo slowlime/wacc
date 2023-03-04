@@ -7,7 +7,7 @@ import 'xterm/css/xterm.css';
 const wacc = import('../target/wacc');
 
 import './styles.css';
-import { runCoolWasm } from './run.js';
+import { CoolRuntime } from './cool.js';
 
 const codeEditor = ace.edit('code');
 const inputEditor = ace.edit('input');
@@ -32,11 +32,20 @@ function createTerminal(id) {
 const slavePty = createTerminal('output');
 slavePty.write('Hello world!');
 
+const runtime = new CoolRuntime({
+  reader: () => 'test',
+  writer: (buf) => {
+    slavePty.write(buf);
+  },
+});
+
 wacc
   .then(m => {
     window.run = async function(code) {
       const wasm = m.compile_from_string(code);
-      await runCoolWasm(wasm);
+      const cool = await runtime.instantiate(wasm);
+
+      cool.run();
     };
   })
   .catch(console.error);
