@@ -9,12 +9,12 @@ const wacc = import('../target/wacc');
 import './styles.css';
 import { runCoolWasm } from './run.js';
 
-let terminal;
-const editor = ace.edit('editor-inner');
+const codeEditor = ace.edit('code');
+const inputEditor = ace.edit('input');
 
-function createTerminal() {
-  const element = document.getElementById('terminal');
-  terminal = new Terminal({ cols: 2, rows: 1 });
+function createTerminal(id) {
+  const element = document.getElementById(id);
+  const terminal = new Terminal({ cols: 2, rows: 1 });
   const termFit = new FitAddon();
   const { master, slave } = openpty();
   terminal.loadAddon(master);
@@ -29,7 +29,7 @@ function createTerminal() {
   return slave;
 }
 
-const slavePty = createTerminal();
+const slavePty = createTerminal('output');
 slavePty.write('Hello world!');
 
 wacc

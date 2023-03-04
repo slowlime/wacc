@@ -1,6 +1,10 @@
 body {
   display: grid;
-  grid: "header header" 2em "editor terminal" 1fr / 1fr 1fr;
+  grid:
+    "header header" 2em
+    "code input" 1fr
+    "code output" 1fr
+    / 1fr 1fr;
   width: 100%;
   height: 100vh;
   margin: 0;
@@ -12,23 +16,23 @@ header {
   padding: 0.5em;
 }
 
-#editor {
-  grid-area: editor;
+#code-container {
+  grid-area: code;
 }
 
-#editor-inner {
+#input-container {
+  grid-area: input;
+}
+
+#output-container {
+  grid-area: output;
+}
+
+.container {
   position: relative;
-  width: 100%;
-  height: 100%;
 }
 
-#terminal-container {
-  grid-area: terminal;
-  height: 100%;
-  position: relative;
-}
-
-#terminal {
+.container > div {
   position: absolute;
   width: 100%;
   height: 100%;
