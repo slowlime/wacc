@@ -645,7 +645,7 @@ impl<'a, 'buf> Codegen<'a, 'buf, CompleteWasmTy<'buf>> {
 
             instrs.push(Instruction::Call(read_line_func_id.to_wasm_index(0)));
             instrs.push(Instruction::ExternInternalize);
-            instrs.push(Instruction::RefAsData);
+            instrs.push(Instruction::RefAsArray);
             instrs.push(Instruction::RefCast(bytes_ty_id.to_wasm_index(0)));
             instrs.extend(visitor.r#box(&BuiltinClass::String.into(), 0));
             // stack: <string: String>
