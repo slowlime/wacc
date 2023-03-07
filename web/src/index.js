@@ -11,6 +11,7 @@ import { CoolRuntime } from './cool.js';
 
 const codeEditor = ace.edit('code');
 const inputEditor = ace.edit('input');
+let slavePty;
 
 function createTerminal(id) {
   const element = document.getElementById(id);
@@ -29,23 +30,52 @@ function createTerminal(id) {
   return slave;
 }
 
-const slavePty = createTerminal('output');
-slavePty.write('Hello world!');
+function makeReader(data) {
+  const lines = data.split('\n');
+  let nextIndex = 0;
 
-const runtime = new CoolRuntime({
-  reader: () => 'test',
-  writer: (buf) => {
-    slavePty.write(buf);
-  },
-});
+  return () => lines[nextIndex++];
+}
+
+function clearTerminal(pty) {
+  const ERASE_DISPLAY = '\x1b[2J';
+  const RESET_CURSOR = '\x1b[H';
+
+  pty.write(RESET_CURSOR + ERASE_DISPLAY);
+}
+
+function makeButtonClickedListener(compiler) {
+  return async () => {
+    // reset the terminal
+    clearTerminal(slavePty);
+
+    // grab the code and input data
+    const code = codeEditor.getValue();
+    const input = inputEditor.getValue();
+
+    const runtime = new CoolRuntime({
+      reader: makeReader(input),
+      writer: (buf) => {
+        slavePty.write(buf);
+      },
+    });
+
+    const wasm = compiler.compile_from_string(code);
+    const cool = await runtime.instantiate(wasm);
+
+    cool.run();
+  };
+};
+
+slavePty = createTerminal('output');
+slavePty.write('Loading...');
+
+const runButton = document.getElementById('run');
 
 wacc
-  .then(m => {
-    window.run = async function(code) {
-      const wasm = m.compile_from_string(code);
-      const cool = await runtime.instantiate(wasm);
-
-      cool.run();
-    };
+  .then(compiler => {
+    clearTerminal(slavePty);
+    slavePty.write('Press "Run" to execute the code!');
+    runButton.onclick = makeButtonClickedListener(compiler);
   })
   .catch(console.error);
