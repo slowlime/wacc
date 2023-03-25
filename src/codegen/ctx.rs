@@ -38,6 +38,17 @@ impl TyId {
             wast::token::Span::from_offset(pos),
         )
     }
+
+    pub fn to_heap_type(&self, pos: usize) -> wast::core::HeapType<'static> {
+        wast::core::HeapType::Index(self.to_wasm_index(pos))
+    }
+
+    pub fn to_cast_arg(&self, pos: usize) -> wast::core::CastArg<'static> {
+        wast::core::CastArg {
+            nullable: true,
+            heap: self.to_heap_type(pos),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]

@@ -192,22 +192,16 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
     }
 
     fn make_method_ref(&self, method_id: MethodId, pos: usize) -> HeapType<'static> {
-        HeapType::Index(
-            self.method_by_id(method_id)
-                .1
-                .method_ty_id
-                .to_wasm_index(pos),
-        )
-    }
-
-    fn make_ty_ref(&self, ty_id: TyId, pos: usize) -> HeapType<'static> {
-        HeapType::Index(ty_id.to_wasm_index(pos))
+        self.method_by_id(method_id)
+            .1
+            .method_ty_id
+            .to_heap_type(pos)
     }
 
     fn reify_self_ty(&self, ty: &ResolvedTy<'buf>, pos: usize) -> Option<Instruction<'static>> {
         match ty {
             ResolvedTy::SelfType { .. } => {
-                Some(Instruction::RefCast(self.self_ty_id().to_wasm_index(pos)))
+                Some(Instruction::RefCast(self.self_ty_id().to_cast_arg(pos)))
             }
             _ => None,
         }
@@ -304,7 +298,7 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
             self.make_method_ref(constructor_method_id, pos),
         ));
         // stack: <that: Object>
-        result.push(Instruction::RefCast(self.self_ty_id().to_wasm_index(pos)));
+        result.push(Instruction::RefCast(self.self_ty_id().to_cast_arg(pos)));
 
         result
     }
@@ -326,7 +320,7 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
             .unwrap();
 
         result.push(Instruction::Call(constructor_func_id.to_wasm_index(pos)));
-        result.push(Instruction::RefCast(ty_id.to_wasm_index(pos)));
+        result.push(Instruction::RefCast(ty_id.to_cast_arg(pos)));
 
         result
     }
@@ -368,7 +362,7 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
     fn push_self(&self, pos: usize) -> Vec<Instruction<'static>> {
         vec![
             self.locals.get(b"self").unwrap().wasm_get(pos),
-            Instruction::RefCast(self.self_ty_id().to_wasm_index(pos)),
+            Instruction::RefCast(self.self_ty_id().to_cast_arg(pos)),
         ]
     }
 
@@ -408,7 +402,7 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
         // local receiver_temp = <receiver>
 
         result.push(Instruction::RefCast(
-            self.object_ty_id().to_wasm_index(expr.method.pos()),
+            self.object_ty_id().to_cast_arg(expr.method.pos()),
         ));
         result.push(Instruction::StructGet(StructAccess {
             r#struct: self.object_ty_id().to_wasm_index(expr.method.pos()),
@@ -484,7 +478,7 @@ impl<'buf> AstVisitor<'buf> for CodegenVisitor<'_, '_, 'buf> {
         };
 
         let ty_id = self.ty_id_for_resolved_ty(expr.unwrap_res_ty().into_owned());
-        instrs.push(Instruction::RefCast(ty_id.to_wasm_index(expr.pos())));
+        instrs.push(Instruction::RefCast(ty_id.to_cast_arg(expr.pos())));
 
         instrs
     }
@@ -538,7 +532,7 @@ impl<'buf> AstVisitor<'buf> for CodegenVisitor<'_, '_, 'buf> {
                     params: Box::new([]),
                     results: Box::new([ValType::Ref(RefType {
                         nullable: true,
-                        heap: self.make_ty_ref(ty_id, expr.antecedent.pos()),
+                        heap: ty_id.to_heap_type(expr.antecedent.pos()),
                     })]),
                 }),
             },
@@ -595,7 +589,7 @@ impl<'buf> AstVisitor<'buf> for CodegenVisitor<'_, '_, 'buf> {
 
         // push a dummy Object
         result.push(Instruction::RefNull(
-            self.make_ty_ref(self.object_ty_id(), expr.pos()),
+            self.object_ty_id().to_heap_type(expr.pos()),
         ));
 
         result
@@ -649,7 +643,7 @@ impl<'buf> AstVisitor<'buf> for CodegenVisitor<'_, '_, 'buf> {
                     params: Box::new([]),
                     results: Box::new([ValType::Ref(RefType {
                         nullable: true,
-                        heap: self.make_ty_ref(ty_id, expr.pos()),
+                        heap: ty_id.to_heap_type(expr.pos()),
                     })]),
                 }),
             },
@@ -673,7 +667,7 @@ impl<'buf> AstVisitor<'buf> for CodegenVisitor<'_, '_, 'buf> {
                             params: Box::new([]),
                             results: Box::new([ValType::Ref(RefType {
                                 nullable: true,
-                                heap: self.make_ty_ref(scrutinee_ty_id, arm.pos()),
+                                heap: scrutinee_ty_id.to_heap_type(arm.pos()),
                             })]),
                         }),
                     },
@@ -686,7 +680,7 @@ impl<'buf> AstVisitor<'buf> for CodegenVisitor<'_, '_, 'buf> {
             } else {
                 result.push(scrutinee_local_id.wasm_get(0));
                 result.push(Instruction::RefCast(
-                    arm_ty_id.to_wasm_index(arm.binding_ty_name.pos()),
+                    arm_ty_id.to_cast_arg(arm.binding_ty_name.pos()),
                 ));
             }
 
@@ -694,7 +688,7 @@ impl<'buf> AstVisitor<'buf> for CodegenVisitor<'_, '_, 'buf> {
             result.push(arm_local_id.wasm_set(arm.name.pos()));
             result.extend(self.visit_expr(&arm.expr));
             drop(arm_local_id);
-            result.push(Instruction::RefCast(ty_id.to_wasm_index(arm.expr.pos())));
+            result.push(Instruction::RefCast(ty_id.to_cast_arg(arm.expr.pos())));
 
             if idx + 1 < expr.arms.len() {
                 result.push(Instruction::Br(WasmIndex::Num(

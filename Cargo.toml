@@ -18,7 +18,8 @@ byte_string = "1.0"
 take_mut = "0.2"
 indexmap = "1.9"
 owo-colors = { version = "3.5.0", features = ["supports-colors"] }
-wast = "55.0.0"
+# wast = "55.0.0"
+wast = { git = "https://github.com/slowlime/wasm-tools", branch = "gc-cast-encoding" }
 paste = "1.0.12"
 ron = "0.8.0"
 serde = { version = "1", features = ["derive"] }

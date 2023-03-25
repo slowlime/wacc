@@ -31,7 +31,7 @@ fn make_ref_type<'buf>(
         WasmTy::Regular(RegularTy::Class(_) | RegularTy::ByteArray) | WasmTy::Func { .. } => {
             RefType {
                 nullable,
-                heap: HeapType::Index(ty_index.get_by_wasm_ty(ty).unwrap().to_wasm_index(pos)),
+                heap: ty_index.get_by_wasm_ty(ty).unwrap().to_heap_type(pos),
             }
         }
     }
