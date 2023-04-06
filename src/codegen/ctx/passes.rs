@@ -16,7 +16,7 @@ pub use super::layout::compute_layout;
 pub fn collect_types<'buf>(
     sorted: &[ClassName<'buf>],
     ty_ctx: &TypeCtx<'buf>,
-) -> TyIndex<'buf, WasmTy<'buf>> {
+) -> TyIndex<'buf, 'buf, WasmTy<'buf>> {
     let span = trace_span!("collect_types");
     let _span = span.enter();
 
@@ -77,7 +77,7 @@ pub fn collect_types<'buf>(
 pub fn enumerate_methods<'buf>(
     sorted: &[ClassName<'buf>],
     ty_ctx: &TypeCtx<'buf>,
-    ty_index: &TyIndex<'buf, WasmTy<'buf>>,
+    ty_index: &TyIndex<'buf, 'buf, WasmTy<'buf>>,
 ) -> MethodIndex<'buf> {
     let span = trace_span!("enumerate_methods");
     let _span = span.enter();
@@ -129,7 +129,7 @@ pub fn enumerate_methods<'buf>(
 
 pub fn create_method_table<'buf>(
     ty_ctx: &TypeCtx<'buf>,
-    ty_index: &TyIndex<'buf, WasmTy<'buf>>,
+    ty_index: &TyIndex<'buf, 'buf, WasmTy<'buf>>,
     method_index: &MethodIndex<'buf>,
 ) -> MethodTable {
     let mut method_table = MethodTable::new();
@@ -166,7 +166,7 @@ pub fn create_method_table<'buf>(
 
 pub fn create_vtable<'buf>(
     ty_ctx: &TypeCtx<'buf>,
-    ty_index: &TyIndex<'buf, WasmTy<'buf>>,
+    ty_index: &TyIndex<'buf, 'buf, WasmTy<'buf>>,
     method_index: &MethodIndex<'buf>,
     method_table: &MethodTable,
 ) -> Vtable {

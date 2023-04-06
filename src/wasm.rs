@@ -65,11 +65,11 @@ pub fn compile_from_string(code: &str) -> Result<Vec<u8>, String> {
     let method_table = cg_passes::create_method_table(&ty_ctx, &ty_index, &method_index);
     let vtable = cg_passes::create_vtable(&ty_ctx, &ty_index, &method_index, &method_table);
     let mut field_table = FieldTable::new();
-    let ty_index = cg_passes::compute_layout(&ty_ctx, &ty_index, &mut field_table);
+    let storage = AuxiliaryStorage::new();
+    let ty_index = cg_passes::compute_layout(&storage, &ty_ctx, &ty_index, &mut field_table);
     let string_table = cg_passes::collect_strings(&classes);
-    let mut storage = AuxiliaryStorage::new();
     let mut codegen_out = cg_passes::lower(
-        &mut storage,
+        &storage,
         ty_ctx,
         ty_index,
         method_index,

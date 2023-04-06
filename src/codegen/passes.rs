@@ -16,9 +16,9 @@ pub fn collect_strings<'buf>(classes: &[Class<'buf>]) -> StringTable<'buf> {
 // haha, you call this too many?
 #[allow(clippy::too_many_arguments)]
 pub fn lower<'buf, 'aux>(
-    storage: &'aux mut AuxiliaryStorage,
+    storage: &'aux AuxiliaryStorage,
     ty_ctx: TypeCtx<'buf>,
-    ty_index: TyIndex<'buf, CompleteWasmTy<'buf>>,
+    ty_index: TyIndex<'buf, 'aux, CompleteWasmTy<'buf, 'aux>>,
     method_index: MethodIndex<'buf>,
     method_table: MethodTable,
     vtable: Vtable,

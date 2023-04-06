@@ -1,6 +1,7 @@
 use std::borrow::Cow;
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell};
 use std::marker::PhantomData;
+use std::ops::Deref;
 
 use indexmap::IndexMap;
 use tracing::{error, trace, trace_span};
@@ -64,6 +65,19 @@ pub struct LocalCtx<'buf> {
     bindings: RefCell<IndexMap<Cow<'buf, [u8]>, Vec<LocalRef>>>,
 }
 
+pub struct LocalNameRef<'a> {
+    bindings: Ref<'a, IndexMap<Cow<'a, [u8]>, Vec<LocalRef>>>,
+    idx: usize,
+}
+
+impl Deref for LocalNameRef<'_> {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        &**self.bindings.get_index(self.idx).unwrap().0
+    }
+}
+
 #[derive(Debug)]
 pub struct LocalId<'ctx, 'buf> {
     ctx: &'ctx LocalCtx<'buf>,
@@ -92,6 +106,16 @@ impl LocalId<'_, '_> {
         let locals = self.ctx.locals.borrow();
 
         locals[self.idx].make_ref()
+    }
+
+    pub fn name(&self) -> Option<LocalNameRef<'_>> {
+        let binding_idx = self.binding_idx?;
+        let r = self.ctx.bindings.borrow();
+
+        (binding_idx < r.len()).then_some(LocalNameRef {
+            bindings: r,
+            idx: binding_idx,
+        })
     }
 }
 

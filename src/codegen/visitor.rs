@@ -46,7 +46,10 @@ pub struct CodegenVisitor<'buf, 'cg> {
     params: Vec<LocalId<'cg, 'buf>>,
 }
 
-impl<'buf, 'cg> CodegenVisitor<'buf, 'cg> {
+impl<'buf, 'cg> CodegenVisitor<'buf, 'cg>
+where
+    'buf: 'cg,
+{
     pub fn new(
         cg: &'cg Codegen<'buf, 'cg, 'cg>,
         method_id: MethodId,
@@ -80,11 +83,11 @@ impl<'buf, 'cg> CodegenVisitor<'buf, 'cg> {
         self.def().method_ty_id
     }
 
-    fn method_complete_ty(&self) -> &'cg CompleteWasmTy<'buf> {
+    fn method_complete_ty(&self) -> &'cg CompleteWasmTy<'buf, 'cg> {
         self.get_ty(self.method_ty_id())
     }
 
-    fn get_ty(&self, ty_id: TyId) -> &'cg CompleteWasmTy<'buf> {
+    fn get_ty(&self, ty_id: TyId) -> &'cg CompleteWasmTy<'buf, 'cg> {
         let Some(ty) = self.cg.ty_index.get_by_id(ty_id) else {
             panic!("The type id {:?} was not found in the type index", ty_id);
         };

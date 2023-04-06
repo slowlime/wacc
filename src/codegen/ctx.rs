@@ -84,7 +84,7 @@ impl From<TyId> for TyKind {
     }
 }
 
-pub trait TyIndexEntry<'buf>: private::Sealed + Hash + Eq + 'buf
+pub trait TyIndexEntry<'buf>: private::Sealed + Hash + Eq
 where
     WasmTy<'buf>: Equivalent<Self>,
 {
@@ -92,12 +92,13 @@ where
 }
 
 #[derive(Debug, Clone)]
-pub struct TyIndex<'buf, T: TyIndexEntry<'buf>>
+pub struct TyIndex<'buf, 'aux, T: TyIndexEntry<'buf>>
 where
     WasmTy<'buf>: Equivalent<T>,
+    'buf: 'aux,
 {
     types: IndexSet<T>,
-    _marker: PhantomData<&'buf mut ()>,
+    _marker: PhantomData<(&'buf mut (), &'aux ())>,
 }
 
 impl private::Sealed for WasmTy<'_> {}
@@ -109,41 +110,41 @@ impl<'buf> TyIndexEntry<'buf> for WasmTy<'buf> {
 }
 
 #[derive(Debug)]
-pub struct CompleteWasmTy<'buf> {
-    pub complete_ty: wast::core::Type<'static>,
+pub struct CompleteWasmTy<'buf, 'aux> {
+    pub complete_ty: wast::core::Type<'aux>,
     pub wasm_ty: WasmTy<'buf>,
     _private: PhantomData<()>,
 }
 
-impl PartialEq for CompleteWasmTy<'_> {
+impl PartialEq for CompleteWasmTy<'_, '_> {
     fn eq(&self, other: &Self) -> bool {
         self.wasm_ty == other.wasm_ty
     }
 }
 
-impl Eq for CompleteWasmTy<'_> {}
+impl Eq for CompleteWasmTy<'_, '_> {}
 
-impl Hash for CompleteWasmTy<'_> {
+impl Hash for CompleteWasmTy<'_, '_> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.wasm_ty.hash(state);
     }
 }
 
-impl<'buf> Equivalent<CompleteWasmTy<'buf>> for WasmTy<'buf> {
-    fn equivalent(&self, key: &CompleteWasmTy<'buf>) -> bool {
+impl<'buf, 'aux> Equivalent<CompleteWasmTy<'buf, 'aux>> for WasmTy<'buf> {
+    fn equivalent(&self, key: &CompleteWasmTy<'buf, 'aux>) -> bool {
         self == &key.wasm_ty
     }
 }
 
-impl private::Sealed for CompleteWasmTy<'_> {}
+impl private::Sealed for CompleteWasmTy<'_, '_> {}
 
-impl<'buf> TyIndexEntry<'buf> for CompleteWasmTy<'buf> {
+impl<'buf, 'aux> TyIndexEntry<'buf> for CompleteWasmTy<'buf, 'aux> {
     fn wasm_ty(&self) -> &WasmTy<'buf> {
         &self.wasm_ty
     }
 }
 
-impl<'buf> TyIndex<'buf, WasmTy<'buf>> {
+impl<'buf> TyIndex<'buf, 'buf, WasmTy<'buf>> {
     pub fn new() -> Self {
         Self {
             types: IndexSet::new(),
@@ -171,13 +172,16 @@ impl<'buf> TyIndex<'buf, WasmTy<'buf>> {
     }
 }
 
-impl<'buf> Default for TyIndex<'buf, WasmTy<'buf>> {
+impl<'buf> Default for TyIndex<'buf, 'buf, WasmTy<'buf>> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<'buf> TyIndex<'buf, CompleteWasmTy<'buf>> {
+impl<'buf, 'aux> TyIndex<'buf, 'aux, CompleteWasmTy<'buf, 'aux>>
+where
+    'buf: 'aux,
+{
     pub fn new() -> Self {
         Self {
             types: IndexSet::new(),
@@ -187,7 +191,7 @@ impl<'buf> TyIndex<'buf, CompleteWasmTy<'buf>> {
 
     pub(super) fn insert(
         &mut self,
-        complete_ty: wast::core::Type<'static>,
+        complete_ty: wast::core::Type<'aux>,
         wasm_ty: WasmTy<'buf>,
     ) -> TyId {
         assert!(wasm_ty.is_boxed());
@@ -208,8 +212,8 @@ impl<'buf> TyIndex<'buf, CompleteWasmTy<'buf>> {
     pub fn extract_completed_tys(
         self,
     ) -> (
-        impl Iterator<Item = (TyId, wast::core::Type<'static>)>,
-        TyIndex<'buf, WasmTy<'buf>>,
+        impl Iterator<Item = (TyId, wast::core::Type<'aux>)>,
+        TyIndex<'buf, 'buf, WasmTy<'buf>>,
     ) {
         let (complete_tys, wasm_tys): (Vec<_>, IndexSet<_>) = self
             .types
@@ -237,15 +241,16 @@ impl<'buf> TyIndex<'buf, CompleteWasmTy<'buf>> {
     }
 }
 
-impl<'buf> Default for TyIndex<'buf, CompleteWasmTy<'buf>> {
+impl<'buf, 'aux> Default for TyIndex<'buf, 'aux, CompleteWasmTy<'buf, 'aux>> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<'buf, T: TyIndexEntry<'buf>> TyIndex<'buf, T>
+impl<'buf, 'aux, T: TyIndexEntry<'buf>> TyIndex<'buf, 'aux, T>
 where
     WasmTy<'buf>: Equivalent<T>,
+    'buf: 'aux,
 {
     pub fn get_by_wasm_ty(&self, ty: &WasmTy<'buf>) -> Option<TyId> {
         self.types.get_index_of(ty).map(TyId)

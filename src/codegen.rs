@@ -148,13 +148,15 @@ pub struct CodegenOutput<'aux> {
     pub module: wast::core::Module<'aux>,
 }
 
-pub struct Codegen<'buf, 'aux, 'a, T: TyIndexEntry<'buf> = CompleteWasmTy<'buf>>
+pub struct Codegen<'buf, 'aux, 'a, T: TyIndexEntry<'buf> + 'aux = CompleteWasmTy<'buf, 'aux>>
 where
     WasmTy<'buf>: Equivalent<T>,
+    'buf: 'aux,
+    'buf: 'a,
 {
     storage: &'aux AuxiliaryStorage,
     ty_ctx: TypeCtx<'buf>,
-    ty_index: TyIndex<'buf, T>,
+    ty_index: TyIndex<'buf, 'aux, T>,
     method_index: MethodIndex<'buf>,
     method_table: MethodTable,
     vtable: Vtable,
@@ -165,13 +167,17 @@ where
     funcs: IndexMap<MethodId, wast::core::Func<'aux>>,
 }
 
-impl<'buf, 'aux, 'a> Codegen<'buf, 'aux, 'a, CompleteWasmTy<'buf>> {
+impl<'buf, 'aux, 'a> Codegen<'buf, 'aux, 'a, CompleteWasmTy<'buf, 'aux>>
+where
+    'buf: 'aux,
+    'buf: 'a,
+{
     // yeah clippy, I know
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        storage: &'aux mut AuxiliaryStorage,
+        storage: &'aux AuxiliaryStorage,
         ty_ctx: TypeCtx<'buf>,
-        ty_index: TyIndex<'buf, CompleteWasmTy<'buf>>,
+        ty_index: TyIndex<'buf, 'aux, CompleteWasmTy<'buf, 'aux>>,
         method_index: MethodIndex<'buf>,
         method_table: MethodTable,
         vtable: Vtable,
@@ -1517,14 +1523,14 @@ where
         self.ty_index.get_by_wasm_ty(&builtin.into()).unwrap()
     }
 
-    fn make_func<'a>(
+    fn make_func<'n>(
         &self,
-        instrs: Vec<Instruction<'a>>,
+        instrs: Vec<Instruction<'n>>,
         locals: LocalCtx<'buf>,
         method_ty_id: TyId,
         pos: usize,
-        name: &'a str,
-    ) -> wast::core::Func<'a> {
+        name: &'n str,
+    ) -> wast::core::Func<'n> {
         use wast::core::*;
 
         let WasmTy::Func { ref params, .. } = self.ty_index.get_by_id(method_ty_id).unwrap().wasm_ty() else {

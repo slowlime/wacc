@@ -1,7 +1,10 @@
 use std::borrow::Cow;
 
+use wast::token::NameAnnotation;
+
 use crate::analysis::{ClassName, DefinitionLocation, TypeCtx};
 use crate::ast::ty::BuiltinClass;
+use crate::codegen::AuxiliaryStorage;
 use crate::codegen::ctx::ty::RegularTy;
 use crate::codegen::ctx::TyKind;
 use crate::util::slice_formatter;
@@ -12,7 +15,7 @@ pub const VTABLE_FIELD_NAME: &[u8] = b"{vtable}";
 pub const VALUE_FIELD_NAME: &[u8] = b"{value}";
 
 fn make_ref_type<'buf>(
-    ty_index: &TyIndex<'buf, WasmTy<'buf>>,
+    ty_index: &TyIndex<'buf, 'buf, WasmTy<'buf>>,
     ty: &WasmTy<'buf>,
     nullable: bool,
     pos: usize,
@@ -38,7 +41,7 @@ fn make_ref_type<'buf>(
 }
 
 fn make_val_type<'buf>(
-    ty_index: &TyIndex<'buf, WasmTy<'buf>>,
+    ty_index: &TyIndex<'buf, 'buf, WasmTy<'buf>>,
     ty: &WasmTy<'buf>,
     nullable: bool,
     pos: usize,
@@ -52,7 +55,7 @@ fn make_val_type<'buf>(
 }
 
 pub fn make_storage_type<'buf>(
-    ty_index: &TyIndex<'buf, WasmTy<'buf>>,
+    ty_index: &TyIndex<'buf, 'buf, WasmTy<'buf>>,
     ty: &WasmTy<'buf>,
     nullable: bool,
     pos: usize,
@@ -71,12 +74,13 @@ pub fn class_pos<'buf>(ty_ctx: &TypeCtx<'buf>, class_name: &ClassName<'buf>) -> 
     }
 }
 
-fn complete_class<'buf>(
+fn complete_class<'buf, 'aux>(
+    storage: &'aux AuxiliaryStorage,
     ty_ctx: &TypeCtx<'buf>,
-    ty_index: &TyIndex<'buf, WasmTy<'buf>>,
+    ty_index: &TyIndex<'buf, 'buf, WasmTy<'buf>>,
     field_table: &mut FieldTable<'buf>,
     ty_id: TyId,
-) -> wast::core::Type<'static> {
+) -> wast::core::Type<'aux> {
     use wast::core::*;
 
     // the first field stores the vtable base offset
@@ -158,14 +162,16 @@ fn complete_class<'buf>(
     Type {
         span: wast::token::Span::from_offset(class_pos(ty_ctx, class_name)),
         id: None,
-        name: None,
+        name: Some(NameAnnotation {
+            name: storage.get(&class_name.to_string()),
+        }),
         def: TypeDef::Struct(StructType { fields }),
         parent,
     }
 }
 
 fn complete_func<'buf>(
-    ty_index: &TyIndex<'buf, WasmTy<'buf>>,
+    ty_index: &TyIndex<'buf, 'buf, WasmTy<'buf>>,
     params: &[RegularTy<'buf>],
     ret: Option<&RegularTy<'buf>>,
 ) -> wast::core::Type<'static> {
@@ -205,7 +211,7 @@ fn complete_byte_array() -> wast::core::Type<'static> {
     wast::core::Type {
         span: Span::from_offset(0),
         id: None,
-        name: None,
+        name: Some(NameAnnotation { name: "bytes" }),
         def: TypeDef::Array(ArrayType {
             mutable: true,
             ty: StorageType::I8,
@@ -214,40 +220,38 @@ fn complete_byte_array() -> wast::core::Type<'static> {
     }
 }
 
-fn complete_wasm_ty<'buf>(
+fn complete_wasm_ty<'buf, 'aux>(
+    storage: &'aux AuxiliaryStorage,
     ty_ctx: &TypeCtx<'buf>,
-    ty_index: &TyIndex<'buf, WasmTy<'buf>>,
+    ty_index: &TyIndex<'buf, 'buf, WasmTy<'buf>>,
     field_table: &mut FieldTable<'buf>,
     ty_id: TyId,
     wasm_ty: &WasmTy<'buf>,
-) -> wast::core::Type<'static> {
+) -> wast::core::Type<'aux> {
     match wasm_ty {
         WasmTy::Regular(RegularTy::I32) => unreachable!(),
         WasmTy::Regular(RegularTy::Extern) => unreachable!(),
         WasmTy::Regular(RegularTy::ByteArray) => complete_byte_array(),
         WasmTy::Regular(RegularTy::Class(_)) => {
-            complete_class(ty_ctx, ty_index, field_table, ty_id)
+            complete_class(storage, ty_ctx, ty_index, field_table, ty_id)
         }
         WasmTy::Func { params, ret } => complete_func(ty_index, params, ret.as_ref()),
     }
 }
 
-pub fn compute_layout<'buf>(
+pub fn compute_layout<'buf, 'aux>(
+    storage: &'aux AuxiliaryStorage,
     ty_ctx: &TypeCtx<'buf>,
-    ty_index: &TyIndex<'buf, WasmTy<'buf>>,
+    ty_index: &TyIndex<'buf, 'buf, WasmTy<'buf>>,
     field_table: &mut FieldTable<'buf>,
-) -> TyIndex<'buf, CompleteWasmTy<'buf>> {
+) -> TyIndex<'buf, 'aux, CompleteWasmTy<'buf, 'aux>> {
     let mut result = TyIndex::<CompleteWasmTy>::new();
 
     for (ty_id, wasm_ty) in ty_index.iter() {
         let complete_ty =
-            super::layout::complete_wasm_ty(ty_ctx, ty_index, field_table, ty_id, wasm_ty);
+            super::layout::complete_wasm_ty(storage, ty_ctx, ty_index, field_table, ty_id, wasm_ty);
         result.insert(complete_ty, wasm_ty.clone());
     }
-
-    // XXX: need to figure out how stable the type indices are
-    // In particular, we rely on the ty_ids and type indices coinciding in the compiled wasm module.
-    // If it turns out they don't, we're gonna have a bad time.
 
     result
 }

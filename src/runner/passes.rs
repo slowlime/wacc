@@ -204,7 +204,7 @@ pub fn collect_types<'buf>(
     _ctx: &mut RunnerCtx<'buf, '_>,
     sorted: &[ClassName<'buf>],
     ty_ctx: &TypeCtx<'buf>,
-) -> PassOutput<TyIndex<'buf, WasmTy<'buf>>> {
+) -> PassOutput<TyIndex<'buf, 'buf, WasmTy<'buf>>> {
     PassOutput::continue_with_output(cg_passes::collect_types(sorted, ty_ctx))
 }
 
@@ -212,7 +212,7 @@ pub fn enumerate_methods<'buf>(
     _ctx: &mut RunnerCtx<'buf, '_>,
     sorted: &[ClassName<'buf>],
     ty_ctx: &TypeCtx<'buf>,
-    ty_index: &TyIndex<'buf, WasmTy<'buf>>,
+    ty_index: &TyIndex<'buf, 'buf, WasmTy<'buf>>,
 ) -> PassOutput<MethodIndex<'buf>> {
     PassOutput::continue_with_output(cg_passes::enumerate_methods(sorted, ty_ctx, ty_index))
 }
@@ -220,7 +220,7 @@ pub fn enumerate_methods<'buf>(
 pub fn create_method_table<'buf>(
     _ctx: &mut RunnerCtx<'buf, '_>,
     ty_ctx: &TypeCtx<'buf>,
-    ty_index: &TyIndex<'buf, WasmTy<'buf>>,
+    ty_index: &TyIndex<'buf, 'buf, WasmTy<'buf>>,
     method_index: &MethodIndex<'buf>,
 ) -> PassOutput<MethodTable> {
     PassOutput::continue_with_output(cg_passes::create_method_table(
@@ -233,7 +233,7 @@ pub fn create_method_table<'buf>(
 pub fn create_vtable<'buf>(
     _ctx: &mut RunnerCtx<'buf, '_>,
     ty_ctx: &TypeCtx<'buf>,
-    ty_index: &TyIndex<'buf, WasmTy<'buf>>,
+    ty_index: &TyIndex<'buf, 'buf, WasmTy<'buf>>,
     method_index: &MethodIndex<'buf>,
     method_table: &MethodTable,
 ) -> PassOutput<Vtable> {
@@ -245,13 +245,14 @@ pub fn create_vtable<'buf>(
     ))
 }
 
-pub fn compute_layout<'buf>(
+pub fn compute_layout<'buf, 'aux>(
     _ctx: &mut RunnerCtx<'buf, '_>,
+    storage: &'aux AuxiliaryStorage,
     ty_ctx: &TypeCtx<'buf>,
-    ty_index: TyIndex<'buf, WasmTy<'buf>>,
-) -> PassOutput<(FieldTable<'buf>, TyIndex<'buf, CompleteWasmTy<'buf>>)> {
+    ty_index: TyIndex<'buf, 'buf, WasmTy<'buf>>,
+) -> PassOutput<(FieldTable<'buf>, TyIndex<'buf, 'aux, CompleteWasmTy<'buf, 'aux>>)> {
     let mut field_table = FieldTable::new();
-    let ty_index = cg_passes::compute_layout(ty_ctx, &ty_index, &mut field_table);
+    let ty_index = cg_passes::compute_layout(storage, ty_ctx, &ty_index, &mut field_table);
 
     PassOutput::continue_with_output((field_table, ty_index))
 }
@@ -268,9 +269,9 @@ pub fn collect_strings<'buf>(
 #[allow(clippy::too_many_arguments)]
 pub fn codegen<'buf, 'aux>(
     _ctx: &mut RunnerCtx<'buf, '_>,
-    storage: &'aux mut AuxiliaryStorage,
+    storage: &'aux AuxiliaryStorage,
     ty_ctx: TypeCtx<'buf>,
-    ty_index: TyIndex<'buf, CompleteWasmTy<'buf>>,
+    ty_index: TyIndex<'buf, 'aux, CompleteWasmTy<'buf, 'aux>>,
     method_index: MethodIndex<'buf>,
     method_table: MethodTable,
     vtable: Vtable,
