@@ -148,7 +148,7 @@ pub struct CodegenOutput<'aux> {
     pub module: wast::core::Module<'aux>,
 }
 
-pub struct Codegen<'a, 'buf, 'aux, T: TyIndexEntry<'buf> = CompleteWasmTy<'buf>>
+pub struct Codegen<'buf, 'aux, 'a, T: TyIndexEntry<'buf> = CompleteWasmTy<'buf>>
 where
     WasmTy<'buf>: Equivalent<T>,
 {
@@ -165,7 +165,7 @@ where
     funcs: IndexMap<MethodId, wast::core::Func<'aux>>,
 }
 
-impl<'a, 'buf, 'aux> Codegen<'a, 'buf, 'aux, CompleteWasmTy<'buf>> {
+impl<'buf, 'aux, 'a> Codegen<'buf, 'aux, 'a, CompleteWasmTy<'buf>> {
     // yeah clippy, I know
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -281,7 +281,7 @@ impl<'a, 'buf, 'aux> Codegen<'a, 'buf, 'aux, CompleteWasmTy<'buf>> {
         this.generate_module(rec_decl)
     }
 
-    fn generate_rec_decl(self) -> (Codegen<'a, 'buf, 'aux, WasmTy<'buf>>, wast::core::Rec<'aux>) {
+    fn generate_rec_decl(self) -> (Codegen<'buf, 'aux, 'a, WasmTy<'buf>>, wast::core::Rec<'aux>) {
         use wast::core::*;
 
         let (types, ty_index) = self.ty_index.extract_completed_tys();
@@ -1129,7 +1129,7 @@ impl<'a, 'buf, 'aux> Codegen<'a, 'buf, 'aux, CompleteWasmTy<'buf>> {
     }
 }
 
-impl<'a, 'buf, 'aux> Codegen<'a, 'buf, 'aux, WasmTy<'buf>> {
+impl<'buf, 'aux> Codegen<'buf, 'aux, '_, WasmTy<'buf>> {
     fn generate_module(mut self, rec_decl: wast::core::Rec<'aux>) -> wast::core::Module<'aux> {
         use wast::core::*;
 
@@ -1147,7 +1147,7 @@ impl<'a, 'buf, 'aux> Codegen<'a, 'buf, 'aux, WasmTy<'buf>> {
         Module {
             span: WasmSpan::from_offset(0),
             id: None,
-            name: None,
+            name: Some(NameAnnotation { name: "compiled-cool-program" }),
             kind: ModuleKind::Text(module_fields),
         }
     }
@@ -1179,7 +1179,7 @@ impl<'a, 'buf, 'aux> Codegen<'a, 'buf, 'aux, WasmTy<'buf>> {
                     item: ItemSig {
                         span: WasmSpan::from_offset(0),
                         id: None,
-                        name: None,
+                        name: Some(NameAnnotation { name: "cool-runtime-support" }),
                         kind: ItemKind::Func(TypeUse {
                             index: Some(func_ty_id.to_wasm_index(0)),
                             inline: None,
@@ -1244,7 +1244,9 @@ impl<'a, 'buf, 'aux> Codegen<'a, 'buf, 'aux, WasmTy<'buf>> {
             result.push(ModuleField::Table(Table {
                 span: WasmSpan::from_offset(0),
                 id: None,
-                name: None,
+                name: Some(NameAnnotation {
+                    name: self.storage.get(&format!("method-table-ty-{}", method_ty_id.index())),
+                }),
                 exports: InlineExport { names: vec![] },
                 kind: TableKind::Normal {
                     ty: TableType {
@@ -1262,10 +1264,17 @@ impl<'a, 'buf, 'aux> Codegen<'a, 'buf, 'aux, WasmTy<'buf>> {
             }));
 
             for (idx, func_id) in func_ids.into_iter().enumerate() {
+                let name = match self.func_registry.get_by_id(func_id) {
+                    Some((name, _)) => format!("method-table-ty-{}-func-{}", method_ty_id.index(), name),
+                    None => format!("method-table-ty-{}-idx-{}", method_ty_id.index(), func_id.index()),
+                };
+
                 result.push(ModuleField::Elem(Elem {
                     span: WasmSpan::from_offset(0),
                     id: None,
-                    name: None,
+                    name: Some(NameAnnotation {
+                        name: self.storage.get(&name),
+                    }),
                     kind: ElemKind::Active {
                         table: table_id.to_wasm_index(0),
                         offset: Expression {
@@ -1301,7 +1310,9 @@ impl<'a, 'buf, 'aux> Codegen<'a, 'buf, 'aux, WasmTy<'buf>> {
         let memory = Memory {
             span: WasmSpan::from_offset(0),
             id: None,
-            name: None,
+            name: Some(NameAnnotation {
+                name: "cool-vtable",
+            }),
             exports: InlineExport { names: vec![] },
             kind: MemoryKind::Normal(MemoryType::B32 {
                 limits: Limits {
@@ -1338,7 +1349,9 @@ impl<'a, 'buf, 'aux> Codegen<'a, 'buf, 'aux, WasmTy<'buf>> {
         let data = Data {
             span: WasmSpan::from_offset(0),
             id: None,
-            name: None,
+            name: Some(NameAnnotation {
+                name: "cool-vtable",
+            }),
             kind: DataKind::Active {
                 memory: WasmIndex::Num(0, WasmSpan::from_offset(0)),
                 offset: Expression {
@@ -1441,7 +1454,7 @@ impl<'a, 'buf, 'aux> Codegen<'a, 'buf, 'aux, WasmTy<'buf>> {
     }
 }
 
-impl<'buf, 'aux, T: TyIndexEntry<'buf>> Codegen<'_, 'buf, 'aux, T>
+impl<'buf, 'aux, T: TyIndexEntry<'buf>> Codegen<'buf, 'aux, '_, T>
 where
     WasmTy<'buf>: Equivalent<T>,
 {
@@ -1504,7 +1517,7 @@ where
         self.ty_index.get_by_wasm_ty(&builtin.into()).unwrap()
     }
 
-    fn make_func<'a: 'aux>(
+    fn make_func<'a>(
         &self,
         instrs: Vec<Instruction<'a>>,
         locals: LocalCtx<'buf>,

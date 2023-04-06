@@ -10,7 +10,7 @@ use super::process_locals;
 use super::wat::quote_wat;
 use super::Codegen;
 
-impl<'buf> Codegen<'_, 'buf, '_, WasmTy<'buf>> {
+impl<'buf> Codegen<'buf, '_, '_, WasmTy<'buf>> {
     pub(super) fn generate_string_eq(&self) -> wast::core::Func<'static> {
         let func = BUILTIN_FUNCS.get(BuiltinFuncKey::StringEq);
         let func_ty_id = self.ty_index.get_by_wasm_ty(&func.ty).unwrap();
