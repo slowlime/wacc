@@ -10,7 +10,7 @@ use super::process_locals;
 use super::wat::quote_wat;
 use super::Codegen;
 
-impl<'buf> Codegen<'_, 'buf, WasmTy<'buf>> {
+impl<'buf> Codegen<'_, 'buf, '_, WasmTy<'buf>> {
     pub(super) fn generate_string_eq(&self) -> wast::core::Func<'static> {
         let func = BUILTIN_FUNCS.get(BuiltinFuncKey::StringEq);
         let func_ty_id = self.ty_index.get_by_wasm_ty(&func.ty).unwrap();
@@ -34,7 +34,7 @@ impl<'buf> Codegen<'_, 'buf, WasmTy<'buf>> {
                 let idx_local = locals.bind(None, TyKind::I32);
             })
             (span 0)
-            (func (type :func_ty_id) (local {process_locals(locals, 2, 0)})
+            (func (@ BuiltinFuncKey::StringEq.as_str()) (type :func_ty_id) (local {process_locals(locals, 2, 0)})
               (local.get :lhs_local) // <lhs: $bytes>
               (array.len)            // <lhs.len: i32>
               (local.get :rhs_local) // <lhs.len: i32> <rhs: $bytes>
@@ -108,7 +108,7 @@ impl<'buf> Codegen<'_, 'buf, WasmTy<'buf>> {
                 let result_local = locals.bind(None, bytes_ty_id);
             })
             (span 0)
-            (func (type :func_ty_id) (local {process_locals(locals, 2, 0)})
+            (func (@ BuiltinFuncKey::StringConcat.as_str()) (type :func_ty_id) (local {process_locals(locals, 2, 0)})
               (local.get :lhs_local) // <lhs: $bytes>
               (array.len)            // <lhs.len: i32>
               (local.get :rhs_local) // <lhs.len: i32> <rhs: $bytes>
@@ -205,7 +205,7 @@ impl<'buf> Codegen<'_, 'buf, WasmTy<'buf>> {
                 let result_local = locals.bind(None, bytes_ty_id);
             })
             (span 0)
-            (func (type :func_ty_id) (local {process_locals(locals, 3, 0)})
+            (func (@ BuiltinFuncKey::StringSubstr.as_str()) (type :func_ty_id) (local {process_locals(locals, 3, 0)})
               // we're going to allocate an array of length `len`
               // so make sure it's at least not larger than the input array...
               (local.get :len_local) // <len: i32>
@@ -272,7 +272,7 @@ impl<'buf> Codegen<'_, 'buf, WasmTy<'buf>> {
                 let len_local = locals.bind(None, TyKind::I32);
             })
             (span 0)
-            (func (type :func_ty_id) (local {process_locals(locals, 1, 0)})
+            (func (@ BuiltinFuncKey::BytesNew.as_str()) (type :func_ty_id) (local {process_locals(locals, 1, 0)})
               (local.get :len_local)
               (array.new_canon_default :bytes_ty_id)
               (extern.externalize))
@@ -294,7 +294,7 @@ impl<'buf> Codegen<'_, 'buf, WasmTy<'buf>> {
                 let bytes_local = locals.bind(None, TyKind::Extern);
             })
             (span 0)
-            (func (type :func_ty_id) (local {process_locals(locals, 1, 0)})
+            (func (@ BuiltinFuncKey::BytesLen.as_str()) (type :func_ty_id) (local {process_locals(locals, 1, 0)})
               (local.get :bytes_local)
               (extern.internalize)
               (ref.cast :bytes_ty_id)
@@ -318,7 +318,7 @@ impl<'buf> Codegen<'_, 'buf, WasmTy<'buf>> {
                 let idx_local = locals.bind(None, TyKind::I32);
             })
             (span 0)
-            (func (type :func_ty_id) (local {process_locals(locals, 2, 0)})
+            (func (@ BuiltinFuncKey::BytesGet.as_str()) (type :func_ty_id) (local {process_locals(locals, 2, 0)})
               (local.get :bytes_local)
               (extern.internalize)
               (ref.cast :bytes_ty_id)
@@ -344,7 +344,7 @@ impl<'buf> Codegen<'_, 'buf, WasmTy<'buf>> {
                 let value_local = locals.bind(None, TyKind::I32);
             })
             (span 0)
-            (func (type :func_ty_id) (local {process_locals(locals, 3, 0)})
+            (func (@ BuiltinFuncKey::BytesSet.as_str()) (type :func_ty_id) (local {process_locals(locals, 3, 0)})
               (local.get :bytes_local)
               (extern.internalize)
               (ref.cast :bytes_ty_id)

@@ -9,7 +9,7 @@ use pretty_assertions::assert_str_eq;
 
 use wacc::analysis::{self, TypeChecker, TypeckResult};
 use wacc::codegen::ctx::FieldTable;
-use wacc::codegen::passes as cg_passes;
+use wacc::codegen::{passes as cg_passes, AuxiliaryStorage};
 use wacc::errors::Diagnostics;
 use wacc::parse::{Cursor, Lexer, Parser};
 use wacc::source::{Source, SourceBuffer};
@@ -322,7 +322,9 @@ fn run_codegen_test_inner(code: &'static [u8], expected: &'static [u8], filename
     let mut field_table = FieldTable::new();
     let ty_index = cg_passes::compute_layout(&ty_ctx, &ty_index, &mut field_table);
     let string_table = cg_passes::collect_strings(&classes);
+    let mut storage = AuxiliaryStorage::new();
     let mut codegen_out = cg_passes::lower(
+        &mut storage,
         ty_ctx,
         ty_index,
         method_index,

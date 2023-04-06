@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::process::ExitCode;
 use std::rc::Rc;
 
+use wacc::codegen::AuxiliaryStorage;
 use wacc::errors::Diagnostics;
 use wacc::source::{Source, SourceBuffer};
 
@@ -123,10 +124,12 @@ fn run(mut ctx: RunnerCtx<'_, '_>) -> ExitCode {
     let (field_table, ty_index) =
         return_if_stopped!(ctx, passes::compute_layout(&mut ctx, &ty_ctx, ty_index));
     let string_table = return_if_stopped!(ctx, passes::collect_strings(&mut ctx, &classes));
+    let mut storage = AuxiliaryStorage::new();
     let codegen_out = return_if_stopped!(
         ctx,
         passes::codegen(
             &mut ctx,
+            &mut storage,
             ty_ctx,
             ty_index,
             method_index,

@@ -5,6 +5,7 @@ use wasm_bindgen::prelude::*;
 use crate::analysis::{self, TypeChecker, TypeckResult};
 use crate::codegen::ctx::FieldTable;
 use crate::codegen::passes as cg_passes;
+use crate::codegen::AuxiliaryStorage;
 use crate::errors::Diagnostics;
 use crate::parse::{Cursor, Lexer, Parser};
 use crate::source::{Source, SourceBuffer};
@@ -66,7 +67,9 @@ pub fn compile_from_string(code: &str) -> Result<Vec<u8>, String> {
     let mut field_table = FieldTable::new();
     let ty_index = cg_passes::compute_layout(&ty_ctx, &ty_index, &mut field_table);
     let string_table = cg_passes::collect_strings(&classes);
+    let mut storage = AuxiliaryStorage::new();
     let mut codegen_out = cg_passes::lower(
+        &mut storage,
         ty_ctx,
         ty_index,
         method_index,

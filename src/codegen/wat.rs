@@ -5,7 +5,7 @@ macro_rules! quote_wat {
     (
         $((pre {$($pre:tt)+}))?
         (span $pos:expr)
-        (func (type :$type:ident) (local {$($local:tt)+}) $($sexpr:tt)*)
+        (func (@ $name:expr) (type :$type:ident) (local {$($local:tt)+}) $($sexpr:tt)*)
     ) => ({
         #[allow(unused_imports)]
         use wast::core::*;
@@ -13,8 +13,9 @@ macro_rules! quote_wat {
         use wast::token::Index as WasmIndex;
         #[allow(unused_imports)]
         use wast::token::Span as WasmSpan;
+        use wast::token::NameAnnotation;
 
-        quote_wat!([$pos] func/body $((pre {$($pre)+}))? (type :$type) (local {$($local)+}) @ $($sexpr)*)
+        quote_wat!([$pos] func/body (@ $name) $((pre {$($pre)+}))? (type :$type) (local {$($local)+}) @ $($sexpr)*)
     });
 
     ([$pos:expr] type_use @ :$type:ident) => (TypeUse {
@@ -62,7 +63,7 @@ macro_rules! quote_wat {
         inline: None,
     });
 
-    ([$pos:expr] func/body $((pre {$($pre:tt)+}))? (type :$type:ident) (local {$($local:tt)+}) @ $($instr:tt)*) => ({
+    ([$pos:expr] func/body (@ $name:expr) $((pre {$($pre:tt)+}))? (type :$type:ident) (local {$($local:tt)+}) @ $($instr:tt)*) => ({
         #[allow(unused_mut)]
         let mut instrs = vec![];
         {
@@ -77,7 +78,7 @@ macro_rules! quote_wat {
         Func {
             span: WasmSpan::from_offset($pos),
             id: None,
-            name: None,
+            name: Some(NameAnnotation { name: $name }),
             exports: InlineExport { names: vec![] },
             kind: FuncKind::Inline {
                 locals,

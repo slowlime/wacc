@@ -7,7 +7,7 @@ use wacc::codegen::ctx::ty::WasmTy;
 use wacc::codegen::ctx::{
     CompleteWasmTy, FieldTable, MethodIndex, MethodTable, StringTable, TyIndex, Vtable,
 };
-use wacc::codegen::{passes as cg_passes, CodegenOutput};
+use wacc::codegen::{passes as cg_passes, CodegenOutput, AuxiliaryStorage};
 use wacc::parse::{Cursor, Lexer, Parser};
 use wacc::position::HasSpan;
 use wacc::util::CloneStatic;
@@ -266,8 +266,9 @@ pub fn collect_strings<'buf>(
 // i *was* planning to use a struct here but then decided not to
 // that how this function got its 9 parameters
 #[allow(clippy::too_many_arguments)]
-pub fn codegen<'buf>(
+pub fn codegen<'buf, 'aux>(
     _ctx: &mut RunnerCtx<'buf, '_>,
+    storage: &'aux mut AuxiliaryStorage,
     ty_ctx: TypeCtx<'buf>,
     ty_index: TyIndex<'buf, CompleteWasmTy<'buf>>,
     method_index: MethodIndex<'buf>,
@@ -276,8 +277,9 @@ pub fn codegen<'buf>(
     string_table: StringTable<'buf>,
     field_table: FieldTable<'buf>,
     classes: &[Class<'buf>],
-) -> PassOutput<CodegenOutput> {
+) -> PassOutput<CodegenOutput<'aux>> {
     let mut codegen_out = cg_passes::lower(
+        storage,
         ty_ctx,
         ty_index,
         method_index,

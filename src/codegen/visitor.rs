@@ -39,16 +39,16 @@ enum NameKind<'ctx, 'buf> {
     Field(FieldId),
 }
 
-pub struct CodegenVisitor<'a, 'cg, 'buf> {
-    cg: &'cg Codegen<'a, 'buf>,
+pub struct CodegenVisitor<'a, 'cg, 'buf, 'aux> {
+    cg: &'cg Codegen<'a, 'buf, 'aux>,
     method_id: MethodId,
     locals: &'cg LocalCtx<'buf>,
     params: Vec<LocalId<'cg, 'buf>>,
 }
 
-impl<'a, 'cg, 'buf> CodegenVisitor<'a, 'cg, 'buf> {
+impl<'a, 'cg, 'buf, 'aux> CodegenVisitor<'a, 'cg, 'buf, 'aux> {
     pub fn new(
-        cg: &'a Codegen<'a, 'buf>,
+        cg: &'a Codegen<'a, 'buf, 'aux>,
         method_id: MethodId,
         locals: &'cg LocalCtx<'buf>,
         params: Option<&[ast::Formal<'buf>]>,
@@ -69,7 +69,7 @@ impl<'a, 'cg, 'buf> CodegenVisitor<'a, 'cg, 'buf> {
     }
 }
 
-impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
+impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf, '_> {
     fn def(&self) -> &'cg MethodDefinition {
         let Some((_, def)) = self.cg.method_index.get_by_id(self.method_id) else { unreachable!() };
 
@@ -436,7 +436,7 @@ impl<'cg, 'buf> CodegenVisitor<'_, 'cg, 'buf> {
     }
 }
 
-impl<'buf> AstVisitor<'buf> for CodegenVisitor<'_, '_, 'buf> {
+impl<'buf> AstVisitor<'buf> for CodegenVisitor<'_, '_, 'buf, '_> {
     type Output = Vec<Instruction<'static>>;
 
     fn visit_program(&mut self, _program: &ast::Program<'buf>) -> Self::Output {

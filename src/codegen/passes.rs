@@ -5,7 +5,7 @@ use super::ctx::{
     CompleteWasmTy, FieldTable, MethodIndex, MethodTable, StringTable, TyIndex, Vtable,
 };
 use super::string_collector::StringCollector;
-use super::{Codegen, CodegenOutput};
+use super::{Codegen, CodegenOutput, AuxiliaryStorage};
 
 pub use super::ctx::passes::*;
 
@@ -15,7 +15,8 @@ pub fn collect_strings<'buf>(classes: &[Class<'buf>]) -> StringTable<'buf> {
 
 // haha, you call this too many?
 #[allow(clippy::too_many_arguments)]
-pub fn lower<'buf>(
+pub fn lower<'buf, 'aux>(
+    storage: &'aux mut AuxiliaryStorage,
     ty_ctx: TypeCtx<'buf>,
     ty_index: TyIndex<'buf, CompleteWasmTy<'buf>>,
     method_index: MethodIndex<'buf>,
@@ -24,8 +25,9 @@ pub fn lower<'buf>(
     string_table: StringTable<'buf>,
     field_table: FieldTable<'buf>,
     classes: &[Class<'buf>],
-) -> CodegenOutput {
+) -> CodegenOutput<'aux> {
     let cg = Codegen::new(
+        storage,
         ty_ctx,
         ty_index,
         method_index,
