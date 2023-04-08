@@ -40,8 +40,9 @@ function makeReader(data) {
 function clearTerminal(pty) {
   const ERASE_DISPLAY = '\x1b[2J';
   const RESET_CURSOR = '\x1b[H';
+  const RESET_COLOR = '\x1b[m';
 
-  pty.write(RESET_CURSOR + ERASE_DISPLAY);
+  pty.write(RESET_COLOR + RESET_CURSOR + ERASE_DISPLAY);
 }
 
 function makeButtonClickedListener(compiler) {
