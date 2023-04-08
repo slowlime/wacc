@@ -45,6 +45,8 @@ function clearTerminal(pty) {
 }
 
 function makeButtonClickedListener(compiler) {
+  const RED_COLOR = '\x1b[31m';
+
   return async () => {
     // reset the terminal
     clearTerminal(slavePty);
@@ -60,10 +62,14 @@ function makeButtonClickedListener(compiler) {
       },
     });
 
-    const wasm = compiler.compile_from_string(code);
-    const cool = await runtime.instantiate(wasm);
+    try {
+      const wasm = compiler.compile_from_string(code);
+      const cool = await runtime.instantiate(wasm);
 
-    cool.run();
+      cool.run();
+    } catch (e) {
+      slavePty.write('\n\n' + RED_COLOR + e.toString());
+    }
   };
 };
 
