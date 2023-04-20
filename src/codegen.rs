@@ -1153,7 +1153,9 @@ impl<'buf, 'aux> Codegen<'buf, 'aux, '_, WasmTy<'buf>> {
         Module {
             span: WasmSpan::from_offset(0),
             id: None,
-            name: Some(NameAnnotation { name: "compiled-cool-program" }),
+            name: Some(NameAnnotation {
+                name: "compiled-cool-program",
+            }),
             kind: ModuleKind::Text(module_fields),
         }
     }
@@ -1185,7 +1187,9 @@ impl<'buf, 'aux> Codegen<'buf, 'aux, '_, WasmTy<'buf>> {
                     item: ItemSig {
                         span: WasmSpan::from_offset(0),
                         id: None,
-                        name: Some(NameAnnotation { name: "cool-runtime-support" }),
+                        name: Some(NameAnnotation {
+                            name: self.storage.get(&format!("cool-runtime-support.{}", key.as_str())),
+                        }),
                         kind: ItemKind::Func(TypeUse {
                             index: Some(func_ty_id.to_wasm_index(0)),
                             inline: None,
@@ -1251,7 +1255,9 @@ impl<'buf, 'aux> Codegen<'buf, 'aux, '_, WasmTy<'buf>> {
                 span: WasmSpan::from_offset(0),
                 id: None,
                 name: Some(NameAnnotation {
-                    name: self.storage.get(&format!("method-table-ty-{}", method_ty_id.index())),
+                    name: self
+                        .storage
+                        .get(&format!("method-table-ty-{}", method_ty_id.index())),
                 }),
                 exports: InlineExport { names: vec![] },
                 kind: TableKind::Normal {
@@ -1271,8 +1277,14 @@ impl<'buf, 'aux> Codegen<'buf, 'aux, '_, WasmTy<'buf>> {
 
             for (idx, func_id) in func_ids.into_iter().enumerate() {
                 let name = match self.func_registry.get_by_id(func_id) {
-                    Some((name, _)) => format!("method-table-ty-{}-func-{}", method_ty_id.index(), name),
-                    None => format!("method-table-ty-{}-idx-{}", method_ty_id.index(), func_id.index()),
+                    Some((name, _)) => {
+                        format!("method-table-ty-{}-func-{}", method_ty_id.index(), name)
+                    }
+                    None => format!(
+                        "method-table-ty-{}-idx-{}",
+                        method_ty_id.index(),
+                        func_id.index()
+                    ),
                 };
 
                 result.push(ModuleField::Elem(Elem {
