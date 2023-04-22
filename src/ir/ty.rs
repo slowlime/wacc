@@ -1,14 +1,15 @@
 use std::cell::RefCell;
-use std::fmt::{self, Debug, Display};
 
 use indexmap::IndexMap;
 
-use crate::util::slice_formatter;
+use crate::util::define_byte_string;
 
 use super::mem::ArenaRef;
+use super::util::derive_ref_eq;
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct IrClassName<'a>(&'a [u8]);
+define_byte_string! {
+    pub struct IrClassName<'a>;
+}
 
 impl<'a> IrClassName<'a> {
     pub fn new(arena: ArenaRef<'a>, name: &[u8]) -> Self {
@@ -16,21 +17,7 @@ impl<'a> IrClassName<'a> {
     }
 }
 
-impl Debug for IrClassName<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("IrClassName")
-            .field(&slice_formatter(self.0))
-            .finish()
-    }
-}
-
-impl Display for IrClassName<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", slice_formatter(self.0))
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug)]
 pub struct IrClassInner<'a> {
     pub name: IrClassName<'a>,
     pub parent: Option<IrClass<'a>>,
@@ -43,6 +30,7 @@ impl<'a> IrClassInner<'a> {
 }
 
 pub type IrClass<'a> = &'a IrClassInner<'a>;
+derive_ref_eq!(&'a IrClassInner<'a>);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct IrFuncRef<'a> {
@@ -78,6 +66,16 @@ impl<'a> IrTy<'a> {
 
     pub fn is_boxed(&self) -> bool {
         !matches!(self, IrTy::I32 | IrTy::Bool | IrTy::Bytes | IrTy::Unit)
+    }
+}
+
+pub trait HasIrTy<'a> {
+    fn ty(&self) -> &IrTy<'a>;
+}
+
+impl<'a> HasIrTy<'a> for IrTy<'a> {
+    fn ty(&self) -> &IrTy<'a> {
+        self
     }
 }
 
@@ -118,7 +116,7 @@ impl<'a> IrTyRegistry<'a> {
         arena: ArenaRef<'a>,
         tys: &mut IndexMap<IrClassName<'a>, IrClass<'a>>,
         name: &[u8],
-        parent: Option<IrClass<'a>>
+        parent: Option<IrClass<'a>>,
     ) -> IrClass<'a> {
         let class = IrClassInner::new(arena, IrClassName::new(arena, name), parent);
         tys.insert(class.name, class);

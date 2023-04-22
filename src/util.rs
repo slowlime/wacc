@@ -92,3 +92,28 @@ where
         self.iter().map(T::clone_static).collect()
     }
 }
+
+macro_rules! define_byte_string {
+    ($($vis:vis struct $name:ident<$lifetime:lifetime>;)+) => {
+        $(
+            #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+            $vis struct $name<$lifetime>(&$lifetime [u8]);
+
+            impl ::std::fmt::Debug for $name<'_> {
+                fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                    f.debug_tuple(stringify!($name))
+                        .field(&$crate::util::slice_formatter(&self.0))
+                        .finish()
+                }
+            }
+
+            impl ::std::fmt::Display for $name<'_> {
+                fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                    write!(f, "{}", $crate::util::slice_formatter(&self.0))
+                }
+            }
+        )+
+    };
+}
+
+pub(crate) use define_byte_string;

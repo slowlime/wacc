@@ -1,39 +1,31 @@
-use std::fmt::{self, Debug, Display};
+use slotmap::new_key_type;
 
-use crate::util::slice_formatter;
+use super::bb::BlockId;
+use super::instr::InstrId;
+use super::ty::{HasIrTy, IrTy};
 
-use super::ty::IrTy;
-
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub struct IrBytes<'a>(&'a [u8]);
-
-impl Debug for IrBytes<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("IrBytes")
-            .field(&slice_formatter(self.0))
-            .finish()
-    }
+new_key_type! {
+    pub struct ValueId;
 }
 
-impl Display for IrBytes<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", slice_formatter(self.0))
-    }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ValueKind {
+    Instr(InstrId),
+
+    Param {
+        bb: BlockId,
+        idx: usize,
+    },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ValueKind<'a> {
-    I32(i32),
-    Bool(bool),
-    Bytes(IrBytes<'a>),
-    Null,
-    Unit,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ValueInner<'a> {
-    pub static_value: ValueKind<'a>,
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct Value<'a> {
     pub ty: IrTy<'a>,
+    pub kind: ValueKind,
 }
 
-pub type Value<'a> = &'a ValueInner<'a>;
+impl<'a> HasIrTy<'a> for Value<'a> {
+    fn ty(&self) -> &IrTy<'a> {
+        &self.ty
+    }
+}
