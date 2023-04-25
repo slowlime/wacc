@@ -7,12 +7,19 @@ use crate::util::define_byte_string;
 
 use super::bb::{Block, BlockData};
 use super::instr::{Instr, InstrKind, TermInstr, TermInstrKind};
+use super::mem::ArenaRef;
 use super::ty::IrTy;
 use super::util::derive_ref_eq;
 use super::value::{Value, ValueData, ValueKind};
 
 define_byte_string! {
     pub struct FuncName<'a>;
+}
+
+impl<'a> FuncName<'a> {
+    pub fn new(arena: ArenaRef<'a>, name: &[u8]) -> Self {
+        Self(arena.alloc_bytes(name))
+    }
 }
 
 #[derive(Debug)]
@@ -28,6 +35,19 @@ pub struct FuncData<'a> {
 }
 
 impl<'a> FuncData<'a> {
+    pub fn new(name: FuncName<'a>) -> Self {
+        Self {
+            name,
+            bbs: Default::default(),
+            bb_preds: Default::default(),
+            instrs: Default::default(),
+            bb_instrs: Default::default(),
+            term_instrs: Default::default(),
+            values: Default::default(),
+            entry_bb: None,
+        }
+    }
+
     pub fn add_instr(&mut self, instr_kind: InstrKind<'a>, ty: IrTy<'a>) -> Value {
         let instr = self.instrs.insert(instr_kind);
         let value = ValueData {
@@ -99,6 +119,12 @@ impl<'a> FuncData<'a> {
 
 #[derive(Debug)]
 pub struct FuncCell<'a>(RefCell<FuncData<'a>>);
+
+impl<'a> FuncCell<'a> {
+    pub fn new(func_data: FuncData<'a>) -> Self {
+        Self(RefCell::new(func_data))
+    }
+}
 
 impl<'a> Deref for FuncCell<'a> {
     type Target = RefCell<FuncData<'a>>;

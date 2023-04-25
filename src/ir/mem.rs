@@ -1,11 +1,11 @@
-use super::func::FuncData;
+use super::func::{FuncData, Func, FuncCell};
 use super::ty::IrClassInner;
 
 #[derive(Default)]
 pub struct Arena<'a> {
     bytes: typed_arena::Arena<u8>,
     classes: typed_arena::Arena<IrClassInner<'a>>,
-    funcs: typed_arena::Arena<FuncData<'a>>,
+    funcs: typed_arena::Arena<FuncCell<'a>>,
 }
 
 impl<'a> Arena<'a> {
@@ -21,8 +21,8 @@ impl<'a> Arena<'a> {
         self.classes.alloc(class)
     }
 
-    pub fn alloc_func(&'a self, func: FuncData<'a>) -> &'a mut FuncData<'a> {
-        self.funcs.alloc(func)
+    pub fn alloc_func(&'a self, func: FuncData<'a>) -> Func<'a> {
+        self.funcs.alloc(FuncCell::new(func))
     }
 }
 

@@ -149,6 +149,8 @@ pub enum TermInstrKind {
     Branch(Branch),
     Jump(BlockJump),
     Return(Option<Value>),
+    /// The block never reaches the end.
+    Diverge,
 }
 
 impl TermInstrKind {
@@ -162,6 +164,7 @@ impl TermInstrKind {
             Self::Jump(jmp) => jmp.swap_remove_arg_from_jumps_to(bb, idx),
 
             Self::Return(_) => {},
+            Self::Diverge => {},
         }
     }
 
@@ -195,6 +198,8 @@ impl<'d> Iterator for Jumps<'d> {
             TermInstrKind::Jump(_) => None,
 
             TermInstrKind::Return(_) => None,
+
+            TermInstrKind::Diverge => None,
         };
 
         if result.is_some() {

@@ -13,3 +13,13 @@ pub struct BlockData {
     pub params: Vec<Value>,
     pub terminator: TermInstr,
 }
+
+impl BlockData {
+    pub fn new(terminator: TermInstr) -> Self {
+        Self {
+            instrs: vec![],
+            params: vec![],
+            terminator,
+        }
+    }
+}
