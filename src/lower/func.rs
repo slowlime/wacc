@@ -5,14 +5,13 @@ use crate::ir::func::{Func, FuncData, FuncName};
 use crate::ir::instr::TermInstrKind;
 use crate::ir::ty::IrClass;
 use crate::lower::expr::lower_expr;
-use crate::lower::ssa::Scope;
 
 use super::{GlobalCtx, LoweringCtx};
 
 fn lower_params<'a, 'buf>(ctx: &mut LoweringCtx<'a, 'buf>, method: &Method<'buf>) {
     for Formal { name, ty, .. } in &method.params {
         let param = ctx.func.borrow_mut().append_param(ctx.current_bb, ctx.gctx.lower_ty(&ty.unwrap_res_ty()));
-        ctx.scope.bind(ctx.current_bb, name.0.value.clone(), param);
+        ctx.bind(name.0.value.clone(), param);
     }
 }
 
@@ -25,13 +24,7 @@ pub fn lower_method<'a, 'buf>(
     let func = gctx.arena.alloc_func(FuncData::new(name));
     let terminator = func.borrow_mut().add_term_instr(TermInstrKind::Diverge);
     let entry_bb = func.borrow_mut().add_bb(BlockData::new(terminator));
-    let mut ctx = LoweringCtx {
-        gctx,
-        class,
-        func,
-        current_bb: entry_bb,
-        scope: Scope::new(),
-    };
+    let mut ctx = LoweringCtx::new(gctx, class, func, entry_bb);
     lower_params(&mut ctx, method);
     let ret = lower_expr(&mut ctx, &method.body);
 

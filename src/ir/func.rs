@@ -10,7 +10,7 @@ use super::instr::{Instr, InstrKind, TermInstr, TermInstrKind};
 use super::mem::ArenaRef;
 use super::ty::IrTy;
 use super::util::derive_ref_eq;
-use super::value::{Value, ValueData, ValueKind};
+use super::value::{Param, Value, ValueData, ValueKind};
 
 define_byte_string! {
     pub struct FuncName<'a>;
@@ -58,6 +58,20 @@ impl<'a> FuncData<'a> {
         self.values.insert(value)
     }
 
+    pub fn remove_instr(&mut self, instr: Instr) {
+        let bb = self.bb_instrs.get(instr);
+        self.instrs.remove(instr);
+
+        if let Some(&bb) = bb {
+            let instr_idx = self.bbs[bb]
+                .instrs
+                .iter()
+                .position(|&bb_instr| bb_instr == instr)
+                .expect("the instruction present in the back-mapping must be present in the block");
+            self.bbs[bb].instrs.remove(instr_idx);
+        }
+    }
+
     pub fn add_term_instr(&mut self, instr: TermInstrKind) -> TermInstr {
         self.term_instrs.insert(instr)
     }
@@ -68,7 +82,11 @@ impl<'a> FuncData<'a> {
         let idx = bb_data.params.len();
         let value = self.values.insert(ValueData {
             ty,
-            kind: ValueKind::Param { bb, idx },
+            kind: ValueKind::Param(Param {
+                bb,
+                idx,
+                removable: true,
+            }),
         });
 
         bb_data.params.push(value);
@@ -77,32 +95,39 @@ impl<'a> FuncData<'a> {
     }
 
     /// Removes a param from the block and its precedessors' terminators.
-    pub fn swap_remove_param(&mut self, bb: Block, idx: usize) {
+    pub fn remove_param(&mut self, bb: Block, idx: usize) {
+        let param = self.bbs[bb].params.remove(idx);
+        let param_def = self.param_def(param).unwrap();
+        assert!(param_def.removable, "the parameter cannot be removed");
+
         let bb_data = &mut self.bbs[bb];
-        bb_data.params.swap_remove(idx);
 
-        let prev_idx = match self.values[bb_data.params[idx]].kind {
-            ValueKind::Param {
-                idx: ref mut prev_idx,
-                ..
-            } => {
-                *prev_idx = idx;
-                *prev_idx
+        // update the indices in the shifted parameters
+        for idx in param_def.idx..bb_data.params.len() {
+            match self.values[bb_data.params[idx]].kind {
+                ValueKind::Param(Param {
+                    idx: ref mut prev_idx,
+                    ..
+                }) => {
+                    *prev_idx = idx;
+                }
+
+                _ => unreachable!(),
             }
-
-            _ => unreachable!(),
-        };
+        }
 
         for &pred in &self.bb_preds[bb] {
-            self.term_instrs[self.bbs[pred].terminator]
-                .swap_remove_arg_from_jumps_to(bb, prev_idx);
+            self.term_instrs[self.bbs[pred].terminator].remove_arg_from_jumps_to(bb, param_def.idx);
         }
     }
 
     pub fn add_bb(&mut self, bb_data: BlockData) -> Block {
         let term_instr = bb_data.terminator;
         let bb = self.bbs.insert(bb_data);
-        let preds = self.term_instrs[term_instr].jumps().map(|jmp| jmp.bb).collect();
+        let preds = self.term_instrs[term_instr]
+            .jumps()
+            .map(|jmp| jmp.bb)
+            .collect();
         self.bb_preds.insert(bb, preds);
 
         bb
@@ -114,6 +139,54 @@ impl<'a> FuncData<'a> {
 
     pub fn unwrap_entry_bb(&self) -> Block {
         self.entry_bb.unwrap()
+    }
+
+    pub fn param_def(&self, value: Value) -> Option<Param> {
+        match self.values[value].kind {
+            ValueKind::Param(param) => Some(param),
+            _ => None,
+        }
+    }
+
+    pub fn instr_def(&self, value: Value) -> Option<Instr> {
+        match self.values[value].kind {
+            ValueKind::Instr(instr) => Some(instr),
+            _ => None,
+        }
+    }
+
+    pub fn preds(&self, bb: Block) -> Vec<Block> {
+        self.bb_preds.get(bb).cloned().unwrap_or_default()
+    }
+
+    /// Resolves a chain of identity values.
+    pub fn resolve_value(&self, mut value: Value) -> Value {
+        while let ValueKind::Id(ref_value) = self.values[value].kind {
+            value = ref_value;
+        }
+
+        value
+    }
+
+    pub fn replace_with_id(&mut self, prev_value: Value, new_value: Value) {
+        let prev_value = self.resolve_value(prev_value);
+        let new_value = self.resolve_value(new_value);
+
+        match self.values[prev_value].kind {
+            ValueKind::Instr(instr) => {
+                self.remove_instr(instr);
+            }
+
+            ValueKind::Param(Param { bb, idx, .. }) => {
+                self.remove_param(bb, idx);
+            }
+
+            // we're matching a resolved value
+            ValueKind::Id(_) => unreachable!(),
+        }
+
+        self.values[prev_value].kind = ValueKind::Id(new_value);
+        assert_eq!(self.values[prev_value].ty, self.values[new_value].ty);
     }
 }
 

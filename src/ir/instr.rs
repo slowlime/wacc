@@ -94,7 +94,6 @@ pub enum InstrKind<'a> {
     MethodLookup(MethodLookup<'a>),
     CallRef(CallRef),
     Call(Call<'a>),
-    Id(Value),
     FieldGet(FieldGet<'a>),
     FieldSet(FieldSet<'a>),
     Box(Value),
@@ -130,9 +129,15 @@ pub struct BlockJump {
 }
 
 impl BlockJump {
-    pub fn swap_remove_arg_from_jumps_to(&mut self, bb: Block, idx: usize) {
+    pub fn remove_arg_from_jumps_to(&mut self, bb: Block, idx: usize) {
         if self.bb == bb {
-            self.args.swap_remove(idx);
+            self.args.remove(idx);
+        }
+    }
+
+    pub fn add_arg_to_jumps_to(&mut self, bb: Block, idx: usize, value: Value) {
+        if self.bb == bb {
+            self.args.insert(idx, value);
         }
     }
 }
@@ -154,14 +159,29 @@ pub enum TermInstrKind {
 }
 
 impl TermInstrKind {
-    pub fn swap_remove_arg_from_jumps_to(&mut self, bb: Block, idx: usize) {
+    pub fn remove_arg_from_jumps_to(&mut self, bb: Block, idx: usize) {
         match self {
             Self::Branch(Branch { on_true, on_false, .. }) => {
-                on_true.swap_remove_arg_from_jumps_to(bb, idx);
-                on_false.swap_remove_arg_from_jumps_to(bb, idx);
+                on_true.remove_arg_from_jumps_to(bb, idx);
+                on_false.remove_arg_from_jumps_to(bb, idx);
             }
 
-            Self::Jump(jmp) => jmp.swap_remove_arg_from_jumps_to(bb, idx),
+            Self::Jump(jmp) => jmp.remove_arg_from_jumps_to(bb, idx),
+
+            Self::Return(_) => {},
+            Self::Diverge => {},
+        }
+    }
+
+    // TODO: deduplicate this...
+    pub fn add_arg_to_jumps_to(&mut self, bb: Block, idx: usize, value: Value) {
+        match self {
+            Self::Branch(Branch { on_true, on_false, .. }) => {
+                on_true.add_arg_to_jumps_to(bb, idx, value);
+                on_false.add_arg_to_jumps_to(bb, idx, value);
+            }
+
+            Self::Jump(jmp) => jmp.add_arg_to_jumps_to(bb, idx, value),
 
             Self::Return(_) => {},
             Self::Diverge => {},
