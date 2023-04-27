@@ -3,6 +3,7 @@ use std::ops::Deref;
 
 use slotmap::{SecondaryMap, SlotMap};
 
+use crate::ir::instr::InstrOperands;
 use crate::util::define_byte_string;
 
 use super::bb::{Block, BlockData};
@@ -117,7 +118,9 @@ impl<'a> FuncData<'a> {
         }
 
         for &pred in &self.bb_preds[bb] {
-            self.term_instrs[self.bbs[pred].terminator].remove_arg_from_jumps_to(bb, param_def.idx);
+            for jmp in self.term_instrs[self.bbs[pred].terminator].jumps_to_mut(bb) {
+                jmp.args.remove(param_def.idx);
+            }
         }
     }
 
@@ -125,7 +128,8 @@ impl<'a> FuncData<'a> {
         let term_instr = bb_data.terminator;
         let bb = self.bbs.insert(bb_data);
         let preds = self.term_instrs[term_instr]
-            .jumps()
+            .operands()
+            .iter()
             .map(|jmp| jmp.bb)
             .collect();
         self.bb_preds.insert(bb, preds);

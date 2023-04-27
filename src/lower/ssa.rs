@@ -127,8 +127,10 @@ impl<'a, 'buf> LoweringCtx<'a, 'buf> {
                 self.func.borrow().values[param].ty.clone(),
             );
             let terminator = self.func.borrow().bbs[pred].terminator;
-            self.func.borrow_mut().term_instrs[terminator]
-                .add_arg_to_jumps_to(bb, param_idx, value);
+
+            for jmp in self.func.borrow_mut().term_instrs[terminator].jumps_to_mut(bb) {
+                jmp.args.insert(param_idx, value);
+            }
         }
 
         self.optimize_block_param(bb, param);
@@ -142,12 +144,8 @@ impl<'a, 'buf> LoweringCtx<'a, 'buf> {
         for &pred in &preds {
             let func = self.func.borrow();
 
-            for jump in func.term_instrs[pred.terminator(self.func)].jumps() {
-                if jump.bb != bb {
-                    continue;
-                }
-
-                let arg = func.resolve_value(jump.args[param_idx]);
+            for jmp in func.term_instrs[pred.terminator(self.func)].jumps_to(bb) {
+                let arg = func.resolve_value(jmp.args[param_idx]);
 
                 if same_value == Some(arg) || arg == param {
                     continue;

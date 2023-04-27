@@ -1,3 +1,5 @@
+use core::slice;
+
 use slotmap::new_key_type;
 
 use crate::util::define_byte_string;
@@ -25,10 +27,69 @@ macro_rules! impl_into_instr {
     };
 }
 
+macro_rules! delegate_instr_operands {
+    ($ty:ty => |$self:ident| $delegatee:expr) => {
+        impl InstrOperands for $ty {
+            type Operand = Value;
+
+            fn operands(&$self) -> &[Value] {
+                $delegatee.operands()
+            }
+
+            fn operands_mut(&mut $self) -> &mut [Value] {
+                $delegatee.operands_mut()
+            }
+        }
+    };
+}
+
 define_byte_string! {
     pub struct MethodName<'a>;
     pub struct FieldName<'a>;
     pub struct IrBytes<'a>;
+}
+
+pub trait InstrOperands {
+    type Operand;
+
+    fn operands(&self) -> &[Self::Operand];
+    fn operands_mut(&mut self) -> &mut [Self::Operand];
+}
+
+impl<const N: usize> InstrOperands for [Value; N] {
+    type Operand = Value;
+
+    fn operands(&self) -> &[Value] {
+        self
+    }
+
+    fn operands_mut(&mut self) -> &mut [Value] {
+        self
+    }
+}
+
+impl InstrOperands for Vec<Value> {
+    type Operand = Value;
+
+    fn operands(&self) -> &[Value] {
+        self
+    }
+
+    fn operands_mut(&mut self) -> &mut [Value] {
+        self
+    }
+}
+
+impl InstrOperands for Value {
+    type Operand = Value;
+
+    fn operands(&self) -> &[Value] {
+        slice::from_ref(self)
+    }
+
+    fn operands_mut(&mut self) -> &mut [Value] {
+        slice::from_mut(self)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -38,6 +99,7 @@ pub struct VTableLookup<'a> {
 }
 
 impl_into_instr!(VTableLookup<'a>);
+delegate_instr_operands!(VTableLookup<'_> => |self| self.obj);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MethodLookup<'a> {
@@ -47,13 +109,48 @@ pub struct MethodLookup<'a> {
 
 impl_into_instr!(MethodLookup<'a>);
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct CallRef {
-    pub func_ref: Value,
-    pub args: Vec<Value>,
+impl InstrOperands for MethodLookup<'_> {
+    type Operand = Value;
+
+    fn operands(&self) -> &[Value] {
+        &[]
+    }
+
+    fn operands_mut(&mut self) -> &mut [Value] {
+        &mut []
+    }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct CallRef(Vec<Value>);
+
 impl_into_instr!(CallRef);
+delegate_instr_operands!(CallRef => |self| self.0);
+
+impl CallRef {
+    fn new(func_ref: Value, args: &[Value]) -> Self {
+        let mut result = Self(Vec::with_capacity(1 + args.len()));
+        result.0.extend_from_slice(args);
+
+        result
+    }
+
+    fn func_ref(&self) -> Value {
+        self.0[0]
+    }
+
+    fn func_ref_mut(&mut self) -> &mut Value {
+        &mut self.0[0]
+    }
+
+    fn args(&self) -> &[Value] {
+        &self.0[1..]
+    }
+
+    fn args_mut(&mut self) -> &mut [Value] {
+        &mut self.0[1..]
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Call<'a> {
@@ -62,6 +159,7 @@ pub struct Call<'a> {
 }
 
 impl_into_instr!(Call<'a>);
+delegate_instr_operands!(Call<'_> => |self| self.args);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FieldGet<'a> {
@@ -70,15 +168,41 @@ pub struct FieldGet<'a> {
 }
 
 impl_into_instr!(FieldGet<'a>);
+delegate_instr_operands!(FieldGet<'_> => |self| self.obj);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FieldSet<'a> {
-    pub obj: Value,
     pub field: FieldName<'a>,
-    pub value: Value,
+    args: [Value; 2],
 }
 
 impl_into_instr!(FieldSet<'a>);
+delegate_instr_operands!(FieldSet<'_> => |self| self.args);
+
+impl<'a> FieldSet<'a> {
+    pub fn new(obj: Value, field: FieldName<'a>, value: Value) -> Self {
+        Self {
+            field,
+            args: [obj, value],
+        }
+    }
+
+    pub fn obj(&self) -> Value {
+        self.args[0]
+    }
+
+    pub fn value(&self) -> Value {
+        self.args[1]
+    }
+
+    pub fn obj_mut(&mut self) -> &mut Value {
+        &mut self.args[0]
+    }
+
+    pub fn value_mut(&mut self) -> &mut Value {
+        &mut self.args[1]
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Cast<'a> {
@@ -87,6 +211,7 @@ pub struct Cast<'a> {
 }
 
 impl_into_instr!(Cast<'a>);
+delegate_instr_operands!(Cast<'_> => |self| self.obj);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum InstrKind<'a> {
@@ -128,25 +253,49 @@ pub struct BlockJump {
     pub args: Vec<Value>,
 }
 
-impl BlockJump {
-    pub fn remove_arg_from_jumps_to(&mut self, bb: Block, idx: usize) {
-        if self.bb == bb {
-            self.args.remove(idx);
-        }
-    }
-
-    pub fn add_arg_to_jumps_to(&mut self, bb: Block, idx: usize, value: Value) {
-        if self.bb == bb {
-            self.args.insert(idx, value);
-        }
-    }
-}
+delegate_instr_operands!(BlockJump => |self| self.args);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Branch {
     pub cond: Value,
-    pub on_true: BlockJump,
-    pub on_false: BlockJump,
+    jumps: [BlockJump; 2],
+}
+
+impl InstrOperands for Branch {
+    type Operand = BlockJump;
+
+    fn operands(&self) -> &[BlockJump] {
+        &self.jumps
+    }
+
+    fn operands_mut(&mut self) -> &mut [BlockJump] {
+        &mut self.jumps
+    }
+}
+
+impl Branch {
+    pub fn new(cond: Value, on_true: BlockJump, on_false: BlockJump) -> Self {
+        Self {
+            cond,
+            jumps: [on_true, on_false],
+        }
+    }
+
+    pub fn on_true(&self) -> &BlockJump {
+        &self.jumps[0]
+    }
+
+    pub fn on_false(&self) -> &BlockJump {
+        &self.jumps[1]
+    }
+
+    pub fn on_true_mut(&mut self) -> &mut BlockJump {
+        &mut self.jumps[0]
+    }
+
+    pub fn on_false_mut(&mut self) -> &mut BlockJump {
+        &mut self.jumps[1]
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -159,73 +308,35 @@ pub enum TermInstrKind {
 }
 
 impl TermInstrKind {
-    pub fn remove_arg_from_jumps_to(&mut self, bb: Block, idx: usize) {
+    pub fn jumps_to<'s>(&'s self, bb: Block) -> impl Iterator<Item = &'s BlockJump> + 's {
+        self.operands().iter().filter(move |jmp| jmp.bb == bb)
+    }
+
+    pub fn jumps_to_mut<'s>(&'s mut self, bb: Block) -> impl Iterator<Item = &'s mut BlockJump> + 's {
+        self.operands_mut().iter_mut().filter(move |jmp| jmp.bb == bb)
+    }
+}
+
+impl InstrOperands for TermInstrKind {
+    type Operand = BlockJump;
+
+    fn operands(&self) -> &[BlockJump] {
         match self {
-            Self::Branch(Branch { on_true, on_false, .. }) => {
-                on_true.remove_arg_from_jumps_to(bb, idx);
-                on_false.remove_arg_from_jumps_to(bb, idx);
-            }
-
-            Self::Jump(jmp) => jmp.remove_arg_from_jumps_to(bb, idx),
-
-            Self::Return(_) => {},
-            Self::Diverge => {},
+            Self::Branch(br) => br.operands(),
+            Self::Jump(jmp) => slice::from_ref(jmp),
+            Self::Return(_) | Self::Diverge => &[],
         }
     }
 
-    // TODO: deduplicate this...
-    pub fn add_arg_to_jumps_to(&mut self, bb: Block, idx: usize, value: Value) {
+    fn operands_mut(&mut self) -> &mut [BlockJump] {
         match self {
-            Self::Branch(Branch { on_true, on_false, .. }) => {
-                on_true.add_arg_to_jumps_to(bb, idx, value);
-                on_false.add_arg_to_jumps_to(bb, idx, value);
-            }
-
-            Self::Jump(jmp) => jmp.add_arg_to_jumps_to(bb, idx, value),
-
-            Self::Return(_) => {},
-            Self::Diverge => {},
-        }
-    }
-
-    pub fn jumps(&self) -> Jumps<'_> {
-        Jumps {
-            term_instr: self,
-            idx: 0,
+            Self::Branch(br) => br.operands_mut(),
+            Self::Jump(jmp) => slice::from_mut(jmp),
+            Self::Return(_) | Self::Diverge => &mut [],
         }
     }
 }
 
 new_key_type! {
     pub struct TermInstr;
-}
-
-pub struct Jumps<'d> {
-    term_instr: &'d TermInstrKind,
-    idx: usize,
-}
-
-impl<'d> Iterator for Jumps<'d> {
-    type Item = &'d BlockJump;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let result = match self.term_instr {
-            TermInstrKind::Branch(Branch { on_true, .. }) if self.idx == 0 => Some(on_true),
-            TermInstrKind::Branch(Branch { on_false, .. }) if self.idx == 1 => Some(on_false),
-            TermInstrKind::Branch(_) => None,
-
-            TermInstrKind::Jump(jmp) if self.idx == 0 => Some(jmp),
-            TermInstrKind::Jump(_) => None,
-
-            TermInstrKind::Return(_) => None,
-
-            TermInstrKind::Diverge => None,
-        };
-
-        if result.is_some() {
-            self.idx += 1;
-        }
-
-        result
-    }
 }
