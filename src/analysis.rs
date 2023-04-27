@@ -6,5 +6,7 @@ mod validate;
 
 pub use error::TypeckError;
 pub use typeck::{TypeChecker, TypeckResult};
-pub use typectx::{BindingId, ClassName, DefinitionLocation, TypeCtx};
+pub use typectx::{
+    Binding, BindingId, BindingKind, BindingMap, ClassName, DefinitionLocation, TypeCtx,
+};
 pub use validate::{check_has_main_class, validate_classes};

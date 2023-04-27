@@ -44,10 +44,7 @@ SnapshotData(
               ),
             ),
           )),
-          binding_id: SerKey(
-            idx: 2,
-            version: 1,
-          ),
+          binding_id: Some(BindingId(2)),
           ty_name: TyName(Name(Spanned(
             value: "Int",
             span: Span(
@@ -153,10 +150,7 @@ SnapshotData(
                   col: 12,
                 ),
               ),
-              binding_id: SerKey(
-                idx: 1,
-                version: 1,
-              ),
+              binding_id: Some(BindingId(1)),
             ),
             method: Name(Spanned(
               value: "test",
@@ -194,10 +188,7 @@ SnapshotData(
                     ),
                   ),
                 )),
-                binding_id: SerKey(
-                  idx: 2,
-                  version: 1,
-                ),
+                binding_id: Some(BindingId(2)),
                 ty: Some(Resolved(Builtin(Int))),
               )),
             ],
@@ -273,10 +264,7 @@ SnapshotData(
                   ),
                 ),
               )),
-              binding_id: SerKey(
-                idx: 3,
-                version: 1,
-              ),
+              binding_id: Some(BindingId(3)),
               ty_name: TyName(Name(Spanned(
                 value: "Int",
                 span: Span(
@@ -347,10 +335,7 @@ SnapshotData(
                   ),
                 ),
               )),
-              binding_id: SerKey(
-                idx: 4,
-                version: 1,
-              ),
+              binding_id: Some(BindingId(4)),
               ty_name: TyName(Name(Spanned(
                 value: "Int",
                 span: Span(
@@ -388,10 +373,7 @@ SnapshotData(
                       ),
                     ),
                   )),
-                  binding_id: SerKey(
-                    idx: 3,
-                    version: 1,
-                  ),
+                  binding_id: Some(BindingId(3)),
                   ty: Some(Resolved(Builtin(Int))),
                 )),
                 rhs: Int(IntLit(Spanned(
@@ -462,10 +444,7 @@ SnapshotData(
                     ),
                   ),
                 )),
-                binding_id: SerKey(
-                  idx: 5,
-                  version: 1,
-                ),
+                binding_id: Some(BindingId(5)),
                 ty_name: TyName(Name(Spanned(
                   value: "Int",
                   span: Span(
@@ -503,10 +482,7 @@ SnapshotData(
                         ),
                       ),
                     )),
-                    binding_id: SerKey(
-                      idx: 4,
-                      version: 1,
-                    ),
+                    binding_id: Some(BindingId(4)),
                     ty: Some(Resolved(Builtin(Int))),
                   )),
                   rhs: Int(IntLit(Spanned(
@@ -577,10 +553,7 @@ SnapshotData(
                       ),
                     ),
                   )),
-                  binding_id: SerKey(
-                    idx: 6,
-                    version: 1,
-                  ),
+                  binding_id: Some(BindingId(6)),
                   ty_name: TyName(Name(Spanned(
                     value: "Int",
                     span: Span(
@@ -618,10 +591,7 @@ SnapshotData(
                           ),
                         ),
                       )),
-                      binding_id: SerKey(
-                        idx: 5,
-                        version: 1,
-                      ),
+                      binding_id: Some(BindingId(5)),
                       ty: Some(Resolved(Builtin(Int))),
                     )),
                     rhs: Int(IntLit(Spanned(
@@ -691,10 +661,7 @@ SnapshotData(
                       ),
                     ),
                   )),
-                  binding_id: SerKey(
-                    idx: 6,
-                    version: 1,
-                  ),
+                  binding_id: Some(BindingId(6)),
                   ty: Some(Resolved(Builtin(Int))),
                 )),
                 span: Span(

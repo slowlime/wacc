@@ -43,10 +43,7 @@ Ok(Program(
               ),
             ),
           )),
-          binding_id: SerKey(
-            idx: 4294967295,
-            version: 1,
-          ),
+          binding_id: None,
           ty_name: TyName(Name(Spanned(
             value: "Int",
             span: Span(
@@ -115,10 +112,7 @@ Ok(Program(
               ),
             ),
           )),
-          binding_id: SerKey(
-            idx: 4294967295,
-            version: 1,
-          ),
+          binding_id: None,
           ty_name: TyName(Name(Spanned(
             value: "Int",
             span: Span(
@@ -187,10 +181,7 @@ Ok(Program(
               ),
             ),
           )),
-          binding_id: SerKey(
-            idx: 4294967295,
-            version: 1,
-          ),
+          binding_id: None,
           ty_name: TyName(Name(Spanned(
             value: "Int",
             span: Span(
@@ -301,10 +292,7 @@ Ok(Program(
                         ),
                       ),
                     )),
-                    binding_id: SerKey(
-                      idx: 4294967295,
-                      version: 1,
-                    ),
+                    binding_id: None,
                     ty: None,
                   )),
                   rhs: Name(NameExpr(
@@ -325,10 +313,7 @@ Ok(Program(
                         ),
                       ),
                     )),
-                    binding_id: SerKey(
-                      idx: 4294967295,
-                      version: 1,
-                    ),
+                    binding_id: None,
                     ty: None,
                   )),
                   span: Span(
@@ -367,10 +352,7 @@ Ok(Program(
                         ),
                       ),
                     )),
-                    binding_id: SerKey(
-                      idx: 4294967295,
-                      version: 1,
-                    ),
+                    binding_id: None,
                     ty: None,
                   )),
                   rhs: Name(NameExpr(
@@ -391,10 +373,7 @@ Ok(Program(
                         ),
                       ),
                     )),
-                    binding_id: SerKey(
-                      idx: 4294967295,
-                      version: 1,
-                    ),
+                    binding_id: None,
                     ty: None,
                   )),
                   span: Span(
@@ -451,10 +430,7 @@ Ok(Program(
                         ),
                       ),
                     )),
-                    binding_id: SerKey(
-                      idx: 4294967295,
-                      version: 1,
-                    ),
+                    binding_id: None,
                     ty: None,
                   )),
                   rhs: BinOp(BinOpExpr(
@@ -477,10 +453,7 @@ Ok(Program(
                           ),
                         ),
                       )),
-                      binding_id: SerKey(
-                        idx: 4294967295,
-                        version: 1,
-                      ),
+                      binding_id: None,
                       ty: None,
                     )),
                     rhs: UnOp(UnOpExpr(
@@ -503,10 +476,7 @@ Ok(Program(
                             ),
                           ),
                         )),
-                        binding_id: SerKey(
-                          idx: 4294967295,
-                          version: 1,
-                        ),
+                        binding_id: None,
                         ty: None,
                       )),
                       span: Span(
@@ -587,10 +557,7 @@ Ok(Program(
                                   ),
                                 ),
                               )),
-                              binding_id: SerKey(
-                                idx: 4294967295,
-                                version: 1,
-                              ),
+                              binding_id: None,
                               ty: None,
                             )),
                             rhs: Name(NameExpr(
@@ -611,10 +578,7 @@ Ok(Program(
                                   ),
                                 ),
                               )),
-                              binding_id: SerKey(
-                                idx: 4294967295,
-                                version: 1,
-                              ),
+                              binding_id: None,
                               ty: None,
                             )),
                             span: Span(
@@ -651,10 +615,7 @@ Ok(Program(
                                 ),
                               ),
                             )),
-                            binding_id: SerKey(
-                              idx: 4294967295,
-                              version: 1,
-                            ),
+                            binding_id: None,
                             ty: None,
                           )),
                           span: Span(
@@ -691,10 +652,7 @@ Ok(Program(
                               ),
                             ),
                           )),
-                          binding_id: SerKey(
-                            idx: 4294967295,
-                            version: 1,
-                          ),
+                          binding_id: None,
                           ty: None,
                         )),
                         span: Span(
@@ -731,10 +689,7 @@ Ok(Program(
                             ),
                           ),
                         )),
-                        binding_id: SerKey(
-                          idx: 4294967295,
-                          version: 1,
-                        ),
+                        binding_id: None,
                         ty: None,
                       )),
                       span: Span(
@@ -771,10 +726,7 @@ Ok(Program(
                           ),
                         ),
                       )),
-                      binding_id: SerKey(
-                        idx: 4294967295,
-                        version: 1,
-                      ),
+                      binding_id: None,
                       ty: None,
                     )),
                     span: Span(

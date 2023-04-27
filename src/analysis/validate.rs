@@ -2,8 +2,6 @@ use std::borrow::Borrow;
 use std::error::Error;
 use std::fmt::{self, Debug, Display};
 
-use slotmap::Key;
-
 use crate::ast::ty::{BuiltinClass, FunctionTy, HasTy, TyExt};
 use crate::ast::{self, AstRecurse, Class, Visitor as AstVisitor};
 use crate::errors::{DiagnosticMessage, Diagnostics};
@@ -153,9 +151,9 @@ impl<'buf> Validator<'_, 'buf> {
         ty.assert_resolved(self.source, span);
     }
 
-    fn assert_binding_resolved(&self, span: &Span, binding_id: BindingId) {
+    fn assert_binding_resolved(&self, span: &Span, binding_id: Option<BindingId>) {
         assert!(
-            !binding_id.is_null(),
+            binding_id.is_some(),
             "the binding at {} has not been resolved",
             span.display(self.source)
         );

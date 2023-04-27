@@ -360,7 +360,7 @@ impl_has_ty!(Method<'buf>);
 #[derive(Serialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Formal<'buf> {
     pub name: Name<'buf>,
-    pub binding_id: BindingId,
+    pub binding_id: Option<BindingId>,
     pub ty_name: TyName<'buf>,
     pub span: Span,
     pub ty: Ty<'buf>,
@@ -405,7 +405,7 @@ impl_has_ty!(|&self: Field<'buf>| self.0.explicit_ty());
 #[derive(Serialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Binding<'buf> {
     pub name: Name<'buf>,
-    pub binding_id: BindingId,
+    pub binding_id: Option<BindingId>,
     pub ty_name: TyName<'buf>,
     pub init: Option<Box<Expr<'buf>>>,
     pub span: Span,
@@ -592,7 +592,7 @@ impl<'buf> Expr<'buf> {
 #[derive(Serialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Assignment<'buf> {
     pub name: Name<'buf>,
-    pub binding_id: BindingId,
+    pub binding_id: Option<BindingId>,
     pub expr: Box<Expr<'buf>>,
     pub span: Span,
 }
@@ -668,7 +668,7 @@ pub enum Receiver<'buf> {
     SelfType {
         ty: Ty<'buf>,
         method_name_span: Span,
-        binding_id: BindingId,
+        binding_id: Option<BindingId>,
     },
 
     Dynamic(Box<Expr<'buf>>),
@@ -1020,7 +1020,7 @@ define_op_kind!(UnOpKind {
 #[derive(Serialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct NameExpr<'buf> {
     pub name: Name<'buf>,
-    pub binding_id: BindingId,
+    pub binding_id: Option<BindingId>,
     pub ty: Option<Ty<'buf>>,
 }
 

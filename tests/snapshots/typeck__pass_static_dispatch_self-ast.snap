@@ -98,10 +98,7 @@ SnapshotData(
                     ),
                   ),
                 )),
-                binding_id: SerKey(
-                  idx: 1,
-                  version: 1,
-                ),
+                binding_id: Some(BindingId(1)),
                 ty: Some(Resolved(SelfType(
                   enclosed: Class("Main"),
                 ))),

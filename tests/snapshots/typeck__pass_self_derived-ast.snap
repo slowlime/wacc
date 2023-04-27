@@ -44,10 +44,7 @@ SnapshotData(
               ),
             ),
           )),
-          binding_id: SerKey(
-            idx: 2,
-            version: 1,
-          ),
+          binding_id: Some(BindingId(2)),
           ty_name: TyName(Name(Spanned(
             value: "SELF_TYPE",
             span: Span(
@@ -83,10 +80,7 @@ SnapshotData(
                 ),
               ),
             )),
-            binding_id: SerKey(
-              idx: 1,
-              version: 1,
-            ),
+            binding_id: Some(BindingId(1)),
             ty: Some(Resolved(SelfType(
               enclosed: Class("Base"),
             ))),
@@ -127,10 +121,7 @@ SnapshotData(
               ),
             ),
           )),
-          binding_id: SerKey(
-            idx: 3,
-            version: 1,
-          ),
+          binding_id: Some(BindingId(3)),
           ty_name: TyName(Name(Spanned(
             value: "SELF_TYPE",
             span: Span(
@@ -167,10 +158,7 @@ SnapshotData(
                   col: 26,
                 ),
               ),
-              binding_id: SerKey(
-                idx: 1,
-                version: 1,
-              ),
+              binding_id: Some(BindingId(1)),
             ),
             method: Name(Spanned(
               value: "id",
@@ -280,10 +268,7 @@ SnapshotData(
                 ),
               ),
             )),
-            binding_id: SerKey(
-              idx: 1,
-              version: 1,
-            ),
+            binding_id: Some(BindingId(1)),
             ty: Some(Resolved(SelfType(
               enclosed: Class("Base"),
             ))),
@@ -418,10 +403,7 @@ SnapshotData(
                     ),
                   ),
                 )),
-                binding_id: SerKey(
-                  idx: 2,
-                  version: 1,
-                ),
+                binding_id: Some(BindingId(2)),
                 expr: Name(NameExpr(
                   name: Name(Spanned(
                     value: "self",
@@ -440,10 +422,7 @@ SnapshotData(
                       ),
                     ),
                   )),
-                  binding_id: SerKey(
-                    idx: 1,
-                    version: 1,
-                  ),
+                  binding_id: Some(BindingId(1)),
                   ty: Some(Resolved(SelfType(
                     enclosed: Class("Main"),
                   ))),
@@ -481,10 +460,7 @@ SnapshotData(
                     ),
                   ),
                 )),
-                binding_id: SerKey(
-                  idx: 3,
-                  version: 1,
-                ),
+                binding_id: Some(BindingId(3)),
                 expr: Call(Call(
                   receiver: SelfType(
                     ty: Resolved(SelfType(
@@ -504,10 +480,7 @@ SnapshotData(
                         col: 18,
                       ),
                     ),
-                    binding_id: SerKey(
-                      idx: 1,
-                      version: 1,
-                    ),
+                    binding_id: Some(BindingId(1)),
                   ),
                   method: Name(Spanned(
                     value: "id",

@@ -43,10 +43,7 @@ Ok(Program(
               ),
             ),
           )),
-          binding_id: SerKey(
-            idx: 4294967295,
-            version: 1,
-          ),
+          binding_id: None,
           ty_name: TyName(Name(Spanned(
             value: "Int",
             span: Span(
@@ -131,10 +128,7 @@ Ok(Program(
               ),
             ),
           )),
-          binding_id: SerKey(
-            idx: 4294967295,
-            version: 1,
-          ),
+          binding_id: None,
           ty_name: TyName(Name(Spanned(
             value: "Bool",
             span: Span(
@@ -219,10 +213,7 @@ Ok(Program(
               ),
             ),
           )),
-          binding_id: SerKey(
-            idx: 4294967295,
-            version: 1,
-          ),
+          binding_id: None,
           ty_name: TyName(Name(Spanned(
             value: "Object",
             span: Span(
@@ -360,10 +351,7 @@ Ok(Program(
               ),
             ),
           )),
-          binding_id: SerKey(
-            idx: 4294967295,
-            version: 1,
-          ),
+          binding_id: None,
           ty_name: TyName(Name(Spanned(
             value: "Int",
             span: Span(
@@ -400,10 +388,7 @@ Ok(Program(
                   ),
                 ),
               )),
-              binding_id: SerKey(
-                idx: 4294967295,
-                version: 1,
-              ),
+              binding_id: None,
               ty: None,
             )),
             consequent: BinOp(BinOpExpr(
@@ -426,10 +411,7 @@ Ok(Program(
                     ),
                   ),
                 )),
-                binding_id: SerKey(
-                  idx: 4294967295,
-                  version: 1,
-                ),
+                binding_id: None,
                 ty: None,
               )),
               rhs: Int(IntLit(Spanned(
@@ -502,10 +484,7 @@ Ok(Program(
                     ),
                   ),
                 )),
-                binding_id: SerKey(
-                  idx: 4294967295,
-                  version: 1,
-                ),
+                binding_id: None,
                 ty: None,
               )),
               span: Span(

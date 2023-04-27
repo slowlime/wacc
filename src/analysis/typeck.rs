@@ -57,6 +57,7 @@ pub struct TypeckResult<'buf> {
     pub classes: Vec<Class<'buf>>,
     pub ctx: TypeCtx<'buf>,
     pub sorted: Vec<ClassName<'buf>>,
+    pub bindings: HashMap<ClassName<'buf>, BindingMap<'buf>>,
 }
 
 pub struct TypeChecker<'dia, 'emt, 'buf> {
@@ -86,6 +87,7 @@ impl<'dia, 'emt, 'buf> TypeChecker<'dia, 'emt, 'buf> {
         } = method_resolver.resolve();
 
         let excluded: HashSet<_> = excluded.into_iter().cloned().collect();
+        let mut bindings = HashMap::new();
 
         self.unrecognized_tys = unrecognized_tys;
 
@@ -103,6 +105,7 @@ impl<'dia, 'emt, 'buf> TypeChecker<'dia, 'emt, 'buf> {
                 };
 
                 visitor.visit_class(class);
+                bindings.insert(class.name.borrow().into(), visitor.bindings);
             }
         }
 
@@ -112,6 +115,7 @@ impl<'dia, 'emt, 'buf> TypeChecker<'dia, 'emt, 'buf> {
             classes: self.classes,
             ctx,
             sorted,
+            bindings,
         }
     }
 
@@ -276,7 +280,7 @@ struct TypeVisitor<'a, 'dia, 'emt, 'buf> {
     unrecognized_names: RefCell<&'a mut Vec<UnrecognizedName<'buf>>>,
     class_name: ClassName<'buf>,
     location: Option<Location<'buf>>,
-    self_binding_id: BindingId,
+    self_binding_id: Option<BindingId>,
 }
 
 impl TypeVisitor<'_, '_, '_, '_> {
@@ -488,7 +492,7 @@ impl<'buf> TypeVisitor<'_, '_, '_, 'buf> {
         name: &Name<'buf>,
         ty: ResolvedTy<'buf>,
         binding_kind: BindingKind,
-    ) -> BindingId {
+    ) -> Option<BindingId> {
         let binding = Binding {
             kind: binding_kind,
             ty,
@@ -496,7 +500,7 @@ impl<'buf> TypeVisitor<'_, '_, '_, 'buf> {
         };
 
         match self.bindings.bind_if_empty(name.0.value.clone(), binding) {
-            Ok(binding_id) => binding_id,
+            Ok(binding_id) => Some(binding_id),
 
             Err(e) => {
                 match e.kind {
@@ -531,7 +535,7 @@ impl<'buf> TypeVisitor<'_, '_, '_, 'buf> {
                         .emit(),
                 }
 
-                Default::default()
+                None
             }
         }
     }
@@ -559,7 +563,7 @@ impl<'buf> TypeVisitor<'_, '_, '_, 'buf> {
     /// - `ResolvedTy::Bottom` if the name occurs in a covariant position
     /// - `ResolvedTy::Builtin(BuiltinClass::Object)` if the name occurs in a contravariant position
     /// - `ResolvedTy::Untyped` if the type occurs in an invariant position
-    fn resolve_name(&self, name: &Name<'buf>, name_ctx: NameCtx) -> (BindingId, ResolvedTy<'buf>) {
+    fn resolve_name(&self, name: &Name<'buf>, name_ctx: NameCtx) -> (Option<BindingId>, ResolvedTy<'buf>) {
         use Variance::*;
 
         match name.as_slice() {
@@ -584,7 +588,7 @@ impl<'buf> TypeVisitor<'_, '_, '_, 'buf> {
                 if let Some((binding_id, Binding { ty, .. })) =
                     self.bindings.resolve(name.as_slice())
                 {
-                    return (binding_id, ty.clone());
+                    return (Some(binding_id), ty.clone());
                 }
 
                 self.push_unrecognized_name(name.clone());
@@ -888,10 +892,10 @@ impl<'buf> ast::VisitorMut<'buf> for TypeVisitor<'_, '_, '_, 'buf> {
         self.with_scope(|this| {
             this.check_forbidden_inheritance(&class.name);
 
-            this.self_binding_id = this.bindings.bind_self(
+            this.self_binding_id = Some(this.bindings.bind_self(
                 this.make_self_ty(),
                 DefinitionLocation::UserCode(class.span.clone()),
-            );
+            ));
             this.add_inherited_fields();
 
             // visit the fields first to populate the scope

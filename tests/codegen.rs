@@ -300,6 +300,7 @@ fn run_codegen_test_inner(code: &'static [u8], expected: &'static [u8], filename
         classes,
         ctx: ty_ctx,
         sorted: sorted_classes,
+        ..
     } = typeck.resolve();
     assert!(
         !diagnostics.has_errors(),

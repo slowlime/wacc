@@ -44,10 +44,7 @@ SnapshotData(
               ),
             ),
           )),
-          binding_id: SerKey(
-            idx: 2,
-            version: 1,
-          ),
+          binding_id: Some(BindingId(2)),
           ty_name: TyName(Name(Spanned(
             value: "Int",
             span: Span(
@@ -100,10 +97,7 @@ SnapshotData(
               ),
             ),
           )),
-          binding_id: SerKey(
-            idx: 3,
-            version: 1,
-          ),
+          binding_id: Some(BindingId(3)),
           ty_name: TyName(Name(Spanned(
             value: "Int",
             span: Span(
@@ -209,10 +203,7 @@ SnapshotData(
               ),
             ),
           )),
-          binding_id: SerKey(
-            idx: 4294967295,
-            version: 1,
-          ),
+          binding_id: None,
           ty_name: TyName(Name(Spanned(
             value: "Int",
             span: Span(
@@ -265,10 +256,7 @@ SnapshotData(
               ),
             ),
           )),
-          binding_id: SerKey(
-            idx: 4294967295,
-            version: 1,
-          ),
+          binding_id: None,
           ty_name: TyName(Name(Spanned(
             value: "String",
             span: Span(

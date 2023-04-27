@@ -77,6 +77,7 @@ pub fn compile_from_string(code: &str) -> Result<Vec<u8>, String> {
         classes,
         ctx: ty_ctx,
         sorted: sorted_classes,
+        ..
     } = typeck.resolve();
 
     if diagnostics.has_errors() {

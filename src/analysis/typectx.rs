@@ -3,11 +3,12 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::{self, Debug, Display};
 use std::iter::successors;
+use std::num::NonZeroUsize;
 
 use byte_string::ByteStr;
 use indexmap::{map as index_map, IndexMap};
 use itertools::Itertools;
-use slotmap::{new_key_type, SlotMap};
+use serde::Serialize;
 
 use crate::ast::ty::{BuiltinClass, FunctionTy, ResolvedTy, Ty, UnresolvedTy};
 use crate::ast::TyName;
@@ -446,21 +447,35 @@ impl<'buf> TypeCtx<'buf> {
     }
 }
 
-new_key_type! {
-    pub struct BindingId;
+#[derive(Serialize, Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
+pub struct BindingId(NonZeroUsize);
+
+impl BindingId {
+    pub fn new(idx: NonZeroUsize) -> Self {
+        Self(idx)
+    }
+
+    pub fn idx(&self) -> NonZeroUsize {
+        self.0
+    }
+
+    fn index_into<'a, 'buf>(&self, vec: &'a [Binding<'buf>]) -> &'a Binding<'buf> {
+        &vec[self.0.get() - 1]
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct BindingMap<'buf> {
     scopes: Vec<BindingScope<'buf>>,
-    bindings: SlotMap<BindingId, Binding<'buf>>
+    bindings: Vec<Binding<'buf>>,
 }
 
 impl<'buf> BindingMap<'buf> {
     pub fn new() -> Self {
         Self {
             scopes: vec![BindingScope::new()],
-            bindings: Default::default(),
+            bindings: vec![],
         }
     }
 
@@ -481,7 +496,7 @@ impl<'buf> BindingMap<'buf> {
             .rev()
             .flat_map(|scope| scope.local_bindings.get(name))
             .next()
-            .map(|&id| (id, &self.bindings[id]))
+            .map(|&id| (id, id.index_into(&self.bindings)))
     }
 
     fn innermost(&self) -> &BindingScope<'buf> {
@@ -493,31 +508,42 @@ impl<'buf> BindingMap<'buf> {
     }
 
     pub fn bind_self(&mut self, ty: ResolvedTy<'buf>, location: DefinitionLocation) -> BindingId {
-        self.bindings.insert(Binding {
+        self.bindings.push(Binding {
             kind: BindingKind::SelfRef,
             ty,
             location,
-        })
+        });
+
+        BindingId(self.bindings.len().try_into().unwrap())
     }
 
-    pub fn bind(&mut self, name: Cow<'buf, [u8]>, binding: Binding<'buf>) -> Result<BindingId, BindError<'_, 'buf>> {
+    pub fn bind(
+        &mut self,
+        name: Cow<'buf, [u8]>,
+        binding: Binding<'buf>,
+    ) -> Result<BindingId, BindError<'_, 'buf>> {
         if &*name == b"self" {
             Err(BindError {
                 kind: BindErrorKind::BindingToSelf,
                 name,
             })
         } else {
-            let binding_id = self.bindings.insert(binding);
+            self.bindings.push(binding);
+            let binding_id = BindingId(self.bindings.len().try_into().unwrap());
             self.innermost_mut().local_bindings.insert(name, binding_id);
 
             Ok(binding_id)
         }
     }
 
-    pub fn bind_if_empty(&mut self, name: Cow<'buf, [u8]>, binding: Binding<'buf>) -> Result<BindingId, BindError<'_, 'buf>> {
+    pub fn bind_if_empty(
+        &mut self,
+        name: Cow<'buf, [u8]>,
+        binding: Binding<'buf>,
+    ) -> Result<BindingId, BindError<'_, 'buf>> {
         if self.innermost().local_bindings.contains_key(&name) {
             let &previous_id = self.innermost().local_bindings.get(&name).unwrap();
-            let previous = &self.bindings[previous_id];
+            let previous = previous_id.index_into(&self.bindings);
 
             Err(BindError {
                 kind: BindErrorKind::DoubleDefinition { previous },
@@ -526,6 +552,17 @@ impl<'buf> BindingMap<'buf> {
         } else {
             self.bind(name, binding)
         }
+    }
+
+    /// Returns an iterator over bindings.
+    ///
+    /// The entries are returned in binding order.
+    /// The ids are guaranteed to be contiguous, starting from 1.
+    pub fn into_bindings(self) -> impl Iterator<Item = (BindingId, Binding<'buf>)> {
+        self.bindings
+            .into_iter()
+            .enumerate()
+            .map(|(idx, binding)| (BindingId(NonZeroUsize::new(idx + 1).unwrap()), binding))
     }
 }
 

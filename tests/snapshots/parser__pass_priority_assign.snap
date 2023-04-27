@@ -43,10 +43,7 @@ Ok(Program(
               ),
             ),
           )),
-          binding_id: SerKey(
-            idx: 4294967295,
-            version: 1,
-          ),
+          binding_id: None,
           ty_name: TyName(Name(Spanned(
             value: "Bool",
             span: Span(
@@ -115,10 +112,7 @@ Ok(Program(
               ),
             ),
           )),
-          binding_id: SerKey(
-            idx: 4294967295,
-            version: 1,
-          ),
+          binding_id: None,
           ty_name: TyName(Name(Spanned(
             value: "Bool",
             span: Span(
@@ -223,10 +217,7 @@ Ok(Program(
                 ),
               ),
             )),
-            binding_id: SerKey(
-              idx: 4294967295,
-              version: 1,
-            ),
+            binding_id: None,
             expr: Assignment(Assignment(
               name: Name(Spanned(
                 value: "z",
@@ -245,10 +236,7 @@ Ok(Program(
                   ),
                 ),
               )),
-              binding_id: SerKey(
-                idx: 4294967295,
-                version: 1,
-              ),
+              binding_id: None,
               expr: Assignment(Assignment(
                 name: Name(Spanned(
                   value: "y",
@@ -267,10 +255,7 @@ Ok(Program(
                     ),
                   ),
                 )),
-                binding_id: SerKey(
-                  idx: 4294967295,
-                  version: 1,
-                ),
+                binding_id: None,
                 expr: Assignment(Assignment(
                   name: Name(Spanned(
                     value: "z",
@@ -289,10 +274,7 @@ Ok(Program(
                       ),
                     ),
                   )),
-                  binding_id: SerKey(
-                    idx: 4294967295,
-                    version: 1,
-                  ),
+                  binding_id: None,
                   expr: Assignment(Assignment(
                     name: Name(Spanned(
                       value: "y",
@@ -311,10 +293,7 @@ Ok(Program(
                         ),
                       ),
                     )),
-                    binding_id: SerKey(
-                      idx: 4294967295,
-                      version: 1,
-                    ),
+                    binding_id: None,
                     expr: UnOp(UnOpExpr(
                       op: Not,
                       expr: UnOp(UnOpExpr(
