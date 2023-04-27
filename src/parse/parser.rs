@@ -484,6 +484,7 @@ impl<'buf> Parser<'buf> {
 
         Ok(ast::Formal {
             name,
+            binding_id: Default::default(),
             ty_name,
             span,
             ty,
@@ -509,6 +510,7 @@ impl<'buf> Parser<'buf> {
 
         Ok(ast::Binding {
             name,
+            binding_id: Default::default(),
             ty_name,
             init,
             span,
@@ -531,6 +533,7 @@ impl<'buf> Parser<'buf> {
 
             Ok(Box::new(Expr::Assignment(ast::Assignment {
                 name,
+                binding_id: Default::default(),
                 expr,
                 span,
             })))
@@ -911,13 +914,18 @@ impl<'buf> Parser<'buf> {
                 ast::Receiver::SelfType {
                     ty: UnresolvedTy::SelfType.into(),
                     method_name_span,
+                    binding_id: Default::default(),
                 },
             )
         } else {
             let name = self.parse_name()?;
             let ty = None;
 
-            Ok(Box::new(Expr::Name(ast::NameExpr { name, ty })))
+            Ok(Box::new(Expr::Name(ast::NameExpr {
+                name,
+                binding_id: Default::default(),
+                ty,
+            })))
         }
     }
 

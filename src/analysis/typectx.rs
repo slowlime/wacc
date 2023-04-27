@@ -7,6 +7,7 @@ use std::iter::successors;
 use byte_string::ByteStr;
 use indexmap::{map as index_map, IndexMap};
 use itertools::Itertools;
+use slotmap::{new_key_type, SlotMap};
 
 use crate::ast::ty::{BuiltinClass, FunctionTy, ResolvedTy, Ty, UnresolvedTy};
 use crate::ast::TyName;
@@ -445,15 +446,21 @@ impl<'buf> TypeCtx<'buf> {
     }
 }
 
+new_key_type! {
+    pub struct BindingId;
+}
+
 #[derive(Debug, Clone)]
 pub struct BindingMap<'buf> {
     scopes: Vec<BindingScope<'buf>>,
+    bindings: SlotMap<BindingId, Binding<'buf>>
 }
 
 impl<'buf> BindingMap<'buf> {
     pub fn new() -> Self {
         Self {
             scopes: vec![BindingScope::new()],
+            bindings: Default::default(),
         }
     }
 
@@ -468,16 +475,57 @@ impl<'buf> BindingMap<'buf> {
         result
     }
 
-    pub fn resolve(&self, name: &[u8]) -> Option<&Binding<'buf>> {
+    pub fn resolve(&self, name: &[u8]) -> Option<(BindingId, &Binding<'buf>)> {
         self.scopes
             .iter()
             .rev()
-            .flat_map(|scope| scope.get(name))
+            .flat_map(|scope| scope.local_bindings.get(name))
             .next()
+            .map(|&id| (id, &self.bindings[id]))
     }
 
-    pub fn innermost_mut(&mut self) -> &mut BindingScope<'buf> {
+    fn innermost(&self) -> &BindingScope<'buf> {
+        self.scopes.last().unwrap()
+    }
+
+    fn innermost_mut(&mut self) -> &mut BindingScope<'buf> {
         self.scopes.last_mut().unwrap()
+    }
+
+    pub fn bind_self(&mut self, ty: ResolvedTy<'buf>, location: DefinitionLocation) -> BindingId {
+        self.bindings.insert(Binding {
+            kind: BindingKind::SelfRef,
+            ty,
+            location,
+        })
+    }
+
+    pub fn bind(&mut self, name: Cow<'buf, [u8]>, binding: Binding<'buf>) -> Result<BindingId, BindError<'_, 'buf>> {
+        if &*name == b"self" {
+            Err(BindError {
+                kind: BindErrorKind::BindingToSelf,
+                name,
+            })
+        } else {
+            let binding_id = self.bindings.insert(binding);
+            self.innermost_mut().local_bindings.insert(name, binding_id);
+
+            Ok(binding_id)
+        }
+    }
+
+    pub fn bind_if_empty(&mut self, name: Cow<'buf, [u8]>, binding: Binding<'buf>) -> Result<BindingId, BindError<'_, 'buf>> {
+        if self.innermost().local_bindings.contains_key(&name) {
+            let &previous_id = self.innermost().local_bindings.get(&name).unwrap();
+            let previous = &self.bindings[previous_id];
+
+            Err(BindError {
+                kind: BindErrorKind::DoubleDefinition { previous },
+                name,
+            })
+        } else {
+            self.bind(name, binding)
+        }
     }
 }
 
@@ -515,7 +563,7 @@ impl Display for BindError<'_, '_> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BindingKind {
     Field { inherited: bool },
-
+    SelfRef,
     Parameter,
     Local,
 }
@@ -553,49 +601,13 @@ pub struct Binding<'buf> {
 
 #[derive(Debug, Clone)]
 pub struct BindingScope<'buf> {
-    local_bindings: HashMap<Cow<'buf, [u8]>, Binding<'buf>>,
+    local_bindings: HashMap<Cow<'buf, [u8]>, BindingId>,
 }
 
 impl<'buf> BindingScope<'buf> {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             local_bindings: HashMap::new(),
-        }
-    }
-
-    pub fn get(&self, name: &[u8]) -> Option<&Binding<'buf>> {
-        self.local_bindings.get(name)
-    }
-
-    pub fn bind(
-        &mut self,
-        name: Cow<'buf, [u8]>,
-        binding: Binding<'buf>,
-    ) -> Result<Option<Binding<'buf>>, BindError<'_, 'buf>> {
-        if &*name == b"self" {
-            Err(BindError {
-                kind: BindErrorKind::BindingToSelf,
-                name,
-            })
-        } else {
-            Ok(self.local_bindings.insert(name, binding))
-        }
-    }
-
-    pub fn bind_if_empty(
-        &mut self,
-        name: Cow<'buf, [u8]>,
-        binding: Binding<'buf>,
-    ) -> Result<(), BindError<'_, 'buf>> {
-        if self.local_bindings.contains_key(&name) {
-            let previous = self.local_bindings.get(&name).unwrap();
-
-            Err(BindError {
-                kind: BindErrorKind::DoubleDefinition { previous },
-                name,
-            })
-        } else {
-            self.bind(name, binding).map(drop)
         }
     }
 }

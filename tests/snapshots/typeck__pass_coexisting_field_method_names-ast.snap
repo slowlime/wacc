@@ -44,6 +44,10 @@ SnapshotData(
               ),
             ),
           )),
+          binding_id: SerKey(
+            idx: 2,
+            version: 1,
+          ),
           ty_name: TyName(Name(Spanned(
             value: "Int",
             span: Span(
@@ -148,6 +152,10 @@ SnapshotData(
                 ),
               ),
             )),
+            binding_id: SerKey(
+              idx: 2,
+              version: 1,
+            ),
             ty: Some(Resolved(Builtin(Int))),
           )),
           span: Span(
@@ -223,6 +231,10 @@ SnapshotData(
                   line: 9,
                   col: 9,
                 ),
+              ),
+              binding_id: SerKey(
+                idx: 1,
+                version: 1,
               ),
             ),
             method: Name(Spanned(

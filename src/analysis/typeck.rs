@@ -21,6 +21,7 @@ use crate::try_match;
 use crate::util::CloneStatic;
 
 use super::typectx::ClassIndex;
+use super::BindingId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Variance {
@@ -98,6 +99,7 @@ impl<'dia, 'emt, 'buf> TypeChecker<'dia, 'emt, 'buf> {
                     unrecognized_names: RefCell::new(&mut self.unrecognized_names),
                     class_name: class.name.borrow().into(),
                     location: None,
+                    self_binding_id: Default::default(),
                 };
 
                 visitor.visit_class(class);
@@ -274,6 +276,7 @@ struct TypeVisitor<'a, 'dia, 'emt, 'buf> {
     unrecognized_names: RefCell<&'a mut Vec<UnrecognizedName<'buf>>>,
     class_name: ClassName<'buf>,
     location: Option<Location<'buf>>,
+    self_binding_id: BindingId,
 }
 
 impl TypeVisitor<'_, '_, '_, '_> {
@@ -290,6 +293,7 @@ impl TypeVisitor<'_, '_, '_, '_> {
             let mut unrecognized_names = Some(this.unrecognized_names);
             let mut class_name = Some(this.class_name);
             let mut location = Some(this.location);
+            let mut self_binding_id = Some(this.self_binding_id);
 
             this.bindings.with_scope(|bindings| {
                 take_mut::take(bindings, |bindings| {
@@ -301,6 +305,7 @@ impl TypeVisitor<'_, '_, '_, '_> {
                         unrecognized_names: unrecognized_names.take().unwrap(),
                         class_name: class_name.take().unwrap(),
                         location: location.take().unwrap(),
+                        self_binding_id: self_binding_id.take().unwrap(),
                     };
 
                     result = Some(f(&mut this));
@@ -311,6 +316,7 @@ impl TypeVisitor<'_, '_, '_, '_> {
                     unrecognized_names.replace(this.unrecognized_names);
                     class_name.replace(this.class_name);
                     location.replace(this.location);
+                    self_binding_id.replace(this.self_binding_id);
 
                     this.bindings
                 });
@@ -324,6 +330,7 @@ impl TypeVisitor<'_, '_, '_, '_> {
                 unrecognized_names: unrecognized_names.unwrap(),
                 class_name: class_name.unwrap(),
                 location: location.take().unwrap(),
+                self_binding_id: self_binding_id.unwrap(),
             }
         });
 
@@ -355,7 +362,7 @@ impl TypeVisitor<'_, '_, '_, '_> {
                 };
 
                 // ignore the error here: it'll get emitted while typecking the offending class
-                let _ = self.bindings.innermost_mut().bind_if_empty(
+                let _ = self.bindings.bind_if_empty(
                     name.clone(),
                     Binding {
                         kind: BindingKind::Field { inherited: true },
@@ -476,45 +483,55 @@ impl<'buf> TypeVisitor<'_, '_, '_, 'buf> {
         }
     }
 
-    fn bind(&mut self, name: &Name<'buf>, ty: ResolvedTy<'buf>, binding_kind: BindingKind) {
+    fn bind(
+        &mut self,
+        name: &Name<'buf>,
+        ty: ResolvedTy<'buf>,
+        binding_kind: BindingKind,
+    ) -> BindingId {
         let binding = Binding {
             kind: binding_kind,
             ty,
             location: DefinitionLocation::UserCode(name.span().into_owned()),
         };
 
-        if let Err(e) = self
-            .bindings
-            .innermost_mut()
-            .bind_if_empty(name.0.value.clone(), binding)
-        {
-            match e.kind {
-                BindErrorKind::DoubleDefinition { previous } => self
-                    .diagnostics
-                    .borrow_mut()
-                    .error()
-                    .with_span_and_error(TypeckError::MultipleDefinition {
-                        kind: match previous.kind {
-                            BindingKind::Local => panic!(
-                                "a local binding was attempted without introducing a new scope"
-                            ),
-                            BindingKind::Field { inherited } => {
-                                MultipleDefinitionKind::Field { inherited }
-                            }
-                            BindingKind::Parameter => MultipleDefinitionKind::Parameter,
-                        },
+        match self.bindings.bind_if_empty(name.0.value.clone(), binding) {
+            Ok(binding_id) => binding_id,
 
-                        name: Box::new(name.clone_static()),
-                        previous: previous.location.clone(),
-                    })
-                    .emit(),
+            Err(e) => {
+                match e.kind {
+                    BindErrorKind::DoubleDefinition { previous } => self
+                        .diagnostics
+                        .borrow_mut()
+                        .error()
+                        .with_span_and_error(TypeckError::MultipleDefinition {
+                            kind: match previous.kind {
+                                BindingKind::Local => panic!(
+                                    "a local binding was attempted without introducing a new scope"
+                                ),
+                                BindingKind::SelfRef => unreachable!(),
+                                BindingKind::Field { inherited } => {
+                                    MultipleDefinitionKind::Field { inherited }
+                                }
+                                BindingKind::Parameter => MultipleDefinitionKind::Parameter,
+                            },
 
-                BindErrorKind::BindingToSelf => self
-                    .diagnostics
-                    .borrow_mut()
-                    .error()
-                    .with_span_and_error(TypeckError::IllegalSelf(Box::new(name.clone_static())))
-                    .emit(),
+                            name: Box::new(name.clone_static()),
+                            previous: previous.location.clone(),
+                        })
+                        .emit(),
+
+                    BindErrorKind::BindingToSelf => self
+                        .diagnostics
+                        .borrow_mut()
+                        .error()
+                        .with_span_and_error(TypeckError::IllegalSelf(Box::new(
+                            name.clone_static(),
+                        )))
+                        .emit(),
+                }
+
+                Default::default()
             }
         }
     }
@@ -542,14 +559,17 @@ impl<'buf> TypeVisitor<'_, '_, '_, 'buf> {
     /// - `ResolvedTy::Bottom` if the name occurs in a covariant position
     /// - `ResolvedTy::Builtin(BuiltinClass::Object)` if the name occurs in a contravariant position
     /// - `ResolvedTy::Untyped` if the type occurs in an invariant position
-    fn resolve_name(&self, name: &Name<'buf>, name_ctx: NameCtx) -> ResolvedTy<'buf> {
+    fn resolve_name(&self, name: &Name<'buf>, name_ctx: NameCtx) -> (BindingId, ResolvedTy<'buf>) {
         use Variance::*;
 
         match name.as_slice() {
             b"self" if name_ctx.allow_self => {
-                return ResolvedTy::SelfType {
-                    enclosed: Box::new(self.class_name.clone().try_into().unwrap()),
-                }
+                return (
+                    self.self_binding_id,
+                    ResolvedTy::SelfType {
+                        enclosed: Box::new(self.class_name.clone().try_into().unwrap()),
+                    },
+                )
             }
 
             b"self" => {
@@ -561,19 +581,24 @@ impl<'buf> TypeVisitor<'_, '_, '_, 'buf> {
             }
 
             _ => {
-                if let Some(Binding { ty, .. }) = self.bindings.resolve(name.as_slice()) {
-                    return ty.clone();
+                if let Some((binding_id, Binding { ty, .. })) =
+                    self.bindings.resolve(name.as_slice())
+                {
+                    return (binding_id, ty.clone());
                 }
 
                 self.push_unrecognized_name(name.clone());
             }
         }
 
-        match name_ctx.variance {
-            Covariant => ResolvedTy::Bottom,
-            Contravariant => BuiltinClass::Object.into(),
-            Invariant => ResolvedTy::Untyped,
-        }
+        (
+            Default::default(),
+            match name_ctx.variance {
+                Covariant => ResolvedTy::Bottom,
+                Contravariant => BuiltinClass::Object.into(),
+                Invariant => ResolvedTy::Untyped,
+            },
+        )
     }
 
     fn make_self_ty(&self) -> ResolvedTy<'buf> {
@@ -827,7 +852,7 @@ impl<'buf> TypeVisitor<'_, '_, '_, 'buf> {
             self.check_expr_conforms(init, &ty);
         }
 
-        self.bind(&binding.name, ty.clone(), binding_kind);
+        binding.binding_id = self.bind(&binding.name, ty.clone(), binding_kind);
         binding.ty = ty.into();
     }
 
@@ -863,6 +888,10 @@ impl<'buf> ast::VisitorMut<'buf> for TypeVisitor<'_, '_, '_, 'buf> {
         self.with_scope(|this| {
             this.check_forbidden_inheritance(&class.name);
 
+            this.self_binding_id = this.bindings.bind_self(
+                this.make_self_ty(),
+                DefinitionLocation::UserCode(class.span.clone()),
+            );
             this.add_inherited_fields();
 
             // visit the fields first to populate the scope
@@ -939,13 +968,14 @@ impl<'buf> ast::VisitorMut<'buf> for TypeVisitor<'_, '_, '_, 'buf> {
     }
 
     fn visit_assignment(&mut self, expr: &mut ast::Assignment<'buf>) {
-        let ty = self.resolve_name(
+        let (binding_id, ty) = self.resolve_name(
             &expr.name,
             NameCtx {
                 variance: Variance::Contravariant,
                 allow_self: false,
             },
         );
+        expr.binding_id = binding_id;
         self.visit_expr(&mut expr.expr);
         self.check_expr_conforms(&expr.expr, &ty);
     }
@@ -1121,7 +1151,7 @@ impl<'buf> ast::VisitorMut<'buf> for TypeVisitor<'_, '_, '_, 'buf> {
     }
 
     fn visit_name_expr(&mut self, expr: &mut ast::NameExpr<'buf>) {
-        let ty = self.resolve_name(
+        let (binding_id, ty) = self.resolve_name(
             &expr.name,
             NameCtx {
                 variance: Variance::Covariant,
@@ -1129,6 +1159,7 @@ impl<'buf> ast::VisitorMut<'buf> for TypeVisitor<'_, '_, '_, 'buf> {
             },
         );
 
+        expr.binding_id = binding_id;
         expr.ty = Some(ty.into());
     }
 
@@ -1144,7 +1175,7 @@ impl<'buf> ast::VisitorMut<'buf> for TypeVisitor<'_, '_, '_, 'buf> {
             },
         );
 
-        self.bind(&formal.name, ty.clone(), BindingKind::Parameter);
+        formal.binding_id = self.bind(&formal.name, ty.clone(), BindingKind::Parameter);
         formal.ty = ty.into();
     }
 
@@ -1154,8 +1185,9 @@ impl<'buf> ast::VisitorMut<'buf> for TypeVisitor<'_, '_, '_, 'buf> {
         recv.recurse_mut(self);
 
         match recv {
-            Receiver::SelfType { ty, .. } => {
+            Receiver::SelfType { ty, binding_id, .. } => {
                 *ty = self.make_self_ty().into();
+                *binding_id = self.self_binding_id;
             }
 
             Receiver::Dynamic(_expr) => {

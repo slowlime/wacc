@@ -81,6 +81,10 @@ SnapshotData(
                   ),
                 ),
               )),
+              binding_id: SerKey(
+                idx: 2,
+                version: 1,
+              ),
               ty_name: TyName(Name(Spanned(
                 value: "Object",
                 span: Span(
@@ -167,6 +171,10 @@ SnapshotData(
                     ),
                   ),
                 )),
+                binding_id: SerKey(
+                  idx: 3,
+                  version: 1,
+                ),
                 ty_name: TyName(Name(Spanned(
                   value: "Int",
                   span: Span(
@@ -253,6 +261,10 @@ SnapshotData(
                       ),
                     ),
                   )),
+                  binding_id: SerKey(
+                    idx: 4,
+                    version: 1,
+                  ),
                   ty_name: TyName(Name(Spanned(
                     value: "String",
                     span: Span(
@@ -339,6 +351,10 @@ SnapshotData(
                         ),
                       ),
                     )),
+                    binding_id: SerKey(
+                      idx: 5,
+                      version: 1,
+                    ),
                     ty_name: TyName(Name(Spanned(
                       value: "IO",
                       span: Span(
@@ -425,6 +441,10 @@ SnapshotData(
                           ),
                         ),
                       )),
+                      binding_id: SerKey(
+                        idx: 6,
+                        version: 1,
+                      ),
                       ty_name: TyName(Name(Spanned(
                         value: "Bool",
                         span: Span(
@@ -511,6 +531,10 @@ SnapshotData(
                             ),
                           ),
                         )),
+                        binding_id: SerKey(
+                          idx: 7,
+                          version: 1,
+                        ),
                         ty_name: TyName(Name(Spanned(
                           value: "Main",
                           span: Span(
@@ -597,6 +621,10 @@ SnapshotData(
                               ),
                             ),
                           )),
+                          binding_id: SerKey(
+                            idx: 8,
+                            version: 1,
+                          ),
                           ty_name: TyName(Name(Spanned(
                             value: "SELF_TYPE",
                             span: Span(

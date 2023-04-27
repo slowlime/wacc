@@ -135,6 +135,10 @@ SnapshotData(
                   ),
                 ),
               )),
+              binding_id: SerKey(
+                idx: 2,
+                version: 1,
+              ),
               ty_name: TyName(Name(Spanned(
                 value: "Int",
                 span: Span(
@@ -204,6 +208,10 @@ SnapshotData(
                 ),
               ),
             )),
+            binding_id: SerKey(
+              idx: 1,
+              version: 1,
+            ),
             ty: Some(Resolved(SelfType(
               enclosed: Class("Base"),
             ))),
@@ -266,6 +274,10 @@ SnapshotData(
                   ),
                 ),
               )),
+              binding_id: SerKey(
+                idx: 3,
+                version: 1,
+              ),
               ty_name: TyName(Name(Spanned(
                 value: "Int",
                 span: Span(
@@ -335,6 +347,10 @@ SnapshotData(
                 ),
               ),
             )),
+            binding_id: SerKey(
+              idx: 1,
+              version: 1,
+            ),
             ty: Some(Resolved(SelfType(
               enclosed: Class("Base"),
             ))),
@@ -397,6 +413,10 @@ SnapshotData(
                   ),
                 ),
               )),
+              binding_id: SerKey(
+                idx: 4,
+                version: 1,
+              ),
               ty_name: TyName(Name(Spanned(
                 value: "Int",
                 span: Span(
@@ -448,6 +468,10 @@ SnapshotData(
                   ),
                 ),
               )),
+              binding_id: SerKey(
+                idx: 5,
+                version: 1,
+              ),
               ty_name: TyName(Name(Spanned(
                 value: "Int",
                 span: Span(
@@ -517,6 +541,10 @@ SnapshotData(
                 ),
               ),
             )),
+            binding_id: SerKey(
+              idx: 1,
+              version: 1,
+            ),
             ty: Some(Resolved(SelfType(
               enclosed: Class("Base"),
             ))),
@@ -705,6 +733,10 @@ SnapshotData(
                   ),
                 ),
               )),
+              binding_id: SerKey(
+                idx: 2,
+                version: 1,
+              ),
               ty_name: TyName(Name(Spanned(
                 value: "String",
                 span: Span(
@@ -774,6 +806,10 @@ SnapshotData(
                 ),
               ),
             )),
+            binding_id: SerKey(
+              idx: 1,
+              version: 1,
+            ),
             ty: Some(Resolved(SelfType(
               enclosed: Class("Derived"),
             ))),
@@ -836,6 +872,10 @@ SnapshotData(
                   ),
                 ),
               )),
+              binding_id: SerKey(
+                idx: 3,
+                version: 1,
+              ),
               ty_name: TyName(Name(Spanned(
                 value: "Int",
                 span: Span(
@@ -887,6 +927,10 @@ SnapshotData(
                   ),
                 ),
               )),
+              binding_id: SerKey(
+                idx: 4,
+                version: 1,
+              ),
               ty_name: TyName(Name(Spanned(
                 value: "Int",
                 span: Span(
@@ -956,6 +1000,10 @@ SnapshotData(
                 ),
               ),
             )),
+            binding_id: SerKey(
+              idx: 1,
+              version: 1,
+            ),
             ty: Some(Resolved(SelfType(
               enclosed: Class("Derived"),
             ))),
@@ -1019,6 +1067,10 @@ SnapshotData(
                   ),
                 ),
               )),
+              binding_id: SerKey(
+                idx: 5,
+                version: 1,
+              ),
               ty_name: TyName(Name(Spanned(
                 value: "Int",
                 span: Span(
@@ -1088,6 +1140,10 @@ SnapshotData(
                 ),
               ),
             )),
+            binding_id: SerKey(
+              idx: 1,
+              version: 1,
+            ),
             ty: Some(Resolved(SelfType(
               enclosed: Class("Derived"),
             ))),

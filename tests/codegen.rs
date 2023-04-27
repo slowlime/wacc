@@ -373,4 +373,5 @@ run_codegen_tests! {
     isvoid,
     arith,
     eq,
+    lexical_scope,
 }

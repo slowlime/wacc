@@ -44,6 +44,10 @@ SnapshotData(
               ),
             ),
           )),
+          binding_id: SerKey(
+            idx: 2,
+            version: 1,
+          ),
           ty_name: TyName(Name(Spanned(
             value: "Int",
             span: Span(
@@ -79,6 +83,10 @@ SnapshotData(
                 ),
               ),
             )),
+            binding_id: SerKey(
+              idx: 4294967295,
+              version: 1,
+            ),
             ty: Some(Resolved(Bottom)),
           ))),
           span: Span(
@@ -115,6 +123,10 @@ SnapshotData(
               ),
             ),
           )),
+          binding_id: SerKey(
+            idx: 3,
+            version: 1,
+          ),
           ty_name: TyName(Name(Spanned(
             value: "SELF_TYPE",
             span: Span(
@@ -150,6 +162,10 @@ SnapshotData(
                 ),
               ),
             )),
+            binding_id: SerKey(
+              idx: 4294967295,
+              version: 1,
+            ),
             ty: Some(Resolved(Bottom)),
           ))),
           span: Span(
@@ -188,6 +204,10 @@ SnapshotData(
               ),
             ),
           )),
+          binding_id: SerKey(
+            idx: 4,
+            version: 1,
+          ),
           ty_name: TyName(Name(Spanned(
             value: "SELF_TYPE",
             span: Span(
@@ -223,6 +243,10 @@ SnapshotData(
                 ),
               ),
             )),
+            binding_id: SerKey(
+              idx: 4294967295,
+              version: 1,
+            ),
             ty: Some(Resolved(Bottom)),
           ))),
           span: Span(
@@ -261,6 +285,10 @@ SnapshotData(
               ),
             ),
           )),
+          binding_id: SerKey(
+            idx: 5,
+            version: 1,
+          ),
           ty_name: TyName(Name(Spanned(
             value: "SELF_TYPE",
             span: Span(
@@ -296,6 +324,10 @@ SnapshotData(
                 ),
               ),
             )),
+            binding_id: SerKey(
+              idx: 3,
+              version: 1,
+            ),
             ty: Some(Resolved(SelfType(
               enclosed: Class("Main"),
             ))),

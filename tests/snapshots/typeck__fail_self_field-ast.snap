@@ -44,6 +44,10 @@ SnapshotData(
               ),
             ),
           )),
+          binding_id: SerKey(
+            idx: 4294967295,
+            version: 1,
+          ),
           ty_name: TyName(Name(Spanned(
             value: "SELF_TYPE",
             span: Span(

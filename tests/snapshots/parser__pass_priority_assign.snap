@@ -43,6 +43,10 @@ Ok(Program(
               ),
             ),
           )),
+          binding_id: SerKey(
+            idx: 4294967295,
+            version: 1,
+          ),
           ty_name: TyName(Name(Spanned(
             value: "Bool",
             span: Span(
@@ -111,6 +115,10 @@ Ok(Program(
               ),
             ),
           )),
+          binding_id: SerKey(
+            idx: 4294967295,
+            version: 1,
+          ),
           ty_name: TyName(Name(Spanned(
             value: "Bool",
             span: Span(
@@ -215,6 +223,10 @@ Ok(Program(
                 ),
               ),
             )),
+            binding_id: SerKey(
+              idx: 4294967295,
+              version: 1,
+            ),
             expr: Assignment(Assignment(
               name: Name(Spanned(
                 value: "z",
@@ -233,6 +245,10 @@ Ok(Program(
                   ),
                 ),
               )),
+              binding_id: SerKey(
+                idx: 4294967295,
+                version: 1,
+              ),
               expr: Assignment(Assignment(
                 name: Name(Spanned(
                   value: "y",
@@ -251,6 +267,10 @@ Ok(Program(
                     ),
                   ),
                 )),
+                binding_id: SerKey(
+                  idx: 4294967295,
+                  version: 1,
+                ),
                 expr: Assignment(Assignment(
                   name: Name(Spanned(
                     value: "z",
@@ -269,6 +289,10 @@ Ok(Program(
                       ),
                     ),
                   )),
+                  binding_id: SerKey(
+                    idx: 4294967295,
+                    version: 1,
+                  ),
                   expr: Assignment(Assignment(
                     name: Name(Spanned(
                       value: "y",
@@ -287,6 +311,10 @@ Ok(Program(
                         ),
                       ),
                     )),
+                    binding_id: SerKey(
+                      idx: 4294967295,
+                      version: 1,
+                    ),
                     expr: UnOp(UnOpExpr(
                       op: Not,
                       expr: UnOp(UnOpExpr(
