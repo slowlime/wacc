@@ -425,7 +425,6 @@ fn dump_ast_coolc<'buf>(
                 Receiver::SelfType {
                     method_name_span,
                     ty,
-                    binding_id,
                 } => {
                     // synthesize a "self" NameExpr
                     let mock_self = ast::Expr::Name(ast::NameExpr {
@@ -433,7 +432,7 @@ fn dump_ast_coolc<'buf>(
                             value: b"self".as_slice().into(),
                             span: method_name_span.clone(),
                         }),
-                        binding_id: *binding_id,
+                        binding_id: None,
                         ty: Some(ty.clone()),
                     });
                     self.visit_expr(&mock_self)?;

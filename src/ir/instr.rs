@@ -5,8 +5,8 @@ use slotmap::new_key_type;
 use crate::util::define_byte_string;
 
 use super::bb::Block;
-use super::func::Func;
-use super::ty::{IrClassName, IrTy};
+use super::func::FuncId;
+use super::ty::{IrTy, IrClassName};
 use super::value::Value;
 
 macro_rules! impl_into_instr {
@@ -103,7 +103,7 @@ delegate_instr_operands!(VTableLookup<'_> => |self| self.obj);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MethodLookup<'a> {
-    pub class_name: IrClassName<'a>,
+    pub class: IrClassName<'a>,
     pub method_name: MethodName<'a>,
 }
 
@@ -128,38 +128,39 @@ impl_into_instr!(CallRef);
 delegate_instr_operands!(CallRef => |self| self.0);
 
 impl CallRef {
-    fn new(func_ref: Value, args: &[Value]) -> Self {
+    pub fn new(func_ref: Value, args: &[Value]) -> Self {
         let mut result = Self(Vec::with_capacity(1 + args.len()));
+        result.0.push(func_ref);
         result.0.extend_from_slice(args);
 
         result
     }
 
-    fn func_ref(&self) -> Value {
+    pub fn func_ref(&self) -> Value {
         self.0[0]
     }
 
-    fn func_ref_mut(&mut self) -> &mut Value {
+    pub fn func_ref_mut(&mut self) -> &mut Value {
         &mut self.0[0]
     }
 
-    fn args(&self) -> &[Value] {
+    pub fn args(&self) -> &[Value] {
         &self.0[1..]
     }
 
-    fn args_mut(&mut self) -> &mut [Value] {
+    pub fn args_mut(&mut self) -> &mut [Value] {
         &mut self.0[1..]
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Call<'a> {
-    pub func: Func<'a>,
+pub struct Call {
+    pub func: FuncId,
     pub args: Vec<Value>,
 }
 
-impl_into_instr!(Call<'a>);
-delegate_instr_operands!(Call<'_> => |self| self.args);
+impl_into_instr!(Call);
+delegate_instr_operands!(Call => |self| self.args);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FieldGet<'a> {
@@ -218,7 +219,7 @@ pub enum InstrKind<'a> {
     VTableLookup(VTableLookup<'a>),
     MethodLookup(MethodLookup<'a>),
     CallRef(CallRef),
-    Call(Call<'a>),
+    Call(Call),
     FieldGet(FieldGet<'a>),
     FieldSet(FieldSet<'a>),
     Box(Value),
@@ -314,6 +315,10 @@ impl TermInstrKind {
 
     pub fn jumps_to_mut<'s>(&'s mut self, bb: Block) -> impl Iterator<Item = &'s mut BlockJump> + 's {
         self.operands_mut().iter_mut().filter(move |jmp| jmp.bb == bb)
+    }
+
+    pub fn succ_bbs(&self) -> impl Iterator<Item = Block> + '_ {
+        self.operands().iter().map(|jmp| jmp.bb)
     }
 }
 

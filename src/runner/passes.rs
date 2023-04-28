@@ -136,6 +136,7 @@ pub fn typeck<'buf>(
         classes,
         ctx: ty_ctx,
         sorted,
+        ..
     } = typeck.resolve();
 
     ctx.stop_if_errors((classes, sorted, ty_ctx))

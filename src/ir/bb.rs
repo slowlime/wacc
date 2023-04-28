@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use slotmap::new_key_type;
 
 use super::func::Func;
@@ -26,15 +28,15 @@ impl BlockData {
 }
 
 impl Block {
-    pub fn preds(self, func: Func<'_>) -> Vec<Block> {
-        func.borrow().preds(self)
+    pub fn preds(self, func: &Func<'_>) -> HashSet<Block> {
+        func.preds(self)
     }
 
-    pub fn param(self, func: Func<'_>, idx: usize) -> Option<Value> {
-        func.borrow().bbs[self].params.get(idx).copied()
+    pub fn param(self, func: &Func<'_>, idx: usize) -> Option<Value> {
+        func.bbs[self].params.get(idx).copied()
     }
 
-    pub fn terminator(self, func: Func<'_>) -> TermInstr {
-        func.borrow().bbs[self].terminator
+    pub fn terminator(self, func: &Func<'_>) -> TermInstr {
+        func.bbs[self].terminator
     }
 }

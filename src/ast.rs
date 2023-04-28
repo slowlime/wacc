@@ -668,7 +668,6 @@ pub enum Receiver<'buf> {
     SelfType {
         ty: Ty<'buf>,
         method_name_span: Span,
-        binding_id: Option<BindingId>,
     },
 
     Dynamic(Box<Expr<'buf>>),
@@ -684,14 +683,13 @@ impl_clone_static!(|&self: Receiver| match self {
     Self::SelfType {
         ty,
         method_name_span,
-        binding_id,
     } => Receiver::SelfType {
         ty: ty.clone_static(),
         method_name_span: method_name_span.clone(),
-        binding_id: *binding_id,
     },
 
     Self::Dynamic(expr) => Receiver::Dynamic(Box::new(expr.clone_static())),
+
     Self::Static {
         object,
         ty_name,

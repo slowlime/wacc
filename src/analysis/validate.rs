@@ -253,10 +253,6 @@ impl<'buf> ast::Visitor<'buf> for Validator<'_, 'buf> {
     }
 
     fn visit_receiver(&mut self, recv: &ast::Receiver<'buf>) -> Self::Output {
-        if let ast::Receiver::SelfType { binding_id, method_name_span, .. } = recv {
-            self.assert_binding_resolved(method_name_span, *binding_id);
-        }
-
         self.assert_resolved(&recv.span(), &recv.ty().as_deref());
         recv.recurse(self);
     }

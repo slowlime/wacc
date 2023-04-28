@@ -914,7 +914,6 @@ impl<'buf> Parser<'buf> {
                 ast::Receiver::SelfType {
                     ty: UnresolvedTy::SelfType.into(),
                     method_name_span,
-                    binding_id: Default::default(),
                 },
             )
         } else {

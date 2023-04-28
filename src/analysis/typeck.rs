@@ -1189,9 +1189,8 @@ impl<'buf> ast::VisitorMut<'buf> for TypeVisitor<'_, '_, '_, 'buf> {
         recv.recurse_mut(self);
 
         match recv {
-            Receiver::SelfType { ty, binding_id, .. } => {
+            Receiver::SelfType { ty, .. } => {
                 *ty = self.make_self_ty().into();
-                *binding_id = self.self_binding_id;
             }
 
             Receiver::Dynamic(_expr) => {

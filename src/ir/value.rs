@@ -2,7 +2,7 @@ use slotmap::new_key_type;
 
 use super::bb::Block;
 use super::instr::Instr;
-use super::ty::{HasIrTy, IrTy};
+use super::ty::{HasIrTy, IrTy, MaybeSelfTy};
 
 new_key_type! {
     pub struct Value;
@@ -34,6 +34,7 @@ pub enum ValueKind {
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ValueData<'a> {
     pub ty: IrTy<'a>,
+    pub lower_bound_ty: MaybeSelfTy<'a>,
     pub kind: ValueKind,
 }
 

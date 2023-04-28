@@ -112,6 +112,12 @@ macro_rules! define_byte_string {
                     write!(f, "{}", $crate::util::slice_formatter(&self.0))
                 }
             }
+
+            impl<$lifetime> ::std::convert::From<&$lifetime [u8]> for $name<$lifetime> {
+                fn from(value: &$lifetime [u8]) -> Self {
+                    Self(value)
+                }
+            }
         )+
     };
 }

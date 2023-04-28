@@ -1,29 +1,27 @@
-use super::func::{FuncData, Func, FuncCell};
-use super::ty::IrClassInner;
+use elsa::FrozenMap;
 
 #[derive(Default)]
-pub struct Arena<'a> {
-    bytes: typed_arena::Arena<u8>,
-    classes: typed_arena::Arena<IrClassInner<'a>>,
-    funcs: typed_arena::Arena<FuncCell<'a>>,
+pub struct Arena {
+    strings: FrozenMap<Vec<u8>, Box<()>>,
 }
 
-impl<'a> Arena<'a> {
+impl Arena {
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn alloc_bytes(&'a self, bytes: &[u8]) -> &'a [u8] {
-        self.bytes.alloc_extend(bytes.iter().copied())
+    pub fn alloc_bytes<'a>(&'a self, bytes: &[u8]) -> &'a [u8] {
+        if let Some((bytes, _)) = self.strings.get_key_value(bytes) {
+            return bytes;
+        }
+
+        self.strings.insert(bytes.to_owned(), Box::new(()));
+        self.strings.get_key_value(bytes).unwrap().0
     }
 
-    pub fn alloc_class(&'a self, class: IrClassInner<'a>) -> &'a mut IrClassInner<'a> {
-        self.classes.alloc(class)
-    }
-
-    pub fn alloc_func(&'a self, func: FuncData<'a>) -> Func<'a> {
-        self.funcs.alloc(FuncCell::new(func))
+    pub fn alloc<'a, T: From<&'a [u8]>>(&'a self, bytes: &[u8]) -> T {
+        self.alloc_bytes(bytes).into()
     }
 }
 
-pub type ArenaRef<'a> = &'a Arena<'a>;
+pub type ArenaRef<'a> = &'a Arena;

@@ -23,7 +23,6 @@ wast = { git = "https://github.com/slowlime/wasm-tools", branch = "gc-cast-encod
 paste = "1.0.12"
 ron = "0.8.0"
 serde = { version = "1", features = ["derive"] }
-typed-arena = "2.0.2"
 slotmap = { version = "1.0.6", features = ["serde"] }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
