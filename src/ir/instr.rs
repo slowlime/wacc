@@ -6,7 +6,7 @@ use crate::util::define_byte_string;
 
 use super::bb::Block;
 use super::func::FuncId;
-use super::ty::{IrTy, IrClassName};
+use super::ty::IrClassName;
 use super::value::Value;
 
 macro_rules! impl_into_instr {
@@ -95,6 +95,7 @@ impl InstrOperands for Value {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct VTableLookup<'a> {
     pub obj: Value,
+    pub class: IrClassName<'a>,
     pub method_name: MethodName<'a>,
 }
 
@@ -104,7 +105,7 @@ delegate_instr_operands!(VTableLookup<'_> => |self| self.obj);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MethodLookup<'a> {
     pub class: IrClassName<'a>,
-    pub method_name: MethodName<'a>,
+    pub method: MethodName<'a>,
 }
 
 impl_into_instr!(MethodLookup<'a>);
@@ -207,12 +208,12 @@ impl<'a> FieldSet<'a> {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Cast<'a> {
-    pub obj: Value,
-    pub to_ty: IrTy<'a>,
+    pub value: Value,
+    pub to_class: IrClassName<'a>,
 }
 
 impl_into_instr!(Cast<'a>);
-delegate_instr_operands!(Cast<'_> => |self| self.obj);
+delegate_instr_operands!(Cast<'_> => |self| self.value);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum InstrKind<'a> {
@@ -225,8 +226,7 @@ pub enum InstrKind<'a> {
     Box(Value),
     Unbox(Value),
     Cast(Cast<'a>),
-    UncheckedCast(Cast<'a>),
-    New(IrTy<'a>),
+    New(IrClassName<'a>),
     IsNull(Value),
     Add(Value, Value),
     Sub(Value, Value),
@@ -239,6 +239,7 @@ pub enum InstrKind<'a> {
     Eq(Value, Value),
     Inv(Value),
     Not(Value),
+    Null(IrClassName<'a>),
     I32(i32),
     Bytes(IrBytes<'a>),
     Bool(bool),
@@ -303,7 +304,7 @@ impl Branch {
 pub enum TermInstrKind {
     Branch(Branch),
     Jump(BlockJump),
-    Return(Option<Value>),
+    Return(Value),
     /// The block never reaches the end.
     Diverge,
 }

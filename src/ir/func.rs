@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::fmt::{self, Display};
 use std::num::NonZeroUsize;
 use std::ops::{Index, IndexMut};
 
@@ -7,28 +8,43 @@ use serde::Serialize;
 use slotmap::{SecondaryMap, SlotMap};
 
 use crate::ir::instr::InstrOperands;
+use crate::try_match;
 use crate::util::define_byte_string;
 
 use super::bb::{Block, BlockData};
-use super::instr::{Instr, InstrKind, TermInstr, TermInstrKind};
-use super::mem::ArenaRef;
-use super::ty::{IrTy, MaybeSelfTy};
+use super::instr::{Instr, InstrKind, MethodName, TermInstr, TermInstrKind};
+use super::ty::{IrClassName, IrTy};
 use super::value::{Param, Value, ValueData, ValueKind};
 
 define_byte_string! {
     pub struct FuncName<'a>;
 }
 
-impl<'a> FuncName<'a> {
-    pub fn new(arena: ArenaRef<'a>, name: &[u8]) -> Self {
-        Self(arena.alloc_bytes(name))
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum FullFuncName<'a> {
+    Free(FuncName<'a>),
+    Method(IrClassName<'a>, MethodName<'a>),
+}
+
+impl<'a> From<FuncName<'a>> for FullFuncName<'a> {
+    fn from(name: FuncName<'a>) -> Self {
+        Self::Free(name)
+    }
+}
+
+impl Display for FullFuncName<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Free(func) => func.fmt(f),
+            Self::Method(class, func) => write!(f, "{}::{}", class, func),
+        }
     }
 }
 
 #[derive(Debug)]
 pub struct Func<'a> {
     pub id: FuncId,
-    pub name: FuncName<'a>,
+    pub name: FullFuncName<'a>,
     pub bbs: SlotMap<Block, BlockData>,
     pub bb_preds: SecondaryMap<Block, HashSet<Block>>,
     pub instrs: SlotMap<Instr, InstrKind<'a>>,
@@ -39,17 +55,10 @@ pub struct Func<'a> {
 }
 
 impl<'a> Func<'a> {
-    pub fn append_instr(
-        &mut self,
-        bb: Block,
-        instr_kind: InstrKind<'a>,
-        ty: IrTy<'a>,
-        lower_bound_ty: MaybeSelfTy<'a>,
-    ) -> Value {
+    pub fn append_instr(&mut self, bb: Block, instr_kind: InstrKind<'a>, ty: IrTy<'a>) -> Value {
         let instr = self.instrs.insert(instr_kind);
         let value_data = ValueData {
             ty,
-            lower_bound_ty,
             kind: ValueKind::Instr(instr),
         };
 
@@ -78,17 +87,11 @@ impl<'a> Func<'a> {
     }
 
     // This does not modify jumps to the bb.
-    pub fn append_param(
-        &mut self,
-        bb: Block,
-        ty: IrTy<'a>,
-        lower_bound_ty: MaybeSelfTy<'a>,
-    ) -> Value {
+    pub fn append_param(&mut self, bb: Block, ty: IrTy<'a>) -> Value {
         let bb_data = &mut self.bbs[bb];
         let idx = bb_data.params.len();
         let value = self.values.insert(ValueData {
             ty,
-            lower_bound_ty,
             kind: ValueKind::Param(Param {
                 bb,
                 idx,
@@ -223,9 +226,39 @@ impl FuncId {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct ExternalFunc<'a> {
+    pub id: FuncId,
+    pub name: FuncName<'a>,
+}
+
+#[derive(Debug)]
+pub enum FuncDef<'a> {
+    Local(Func<'a>),
+    External(ExternalFunc<'a>),
+}
+
+impl<'a> FuncDef<'a> {
+    pub fn local(&self) -> Option<&Func<'a>> {
+        try_match!(self, Self::Local(func) => func)
+    }
+
+    pub fn local_mut(&mut self) -> Option<&mut Func<'a>> {
+        try_match!(self, Self::Local(func) => func)
+    }
+
+    pub fn external(&self) -> Option<&ExternalFunc<'a>> {
+        try_match!(self, Self::External(func) => func)
+    }
+
+    pub fn external_mut(&mut self) -> Option<&mut ExternalFunc<'a>> {
+        try_match!(self, Self::External(func) => func)
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct FuncRegistry<'a> {
-    funcs: IndexMap<FuncName<'a>, Func<'a>>,
+    funcs: IndexMap<FullFuncName<'a>, FuncDef<'a>>,
 }
 
 impl<'a> FuncRegistry<'a> {
@@ -233,25 +266,43 @@ impl<'a> FuncRegistry<'a> {
         Default::default()
     }
 
-    pub fn add_func<'r>(&'r mut self, name: FuncName<'a>) -> &'r mut Func<'a> {
+    pub fn add_local_func<'r>(&'r mut self, name: FullFuncName<'a>) -> &'r mut Func<'a> {
+        self.add_func_def(name, |id| {
+            FuncDef::Local(Func {
+                id,
+                name,
+                bbs: Default::default(),
+                bb_preds: Default::default(),
+                instrs: Default::default(),
+                bb_instrs: Default::default(),
+                term_instrs: Default::default(),
+                values: Default::default(),
+                entry_bb: Default::default(),
+            })
+        })
+        .local_mut()
+        .unwrap()
+    }
+
+    pub fn add_external_func<'r>(&'r mut self, name: FuncName<'a>) -> &'r mut ExternalFunc<'a> {
+        self.add_func_def(name.into(), |id| {
+            FuncDef::External(ExternalFunc { id, name })
+        })
+        .external_mut()
+        .unwrap()
+    }
+
+    fn add_func_def<'r>(
+        &'r mut self,
+        name: FullFuncName<'a>,
+        func_def: impl FnOnce(FuncId) -> FuncDef<'a>,
+    ) -> &'r mut FuncDef<'a> {
         use indexmap::map::Entry;
 
         let id = FuncId(NonZeroUsize::new(self.funcs.len() + 1).unwrap());
 
         match self.funcs.entry(name) {
-            Entry::Vacant(entry) => {
-                entry.insert(Func {
-                    id,
-                    name,
-                    bbs: Default::default(),
-                    bb_preds: Default::default(),
-                    instrs: Default::default(),
-                    bb_instrs: Default::default(),
-                    term_instrs: Default::default(),
-                    values: Default::default(),
-                    entry_bb: Default::default(),
-                })
-            }
+            Entry::Vacant(entry) => entry.insert(func_def(id)),
 
             Entry::Occupied(_) => {
                 panic!("Function {} is defined twice", name);
@@ -261,7 +312,7 @@ impl<'a> FuncRegistry<'a> {
 }
 
 impl<'a> Index<FuncId> for FuncRegistry<'a> {
-    type Output = Func<'a>;
+    type Output = FuncDef<'a>;
 
     fn index(&self, index: FuncId) -> &Self::Output {
         &self.funcs[index.idx()]
@@ -274,16 +325,30 @@ impl<'a> IndexMut<FuncId> for FuncRegistry<'a> {
     }
 }
 
+impl<'a> Index<FullFuncName<'a>> for FuncRegistry<'a> {
+    type Output = FuncDef<'a>;
+
+    fn index(&self, index: FullFuncName<'a>) -> &Self::Output {
+        &self.funcs[&index]
+    }
+}
+
+impl<'a> IndexMut<FullFuncName<'a>> for FuncRegistry<'a> {
+    fn index_mut(&mut self, index: FullFuncName<'a>) -> &mut Self::Output {
+        &mut self.funcs[&index]
+    }
+}
+
 impl<'a> Index<FuncName<'a>> for FuncRegistry<'a> {
-    type Output = Func<'a>;
+    type Output = FuncDef<'a>;
 
     fn index(&self, index: FuncName<'a>) -> &Self::Output {
-        &self.funcs[&index]
+        &self.funcs[&FullFuncName::from(index)]
     }
 }
 
 impl<'a> IndexMut<FuncName<'a>> for FuncRegistry<'a> {
     fn index_mut(&mut self, index: FuncName<'a>) -> &mut Self::Output {
-        &mut self.funcs[&index]
+        &mut self.funcs[&FullFuncName::from(index)]
     }
 }

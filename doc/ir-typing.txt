@@ -1,0 +1,206 @@
+This document defines the typing rules of wacc's intermediate representation
+language.
+
+Types, type families, and the typing context
+================================================================================
+The `OBJECT` type family contains all class types. We define it as the
+transitive closure of the following rules:
+
+    Object, IO, Bool, Int, String ∈ OBJECT
+    IO <: Object
+    T <: Object ⇒ T ∈ OBJECT
+
+The notation `T <: T'` indicates `T` is a subtype of `T'`. The subtyping
+relation is transitive and reflexive.
+
+The `PRIMITIVE` type family consists of three unboxed types. For convenience we
+also define the family `BOXED` of the boxed types corresponding to them.
+
+    i32, bool, bytes, unit ∈ PRIMITIVE
+    Int, Bool, String, Object ∈ BOXED
+
+To support Cool's `SELF_TYPE`, we introduce the following notation:
+
+    v : T ∈ OBJECT ⇒ dynamic-type(v) <: T
+    v : T[T'] ⇔ v : T ∈ OBJECT, dynamic-type(v) = T'
+    v : T[?] ⇔ v : T ∈ OBJECT
+    v : T[? <: T'] ⇔ v : T ∈ OBJECT, dynamic-type(v) <: T'
+    v : T[v'] ⇔ v : T ∈ OBJECT, dynamic-type(v) = dynamic-type(v'),
+                v' : T'[?] or v' : T'[? <: T'']
+
+`dynamic-type(v)` is the real type of `v` determined by the `new` instruction.
+The `[t]` annotation indicates the known information about `dynamic-type(v)` and
+comes in the four forms defined above:
+
+- `T[T']` means the current static (emitted) type is `T` but `dynamic-type(v)`
+  is known (precisely) as `T'`.
+
+- `T[?]` means `dynamic-type(v)` is not known statically (due to loss of
+  typing information).
+
+- `T[? <: T']` means `dynamic-type(v)` is only known to be a subtype of `T'`.
+
+- `T[v']` means the dynamic types of `v` and `v'` are the same but not known
+  statically.
+
+To represent the result of method lookup, the IR has a family of function types.
+
+        T₀ ∈ OBJECT ∪ PRIMITIVE ∪ {Self},
+    and T₁ ∈ OBJECT ∪ PRIMITIVE ∪ {T[? <: T'] | T, T' ∈ OBJECT}
+    and i > 1 ⇒ Tᵢ ∈ OBJECT ∪ PRIMITIVE,
+    and T₀ = Self ⇒ n ≥ 1, T₁ = T[? <: T']
+    and T₁ = T[? <: T'] ⇒ T <: T' or T' <: T
+    and n ≥ 0
+    ⇔ (T₁, ..., Tₙ) -> T₀ ∈ FUNC
+
+Function types admit object/primitive types for parameters and return values.
+The first parameter may use a form of the dynamic type information to represent
+the type of `self` in methods. In such case the return type is allowed to be
+`Self`. As defined in the instruction typing rules, such a function returns a
+value of the dynamic type of the first argument. It isn't necessarily the first
+argument itself, however.
+
+This constraint is reflected in the type system as bound function types. Binding
+is an operation on annotated types defined as follows:
+
+    ((T[? <: T'], ...) -> Self){v} = (T[? <: T']{v}, ...) -> Self(T){v}
+    ((T[? <: T'], ...) -> T){v} = (T[? <: T']{v}, ...) -> T
+
+        v : T₀[t]       |  t = T''    t = ?    t = ? <: T''    t = v''
+    --------------------+------------------------------------------------
+        T[T']{v} =      |  T[T']      T[T']    T[T']           T[T']
+        T[?]{v} =       |  T[T'']     T[v]     T[v]            T[v'']
+        T[? <: T']{v} = |  T[T'']     T[v]     T[v]            T[v'']
+        T[v']{v} =      |  T[T'']     T[v']    T[v']           T[v']
+
+    v : T₀[t] ⇒ Self(T){v} = T[?]{v}
+
+For other types `T{v} = T`.
+
+The indexed family of all bound function types is defined as follows:
+
+    T ∈ FUNC ⇒ T{v} ∈ BOUND(v)
+    T = (T₁, ..., Tₙ) -> T₀ ∈ FUNC, T₁ ∈ OBJECT ∪ PRIMITIVE ⇒ T ∈ BOUND()
+
+`BOUND()` is a family of function types without a `self` parameter (free
+functions).
+
+Finally, the typing context consists of the following sets:
+
+1. F -- a set of all functions
+   F(func) -- the type of func
+
+       F(func) ∈ FUNC
+
+2. M(class) -- a set of all methods available in class
+   M(class)(method) -- the type of method
+
+       M(class)(method) ∈ FUNC
+
+3. O -- a set of all fields
+   O(class) -- a set of all fields available in class
+   O(class)(field) -- the type of field
+
+       O(class)(field) ∈ OBJECT ∪ {Self(T) | T ∈ OBJECT}
+
+Instruction typing rules
+================================================================================
+
+vtable-lookup <obj> <class> <method> -> M(dynamic-type(obj))(method){obj}
+  method ∈ M(class)
+  obj : T ∈ OBJECT
+  dynamic-type(obj) <: class
+
+method-lookup <obj> <class> <method> -> M(class)(method){obj}
+  method ∈ M(class)
+  obj : T ∈ OBJECT
+  dynamic-type(obj) <: class
+
+call-ref <func-ref> <a₁> ... <aₙ> -> T₀[t]
+  func-ref : T = (T₁[t], ..., Tₙ) -> T₀[t]
+  n ≥ 1 ⇒ T ∈ BOUND(a₁)
+  n = 0 ⇒ T ∈ BOUND()
+  a₁ : T₁[t], ..., aₙ : Tₙ
+
+call <func> <a₁> ... <aₙ> -> T₀
+  func ∈ F
+  F(func) = (T₁, ..., Tₙ) -> T₀ ∈ BOUND()
+  a₁ : T₁, ..., aₙ : Tₙ
+
+field-get <obj> <field> -> O(T)(field){obj}
+  obj : T[t] ∈ OBJECT
+  field ∈ O(T)
+
+field-set <obj> <field> <value> -> ()
+  obj : T ∈ OBJECT
+  field ∈ O(T)
+  value : O(T)(field){obj}
+
+box <value> -> T₀
+  value : T ∈ PRIMITIVE
+  T = i32 ⇒ T₀ = Int
+  T = bytes ⇒ T₀ = String
+  T = bool ⇒ T₀ = Bool
+  T = unit ⇒ T₀ = Object
+
+unbox <value> -> T₀
+  value : T ∈ BOXED
+  T = Int → T₀ = i32
+  T = String ⇒ T₀ = bytes
+  T = Bool ⇒ T₀ = bool
+  T = Object ⇒ T₀ = unit
+
+cast <value> <T'> -> Self(T'){value}
+  value : T[t] ∈ OBJECT
+  T <: T' or T' <: T
+
+new <T> -> T[T]
+  T ∈ OBJECT
+
+  Note: the `new SELF_TYPE` is translated to a call to a constructor.
+
+is-null <value> -> bool
+  value : T ∈ OBJECT
+
+add <lhs> <rhs> -> i32
+  lhs : i32, rhs : i32
+
+sub <lhs> <rhs> -> i32
+  lhs : i32, rhs : i32
+
+mul <lhs> <rhs> -> i32
+  lhs : i32, rhs : i32
+
+div <lhs> <rhs> -> i32
+  lhs : i32, rhs : i32
+
+lt <lhs> <rhs> -> bool
+  lhs : i32, rhs : i32
+
+gt <lhs> <rhs> -> bool
+  lhs : i32, rhs : i32
+
+le <lhs> <rhs> -> bool
+  lhs : i32, rhs : i32
+
+ge <lhs> <rhs> -> bool
+  lhs : i32, rhs : i32
+
+eq <lhs> <rhs> -> bool
+  lhs : T₁, rhs : T₂
+  {T₁, T₂} ∩ PRIMITIVE ≠ ø ⇒ T₁ = T₂
+
+inv <value> -> i32
+  value : i32
+
+not <value> -> bool
+  value : bool
+
+null <T> -> T[T]
+  T ∈ OBJECT
+
+i32 <value> -> i32
+
+bytes <value> -> bytes
+
+bool <value> -> bool
