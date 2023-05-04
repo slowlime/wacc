@@ -133,6 +133,13 @@ impl<'a> Func<'a> {
         }
     }
 
+    pub fn add_diverging_bb(&mut self) -> Block {
+        let term_instr = self.add_term_instr(TermInstrKind::Diverge);
+        let bb_data = BlockData::new(term_instr);
+
+        self.add_bb(bb_data)
+    }
+
     pub fn add_bb(&mut self, bb_data: BlockData) -> Block {
         let term_instr = bb_data.terminator;
         let bb = self.bbs.insert(bb_data);

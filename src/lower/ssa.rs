@@ -7,8 +7,8 @@ use crate::analysis::BindingId;
 use crate::ast::ty::ResolvedTy;
 use crate::ir::bb::Block;
 use crate::ir::func::{FullFuncName, Func};
-use crate::ir::instr::{Cast, InstrKind};
-use crate::ir::ty::{IrClass, IrClassName, IrTy, DynTy};
+use crate::ir::instr::{Cast, InstrKind, TermInstrKind};
+use crate::ir::ty::{DynTy, IrClass, IrClassName, IrTy};
 use crate::ir::value::Value;
 
 use super::bindings::Binding;
@@ -42,8 +42,8 @@ pub struct LoweringCtx<'a, 'gctx> {
     pub gctx: &'gctx mut GlobalCtx<'a>,
     pub class: IrClassName<'a>,
     pub func_name: FullFuncName<'a>,
-    pub current_bb: Block,
     pub bbs: SecondaryMap<Block, SsaBlock>,
+    current_bb: Option<Block>,
 }
 
 fn get_block_mut<'a>(bbs: &'a mut SecondaryMap<Block, SsaBlock>, bb: Block) -> &'a mut SsaBlock {
@@ -61,7 +61,7 @@ impl<'a, 'gctx> LoweringCtx<'a, 'gctx> {
             gctx,
             class,
             func_name,
-            current_bb: entry_bb,
+            current_bb: Some(entry_bb),
             bbs: Default::default(),
         };
 
@@ -75,7 +75,10 @@ impl<'a, 'gctx> LoweringCtx<'a, 'gctx> {
     }
 
     pub fn self_param_dyn_ty(&self) -> DynTy<'a> {
-        self.func().values[self.self_param()].ty.get_dyn_ty().unwrap()
+        self.func().values[self.self_param()]
+            .ty
+            .get_dyn_ty()
+            .unwrap()
     }
 
     pub fn func(&self) -> &Func<'a> {
@@ -94,8 +97,12 @@ impl<'a, 'gctx> LoweringCtx<'a, 'gctx> {
         &self.gctx.ty_registry[self.class]
     }
 
+    pub fn current_bb(&self) -> Block {
+        self.current_bb.unwrap()
+    }
+
     pub fn bind(&mut self, var: Var, value: Value) {
-        self.bind_in(self.current_bb, var, value);
+        self.bind_in(self.current_bb(), var, value);
     }
 
     pub fn bind_in(&mut self, bb: Block, var: Var, value: Value) {
@@ -104,7 +111,7 @@ impl<'a, 'gctx> LoweringCtx<'a, 'gctx> {
     }
 
     pub fn lookup(&mut self, var: Var, ty: IrTy<'a>) -> Value {
-        self.lookup_in(self.current_bb, var, ty)
+        self.lookup_in(self.current_bb(), var, ty)
     }
 
     pub fn lookup_local(&self, bb: Block, var: Var) -> Option<Value> {
@@ -202,9 +209,20 @@ impl<'a, 'gctx> LoweringCtx<'a, 'gctx> {
         }
     }
 
+    pub fn terminate(&mut self, instr: TermInstrKind) {
+        let term_instr = self.func_mut().add_term_instr(instr);
+        let current_bb = self.current_bb.take().unwrap();
+        self.seal_block(current_bb);
+        self.func_mut().terminate_block(current_bb, term_instr);
+    }
+
+    pub fn select_bb(&mut self, bb: Block) {
+        assert!(self.current_bb.replace(bb).is_none());
+    }
+
     /// Appends an instruction to the current block.
     pub fn emit(&mut self, instr_kind: InstrKind<'a>, ty: IrTy<'a>) -> Value {
-        let current_bb = self.current_bb;
+        let current_bb = self.current_bb();
 
         self.func_mut().append_instr(current_bb, instr_kind, ty)
     }
@@ -241,11 +259,35 @@ impl<'a, 'gctx> LoweringCtx<'a, 'gctx> {
         self.gctx.bindings.get(self.class, binding_id)
     }
 
-    pub fn lower_object_ty(&self, res_ty: &ResolvedTy<'_>) -> IrClassName<'a> {
+    pub fn lower_object_ty_to_class_name(&self, res_ty: &ResolvedTy<'_>) -> IrClassName<'a> {
         match res_ty {
             ResolvedTy::Builtin(builtin) => self.gctx.ty_registry.get_builtin_class(*builtin).name,
             ResolvedTy::SelfType { .. } => self.class,
             ResolvedTy::Class(name) => self.gctx.ty_registry[self.gctx.arena.alloc(name)].name,
+            ResolvedTy::Function(_) => unreachable!(),
+            ResolvedTy::Bottom => unreachable!(),
+            ResolvedTy::Untyped => unreachable!(),
+        }
+    }
+
+    pub fn lower_object_ty(&self, res_ty: &ResolvedTy<'_>) -> IrTy<'a> {
+        match res_ty {
+            ResolvedTy::Builtin(builtin) => {
+                let class = self.gctx.ty_registry.get_builtin_class(*builtin);
+
+                if class.r#final {
+                    IrTy::new_known(class.name)
+                } else {
+                    IrTy::Object(class.name, DynTy::Unknown)
+                }
+            }
+
+            ResolvedTy::SelfType { .. } => IrTy::Object(self.class, DynTy::Unknown)
+                .bind(self.self_param(), self.self_param_dyn_ty()),
+            ResolvedTy::Class(name) => IrTy::Object(
+                self.gctx.ty_registry[self.gctx.arena.alloc(name)].name,
+                DynTy::Unknown,
+            ),
             ResolvedTy::Function(_) => unreachable!(),
             ResolvedTy::Bottom => unreachable!(),
             ResolvedTy::Untyped => unreachable!(),
@@ -269,7 +311,10 @@ impl<'a, 'gctx> LoweringCtx<'a, 'gctx> {
                 self.coerce(unboxed, IrTy::Object(class, DynTy::Known(class)))
             }
 
-            _ => self.emit(InstrKind::Null(class), IrTy::Object(class, DynTy::Known(class))),
+            _ => self.emit(
+                InstrKind::Null(class),
+                IrTy::Object(class, DynTy::Known(class)),
+            ),
         }
     }
 }

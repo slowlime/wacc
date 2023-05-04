@@ -3,7 +3,9 @@ use std::iter::once;
 use crate::analysis::BindingKind;
 use crate::ast::ty::{ResolvedTy, UnwrapResolvedTy};
 use crate::ast::{self, Expr, Visitor};
-use crate::ir::instr::{CallRef, FieldSet, InstrKind, MethodLookup, VTableLookup};
+use crate::ir::instr::{
+    BlockJump, Branch, CallRef, FieldGet, FieldSet, InstrKind, MethodLookup, VTableLookup,
+};
 use crate::ir::ty::{DynTy, IrTy};
 use crate::ir::value::Value;
 
@@ -54,7 +56,7 @@ impl<'buf> Visitor<'buf> for ExprVisitor<'_, '_, '_> {
             .ty
             .clone()
             .bind(self.ctx.self_param(), self.ctx.self_param_dyn_ty());
-        let value = self.ctx.coerce(value, expected_ty);
+        let coerced_value = self.ctx.coerce(value, expected_ty);
         let binding = self.ctx.get_binding(expr.binding_id.unwrap());
 
         match binding.kind {
@@ -62,12 +64,12 @@ impl<'buf> Visitor<'buf> for ExprVisitor<'_, '_, '_> {
                 let field_name = self.ctx.gctx.arena.alloc(expr.name.as_slice());
 
                 self.ctx.emit(
-                    FieldSet::new(self.ctx.self_param(), field_name, value).into(),
+                    FieldSet::new(self.ctx.self_param(), field_name, coerced_value).into(),
                     IrTy::Unit,
                 );
             }
 
-            _ => self.ctx.bind(expr.binding_id.unwrap(), value),
+            _ => self.ctx.bind(expr.binding_id.unwrap(), coerced_value),
         }
 
         value
@@ -120,7 +122,7 @@ impl<'buf> Visitor<'buf> for ExprVisitor<'_, '_, '_> {
             ast::Receiver::Static { object, ty, .. } => {
                 obj = self.visit_expr(object);
                 let recv_dyn_ty = self.ctx.func().values[obj].ty.get_dyn_ty().unwrap();
-                let class = self.ctx.lower_object_ty(&ty.unwrap_res_ty());
+                let class = self.ctx.lower_object_ty_to_class_name(&ty.unwrap_res_ty());
                 func_ref_ty = self.ctx.gctx.ty_registry[class].methods[&method_name]
                     .ty
                     .clone()
@@ -145,7 +147,9 @@ impl<'buf> Visitor<'buf> for ExprVisitor<'_, '_, '_> {
             .zip(func_ref_ty.args())
             .map(|(value, arg_ty)| self.ctx.coerce(value, arg_ty.clone()))
             .collect::<Vec<_>>();
-        let expected_class = self.ctx.lower_object_ty(&expr.unwrap_res_ty());
+        let expected_class = self
+            .ctx
+            .lower_object_ty_to_class_name(&expr.unwrap_res_ty());
         let ret = self.ctx.emit(
             CallRef::new(func_ref, &args).into(),
             func_ref_ty.ret().clone(),
@@ -156,11 +160,118 @@ impl<'buf> Visitor<'buf> for ExprVisitor<'_, '_, '_> {
     }
 
     fn visit_if(&mut self, expr: &ast::If<'buf>) -> Self::Output {
-        todo!()
+        let cond = self.visit_expr(&expr.antecedent);
+        let cond = self.ctx.coerce(cond, IrTy::Bool);
+
+        let true_bb = self.ctx.func_mut().add_diverging_bb();
+        let false_bb = self.ctx.func_mut().add_diverging_bb();
+        let join_bb = self.ctx.func_mut().add_diverging_bb();
+
+        let expected_ty = self.ctx.lower_object_ty(&expr.unwrap_res_ty());
+        let join_param = self
+            .ctx
+            .func_mut()
+            .append_param(join_bb, expected_ty.clone());
+        self.ctx.terminate(
+            Branch::new(
+                cond,
+                BlockJump {
+                    bb: true_bb,
+                    args: vec![],
+                },
+                BlockJump {
+                    bb: false_bb,
+                    args: vec![],
+                },
+            )
+            .into(),
+        );
+
+        self.ctx.seal_block(true_bb);
+        self.ctx.seal_block(false_bb);
+
+        {
+            self.ctx.select_bb(true_bb);
+            let value = self.visit_expr(&expr.consequent);
+            let coerced = self.ctx.coerce(value, expected_ty.clone());
+
+            self.ctx.terminate(
+                BlockJump {
+                    bb: join_bb,
+                    args: vec![coerced],
+                }
+                .into(),
+            );
+        }
+
+        {
+            self.ctx.select_bb(false_bb);
+            let value = self.visit_expr(&expr.alternative);
+            let coerced = self.ctx.coerce(value, expected_ty);
+
+            self.ctx.terminate(
+                BlockJump {
+                    bb: join_bb,
+                    args: vec![coerced],
+                }
+                .into(),
+            );
+        }
+
+        self.ctx.select_bb(join_bb);
+        self.ctx.seal_block(join_bb);
+
+        join_param
     }
 
     fn visit_while(&mut self, expr: &ast::While<'buf>) -> Self::Output {
-        todo!()
+        let header_bb = self.ctx.func_mut().add_diverging_bb();
+        self.ctx.terminate(
+            BlockJump {
+                bb: header_bb,
+                args: vec![],
+            }
+            .into(),
+        );
+
+        self.ctx.select_bb(header_bb);
+        let cond = self.visit_expr(&expr.condition);
+        let cond = self.ctx.coerce(cond, IrTy::Bool);
+
+        let body_bb = self.ctx.func_mut().add_diverging_bb();
+        let join_bb = self.ctx.func_mut().add_diverging_bb();
+        self.ctx.terminate(
+            Branch::new(
+                cond,
+                BlockJump {
+                    bb: body_bb,
+                    args: vec![],
+                },
+                BlockJump {
+                    bb: join_bb,
+                    args: vec![],
+                },
+            )
+            .into(),
+        );
+        self.ctx.seal_block(join_bb);
+
+        self.ctx.select_bb(body_bb);
+        self.visit_expr(&expr.body);
+        self.ctx.terminate(
+            BlockJump {
+                bb: header_bb,
+                args: vec![],
+            }
+            .into(),
+        );
+        self.ctx.seal_block(header_bb);
+
+        self.ctx.select_bb(join_bb);
+
+        let object_class = self.ctx.gctx.ty_registry.object_class;
+        self.ctx
+            .emit(InstrKind::Null(object_class), IrTy::new_known(object_class))
     }
 
     fn visit_block(&mut self, expr: &ast::Block<'buf>) -> Self::Output {
@@ -242,7 +353,7 @@ impl<'buf> Visitor<'buf> for ExprVisitor<'_, '_, '_> {
             }
 
             ty => {
-                let class = self.ctx.lower_object_ty(ty);
+                let class = self.ctx.lower_object_ty_to_class_name(ty);
                 let obj_dyn_ty = DynTy::Known(class);
                 let obj = self
                     .ctx
@@ -296,7 +407,9 @@ impl<'buf> Visitor<'buf> for ExprVisitor<'_, '_, '_> {
             BinOpKind::Equals => self.ctx.emit(InstrKind::Eq(lhs, rhs), IrTy::Bool),
         };
 
-        let expected_ty = self.ctx.lower_object_ty(&expr.unwrap_res_ty());
+        let expected_ty = self
+            .ctx
+            .lower_object_ty_to_class_name(&expr.unwrap_res_ty());
 
         self.ctx
             .coerce(unboxed, IrTy::Object(expected_ty, DynTy::Unknown))
@@ -321,7 +434,9 @@ impl<'buf> Visitor<'buf> for ExprVisitor<'_, '_, '_> {
             }
         };
 
-        let expected_ty = self.ctx.lower_object_ty(&expr.unwrap_res_ty());
+        let expected_ty = self
+            .ctx
+            .lower_object_ty_to_class_name(&expr.unwrap_res_ty());
 
         self.ctx
             .coerce(unboxed, IrTy::Object(expected_ty, DynTy::Unknown))
@@ -335,7 +450,29 @@ impl<'buf> Visitor<'buf> for ExprVisitor<'_, '_, '_> {
             .ty
             .clone()
             .bind(self.ctx.self_param(), self.ctx.self_param_dyn_ty());
-        self.ctx.lookup(expr.binding_id.unwrap(), ty)
+
+        let value = match self.ctx.get_binding(binding_id).kind {
+            BindingKind::Field { .. } => {
+                let field_name = self.ctx.gctx.arena.alloc(expr.name.as_slice());
+
+                self.ctx.emit(
+                    FieldGet {
+                        obj: self.ctx.self_param(),
+                        field: field_name,
+                    }
+                    .into(),
+                    ty,
+                )
+            }
+
+            _ => self.ctx.lookup(binding_id, ty),
+        };
+        let expected_class = self
+            .ctx
+            .lower_object_ty_to_class_name(&expr.unwrap_res_ty());
+
+        self.ctx
+            .coerce(value, IrTy::Object(expected_class, DynTy::Unknown))
     }
 
     fn visit_formal(&mut self, _formal: &ast::Formal<'buf>) -> Self::Output {

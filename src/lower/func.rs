@@ -25,7 +25,7 @@ fn lower_params<'a>(
             Some(idx) => method.params[idx].binding_id.unwrap(),
         };
 
-        let current_bb = ctx.current_bb;
+        let current_bb = ctx.current_bb();
         let param = ctx.func_mut().append_param(current_bb, arg_ty);
         ctx.bind(binding_id, param);
     }
@@ -44,11 +44,11 @@ pub fn lower_method<'a, 'gctx>(
     let entry_bb = func.add_bb(BlockData::new(terminator));
     let mut ctx = LoweringCtx::new(gctx, class_name, func_name, entry_bb);
     lower_params(&mut ctx, method_name, method);
-    ctx.seal_block(ctx.current_bb);
+    ctx.seal_block(ctx.current_bb());
     let ret = lower_expr(&mut ctx, &method.body);
     let ret_instr = ctx.func_mut().add_term_instr(TermInstrKind::Return(ret));
 
-    let exit_bb = ctx.current_bb;
+    let exit_bb = ctx.current_bb();
     ctx.func_mut().terminate_block(exit_bb, ret_instr);
 
     ctx.into_func_mut()

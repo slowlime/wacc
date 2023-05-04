@@ -62,7 +62,7 @@ fn make_global_ctx<'a>(arena: ArenaRef<'a>, typeck_result: TypeckResult<'_>) -> 
             .parent()
             .map(|name| ty_registry.get_class_by_class_name(name).unwrap());
 
-        let mut builder = IrClassBuilder::new(class, parent);
+        let mut builder = IrClassBuilder::new(class, parent, false);
 
         for (name, _location, func_ty) in class_index.methods() {
             let name = arena.alloc(name);

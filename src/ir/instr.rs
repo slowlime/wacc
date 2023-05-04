@@ -323,6 +323,18 @@ impl TermInstrKind {
     }
 }
 
+impl From<Branch> for TermInstrKind {
+    fn from(branch: Branch) -> TermInstrKind {
+        TermInstrKind::Branch(branch)
+    }
+}
+
+impl From<BlockJump> for TermInstrKind {
+    fn from(jmp: BlockJump) -> TermInstrKind {
+        TermInstrKind::Jump(jmp)
+    }
+}
+
 impl InstrOperands for TermInstrKind {
     type Operand = BlockJump;
 

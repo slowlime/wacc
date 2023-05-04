@@ -66,21 +66,24 @@ pub struct IrClass<'a> {
     pub parent: Option<IrClassName<'a>>,
     pub methods: IndexMap<MethodName<'a>, IrMethod<'a>>,
     pub fields: IndexMap<FieldName<'a>, IrField<'a>>,
+    pub r#final: bool,
 }
 
 #[derive(Debug)]
 pub struct IrClassBuilder<'a>(IrClass<'a>);
 
 impl<'a> IrClassBuilder<'a> {
-    pub fn new(name: IrClassName<'a>, parent: Option<&IrClass<'a>>) -> Self {
+    pub fn new(name: IrClassName<'a>, parent: Option<&IrClass<'a>>, r#final: bool) -> Self {
         let mut this = Self(IrClass {
             name,
             parent: parent.map(|class| class.name),
             methods: Default::default(),
             fields: Default::default(),
+            r#final,
         });
 
         if let Some(parent) = parent {
+            assert!(!parent.r#final);
             this.inherit_definitions(parent);
         }
 
@@ -408,6 +411,10 @@ pub enum IrTy<'a> {
 }
 
 impl<'a> IrTy<'a> {
+    pub fn new_known(class: IrClassName<'a>) -> IrTy<'a> {
+        IrTy::Object(class, DynTy::Known(class))
+    }
+
     pub fn is_boxed(&self) -> bool {
         !self.is_primitive()
     }
@@ -628,7 +635,7 @@ impl<'a> IrTyRegistry<'a> {
     }
 
     fn object_builder<'s>(&'s self) -> IrClassBuilder<'a> {
-        IrClassBuilder::new(self.object_class, None)
+        IrClassBuilder::new(self.object_class, None, false)
             .with_method(self.new_method, func_ref!(() -> self.object_class))
             .with_method(
                 self.init_method,
@@ -657,12 +664,12 @@ impl<'a> IrTyRegistry<'a> {
     }
 
     fn int_builder<'s>(&'s self) -> IrClassBuilder<'a> {
-        IrClassBuilder::new(self.int_class, Some(self.object_class()))
+        IrClassBuilder::new(self.int_class, Some(self.object_class()), true)
     }
 
     fn string_builder<'s>(&'s self) -> IrClassBuilder<'a> {
         // we pass String instead of SELF_TYPE as the first param because String is final
-        IrClassBuilder::new(self.string_class, Some(self.object_class()))
+        IrClassBuilder::new(self.string_class, Some(self.object_class()), true)
             .with_method(
                 self.arena.alloc(b"length"),
                 func_ref!((self.string_class) -> self.int_class),
@@ -678,11 +685,11 @@ impl<'a> IrTyRegistry<'a> {
     }
 
     fn bool_builder<'s>(&'s self) -> IrClassBuilder<'a> {
-        IrClassBuilder::new(self.bool_class, Some(self.object_class()))
+        IrClassBuilder::new(self.bool_class, Some(self.object_class()), true)
     }
 
     fn io_builder<'s>(&'s self) -> IrClassBuilder<'a> {
-        IrClassBuilder::new(self.io_class, Some(self.object_class()))
+        IrClassBuilder::new(self.io_class, Some(self.object_class()), false)
             .with_method(
                 self.arena.alloc(b"out_string"),
                 func_ref!((self(self.io_class)[? <: self.io_class], self.string_class) -> self(self.io_class)),
