@@ -868,6 +868,7 @@ impl<'buf> Parser<'buf> {
                 expr,
                 span,
                 binding_ty,
+                binding_id: None,
             });
 
             if let Some(esac) = self.try_consume(Symbol::Esac)? {

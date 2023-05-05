@@ -49,7 +49,7 @@ pub struct Func<'a> {
     pub bb_preds: SecondaryMap<Block, HashSet<Block>>,
     pub instrs: SlotMap<Instr, InstrKind<'a>>,
     pub bb_instrs: SecondaryMap<Instr, Block>,
-    pub term_instrs: SlotMap<TermInstr, TermInstrKind>,
+    pub term_instrs: SlotMap<TermInstr, TermInstrKind<'a>>,
     pub values: SlotMap<Value, ValueData<'a>>,
     entry_bb: Option<Block>,
 }
@@ -82,8 +82,17 @@ impl<'a> Func<'a> {
         }
     }
 
-    pub fn add_term_instr(&mut self, instr: TermInstrKind) -> TermInstr {
+    pub fn add_term_instr(&mut self, instr: TermInstrKind<'a>) -> TermInstr {
         self.term_instrs.insert(instr)
+    }
+
+    pub fn make_term_instr_value(&mut self, term_instr: TermInstr, ty: IrTy<'a>) -> Value {
+        let value_data = ValueData {
+            ty,
+            kind: ValueKind::TermInstr(term_instr),
+        };
+
+        self.values.insert(value_data)
     }
 
     // This does not modify jumps to the bb.
@@ -195,6 +204,10 @@ impl<'a> Func<'a> {
         match self.values[prev_value].kind {
             ValueKind::Instr(instr) => {
                 self.remove_instr(instr);
+            }
+
+            ValueKind::TermInstr(_) => {
+                panic!("cannot optimize away a terminator instruction result");
             }
 
             ValueKind::Param(Param { bb, idx, .. }) => {

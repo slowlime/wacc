@@ -7,7 +7,7 @@ use crate::analysis::BindingId;
 use crate::ast::ty::ResolvedTy;
 use crate::ir::bb::Block;
 use crate::ir::func::{FullFuncName, Func};
-use crate::ir::instr::{Cast, InstrKind, TermInstrKind};
+use crate::ir::instr::{Cast, InstrKind, TermInstrKind, TermInstr};
 use crate::ir::ty::{DynTy, IrClass, IrClassName, IrTy};
 use crate::ir::value::Value;
 
@@ -209,11 +209,15 @@ impl<'a, 'gctx> LoweringCtx<'a, 'gctx> {
         }
     }
 
-    pub fn terminate(&mut self, instr: TermInstrKind) {
-        let term_instr = self.func_mut().add_term_instr(instr);
+    pub fn terminate_with(&mut self, term_instr: TermInstr) {
         let current_bb = self.current_bb.take().unwrap();
         self.seal_block(current_bb);
         self.func_mut().terminate_block(current_bb, term_instr);
+    }
+
+    pub fn terminate(&mut self, instr: TermInstrKind<'a>) {
+        let term_instr = self.func_mut().add_term_instr(instr);
+        self.terminate_with(term_instr);
     }
 
     pub fn select_bb(&mut self, bb: Block) {

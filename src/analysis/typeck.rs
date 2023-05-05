@@ -1227,7 +1227,7 @@ impl<'buf> ast::VisitorMut<'buf> for TypeVisitor<'_, '_, '_, 'buf> {
         arm.binding_ty = binding_ty.clone().into();
 
         self.with_scope(|this| {
-            this.bind(&arm.name, binding_ty, BindingKind::Local);
+            arm.binding_id = this.bind(&arm.name, binding_ty, BindingKind::Local);
             this.visit_expr(&mut arm.expr);
         })
     }

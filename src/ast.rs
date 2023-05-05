@@ -896,6 +896,7 @@ pub struct CaseArm<'buf> {
     pub expr: Box<Expr<'buf>>,
     pub span: Span,
     pub binding_ty: Ty<'buf>,
+    pub binding_id: Option<BindingId>,
 }
 
 impl_clone_static!(|&self: CaseArm| CaseArm {
@@ -904,6 +905,7 @@ impl_clone_static!(|&self: CaseArm| CaseArm {
     expr: Box::new(self.expr.clone_static()),
     span: self.span.clone(),
     binding_ty: self.binding_ty.clone_static(),
+    binding_id: self.binding_id,
 });
 
 impl_recurse!(|self: CaseArm<'buf>, visitor| {

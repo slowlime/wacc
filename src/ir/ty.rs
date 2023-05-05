@@ -347,6 +347,13 @@ impl<'a> MaybeSelfTy<'a> {
             Self::Other(ty) => ty.bind(value, value_dyn_ty),
         }
     }
+
+    pub fn unwrap_ty(self) -> IrTy<'a> {
+        match self {
+            Self::SelfTy(_) => panic!("attempted to unwrap a SelfTy"),
+            Self::Other(ty) => ty,
+        }
+    }
 }
 
 impl<'a> From<IrTy<'a>> for MaybeSelfTy<'a> {

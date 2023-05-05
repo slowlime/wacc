@@ -4,7 +4,8 @@ use crate::analysis::BindingKind;
 use crate::ast::ty::{ResolvedTy, UnwrapResolvedTy};
 use crate::ast::{self, Expr, Visitor};
 use crate::ir::instr::{
-    BlockJump, Branch, CallRef, FieldGet, FieldSet, InstrKind, MethodLookup, VTableLookup,
+    BlockJump, Branch, CallRef, Cast, CastBranch, FieldGet, FieldSet, InstrKind, MethodLookup,
+    TermInstrKind, VTableLookup,
 };
 use crate::ir::ty::{DynTy, IrTy};
 use crate::ir::value::Value;
@@ -254,6 +255,7 @@ impl<'buf> Visitor<'buf> for ExprVisitor<'_, '_, '_> {
             )
             .into(),
         );
+        self.ctx.seal_block(body_bb);
         self.ctx.seal_block(join_bb);
 
         self.ctx.select_bb(body_bb);
@@ -303,7 +305,78 @@ impl<'buf> Visitor<'buf> for ExprVisitor<'_, '_, '_> {
     }
 
     fn visit_case(&mut self, expr: &ast::Case<'buf>) -> Self::Output {
-        todo!()
+        let scrutinee = self.visit_expr(&expr.scrutinee);
+
+        let join_ty = self.ctx.lower_object_ty(&expr.unwrap_res_ty());
+        let join_bb = self.ctx.func_mut().add_diverging_bb();
+        let join_param = self.ctx.func_mut().append_param(join_bb, join_ty.clone());
+
+        for ast::CaseArm {
+            binding_id, expr, ..
+        } in &expr.arms
+        {
+            let success_bb = self.ctx.func_mut().add_diverging_bb();
+            let fallthrough_bb = self.ctx.func_mut().add_diverging_bb();
+            let ty = self
+                .ctx
+                .get_binding(binding_id.unwrap())
+                .ty
+                .clone()
+                .unwrap_ty();
+            let to_class = ty.get_class().unwrap();
+
+            let term_instr = self.ctx.func_mut().add_term_instr(
+                CastBranch::new(
+                    Cast {
+                        value: scrutinee,
+                        to_class,
+                    },
+                    BlockJump {
+                        bb: success_bb,
+                        args: vec![],
+                    },
+                    BlockJump {
+                        bb: fallthrough_bb,
+                        args: vec![],
+                    },
+                )
+                .into(),
+            );
+            let arg = self.ctx.func_mut().make_term_instr_value(term_instr, ty);
+
+            match self.ctx.func_mut().term_instrs[term_instr] {
+                TermInstrKind::CastBranch(ref mut br) => {
+                    br.on_success_mut().args.push(arg);
+                }
+
+                _ => unreachable!(),
+            }
+
+            self.ctx.terminate_with(term_instr);
+            self.ctx.seal_block(success_bb);
+            self.ctx.seal_block(fallthrough_bb);
+
+            self.ctx.select_bb(success_bb);
+            let value = self.visit_expr(expr);
+            let coerced = self.ctx.coerce(value, join_ty.clone());
+            self.ctx.terminate(
+                BlockJump {
+                    bb: join_bb,
+                    args: vec![coerced],
+                }
+                .into(),
+            );
+
+            self.ctx.select_bb(fallthrough_bb);
+        }
+
+        // we're in the fallthrough block, having exhausted all case arms, so emit a trap
+        self.ctx.seal_block(join_bb);
+        self.ctx.terminate(TermInstrKind::Diverge);
+
+        self.ctx.select_bb(join_bb);
+
+        join_param
     }
 
     fn visit_new(&mut self, expr: &ast::New<'buf>) -> Self::Output {
@@ -401,10 +474,102 @@ impl<'buf> Visitor<'buf> for ExprVisitor<'_, '_, '_> {
             BinOpKind::Add => self.ctx.emit(InstrKind::Add(lhs, rhs), IrTy::I32),
             BinOpKind::Subtract => self.ctx.emit(InstrKind::Sub(lhs, rhs), IrTy::I32),
             BinOpKind::Multiply => self.ctx.emit(InstrKind::Mul(lhs, rhs), IrTy::I32),
-            BinOpKind::Divide => todo!("may trap"),
             BinOpKind::LessThan => self.ctx.emit(InstrKind::Lt(lhs, rhs), IrTy::Bool),
             BinOpKind::LessEquals => self.ctx.emit(InstrKind::Le(lhs, rhs), IrTy::Bool),
             BinOpKind::Equals => self.ctx.emit(InstrKind::Eq(lhs, rhs), IrTy::Bool),
+
+            // special-handling:
+            // - division by zero, which should trap,
+            // - i32::MAX / -1, which is undefined in wasm
+            BinOpKind::Divide => {
+                let join_bb = self.ctx.func_mut().add_diverging_bb();
+                let trap_bb = self.ctx.func_mut().add_diverging_bb();
+                let min_check_bb = self.ctx.func_mut().add_diverging_bb();
+
+                let join_param = self.ctx.func_mut().append_param(join_bb, IrTy::I32);
+
+                // if rhs == 0
+                let zero_value = self.ctx.emit(InstrKind::I32(0), IrTy::I32);
+                let div_zero_cond = self.ctx.emit(InstrKind::Eq(rhs, zero_value), IrTy::Bool);
+                self.ctx.terminate(
+                    Branch::new(
+                        div_zero_cond,
+                        BlockJump {
+                            bb: trap_bb,
+                            args: vec![],
+                        },
+                        BlockJump {
+                            bb: min_check_bb,
+                            args: vec![],
+                        },
+                    )
+                    .into(),
+                );
+
+                self.ctx.seal_block(trap_bb);
+                self.ctx.seal_block(min_check_bb);
+
+                self.ctx.select_bb(trap_bb);
+                self.ctx.terminate(TermInstrKind::Diverge);
+
+                let neg_one_bb = self.ctx.func_mut().add_diverging_bb();
+                let div_bb = self.ctx.func_mut().add_diverging_bb();
+
+                // if lhs == i32::MIN
+                self.ctx.select_bb(min_check_bb);
+                let min_value = self.ctx.emit(InstrKind::I32(i32::MIN), IrTy::I32);
+                let eq_min_cond = self.ctx.emit(InstrKind::Eq(lhs, min_value), IrTy::Bool);
+                self.ctx.terminate(
+                    Branch::new(
+                        eq_min_cond,
+                        BlockJump {
+                            bb: neg_one_bb,
+                            args: vec![],
+                        },
+                        BlockJump {
+                            bb: div_bb,
+                            args: vec![],
+                        },
+                    )
+                    .into(),
+                );
+
+                // if rhs == -1
+                self.ctx.seal_block(neg_one_bb);
+                self.ctx.select_bb(neg_one_bb);
+                let neg_one_value = self.ctx.emit(InstrKind::I32(-1), IrTy::I32);
+                let neg_one_cond = self.ctx.emit(InstrKind::Eq(rhs, neg_one_value), IrTy::Bool);
+                self.ctx.terminate(
+                    Branch::new(
+                        neg_one_cond,
+                        BlockJump {
+                            bb: join_bb,
+                            args: vec![lhs],
+                        },
+                        BlockJump {
+                            bb: div_bb,
+                            args: vec![],
+                        },
+                    )
+                    .into(),
+                );
+
+                // rhs != 0 && (lhs != i32::MIN || rhs != -1)
+                self.ctx.seal_block(div_bb);
+                self.ctx.select_bb(div_bb);
+                let div_value = self.ctx.emit(InstrKind::Div(lhs, rhs), IrTy::I32);
+                self.ctx.terminate(
+                    BlockJump {
+                        bb: join_bb,
+                        args: vec![div_value],
+                    }
+                    .into(),
+                );
+
+                self.ctx.seal_block(join_bb);
+
+                join_param
+            }
         };
 
         let expected_ty = self

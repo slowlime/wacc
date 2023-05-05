@@ -300,22 +300,72 @@ impl Branch {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct CastBranch<'a> {
+    pub cast: Cast<'a>,
+    jumps: [BlockJump; 2],
+}
+
+impl<'a> CastBranch<'a> {
+    pub fn new(cast: Cast<'a>, on_success: BlockJump, on_fail: BlockJump) -> Self {
+        Self {
+            cast,
+            jumps: [on_success, on_fail],
+        }
+    }
+
+    pub fn on_success(&self) -> &BlockJump {
+        &self.jumps[0]
+    }
+
+    pub fn on_fail(&self) -> &BlockJump {
+        &self.jumps[1]
+    }
+
+    pub fn on_success_mut(&mut self) -> &mut BlockJump {
+        &mut self.jumps[0]
+    }
+
+    pub fn on_fail_mut(&mut self) -> &mut BlockJump {
+        &mut self.jumps[1]
+    }
+}
+
+impl<'a> InstrOperands for CastBranch<'a> {
+    type Operand = BlockJump;
+
+    fn operands(&self) -> &[BlockJump] {
+        &self.jumps
+    }
+
+    fn operands_mut(&mut self) -> &mut [BlockJump] {
+        &mut self.jumps
+    }
+}
+
 #[derive(Debug, Clone)]
-pub enum TermInstrKind {
+pub enum TermInstrKind<'a> {
     Branch(Branch),
+    CastBranch(CastBranch<'a>),
     Jump(BlockJump),
     Return(Value),
+
     /// The block never reaches the end.
     Diverge,
 }
 
-impl TermInstrKind {
+impl<'a> TermInstrKind<'a> {
     pub fn jumps_to<'s>(&'s self, bb: Block) -> impl Iterator<Item = &'s BlockJump> + 's {
         self.operands().iter().filter(move |jmp| jmp.bb == bb)
     }
 
-    pub fn jumps_to_mut<'s>(&'s mut self, bb: Block) -> impl Iterator<Item = &'s mut BlockJump> + 's {
-        self.operands_mut().iter_mut().filter(move |jmp| jmp.bb == bb)
+    pub fn jumps_to_mut<'s>(
+        &'s mut self,
+        bb: Block,
+    ) -> impl Iterator<Item = &'s mut BlockJump> + 's {
+        self.operands_mut()
+            .iter_mut()
+            .filter(move |jmp| jmp.bb == bb)
     }
 
     pub fn succ_bbs(&self) -> impl Iterator<Item = Block> + '_ {
@@ -323,24 +373,31 @@ impl TermInstrKind {
     }
 }
 
-impl From<Branch> for TermInstrKind {
-    fn from(branch: Branch) -> TermInstrKind {
+impl<'a> From<Branch> for TermInstrKind<'a> {
+    fn from(branch: Branch) -> Self {
         TermInstrKind::Branch(branch)
     }
 }
 
-impl From<BlockJump> for TermInstrKind {
-    fn from(jmp: BlockJump) -> TermInstrKind {
+impl<'a> From<CastBranch<'a>> for TermInstrKind<'a> {
+    fn from(branch: CastBranch<'a>) -> Self {
+        TermInstrKind::CastBranch(branch)
+    }
+}
+
+impl<'a> From<BlockJump> for TermInstrKind<'a> {
+    fn from(jmp: BlockJump) -> Self {
         TermInstrKind::Jump(jmp)
     }
 }
 
-impl InstrOperands for TermInstrKind {
+impl<'a> InstrOperands for TermInstrKind<'a> {
     type Operand = BlockJump;
 
     fn operands(&self) -> &[BlockJump] {
         match self {
             Self::Branch(br) => br.operands(),
+            Self::CastBranch(br) => br.operands(),
             Self::Jump(jmp) => slice::from_ref(jmp),
             Self::Return(_) | Self::Diverge => &[],
         }
@@ -349,6 +406,7 @@ impl InstrOperands for TermInstrKind {
     fn operands_mut(&mut self) -> &mut [BlockJump] {
         match self {
             Self::Branch(br) => br.operands_mut(),
+            Self::CastBranch(br) => br.operands_mut(),
             Self::Jump(jmp) => slice::from_mut(jmp),
             Self::Return(_) | Self::Diverge => &mut [],
         }

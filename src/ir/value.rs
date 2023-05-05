@@ -1,7 +1,7 @@
 use slotmap::new_key_type;
 
 use super::bb::Block;
-use super::instr::Instr;
+use super::instr::{Instr, TermInstr};
 use super::ty::IrTy;
 
 new_key_type! {
@@ -23,6 +23,11 @@ pub struct Param {
 pub enum ValueKind {
     /// An instruction result.
     Instr(Instr),
+
+    /// A value produced by a terminator instruction.
+    ///
+    /// Only used as a block jump argument.
+    TermInstr(TermInstr),
 
     /// A block parameter.
     Param(Param),

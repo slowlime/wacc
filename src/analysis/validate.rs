@@ -258,6 +258,7 @@ impl<'buf> ast::Visitor<'buf> for Validator<'_, 'buf> {
     }
 
     fn visit_case_arm(&mut self, arm: &ast::CaseArm<'buf>) -> Self::Output {
+        self.assert_binding_resolved(&arm.span, arm.binding_id);
         self.assert_resolved(&arm.binding_ty_name.span(), &arm.binding_ty);
         arm.recurse(self);
     }
