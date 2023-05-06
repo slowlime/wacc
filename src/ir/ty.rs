@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::iter::successors;
+use std::iter::{once, successors};
 use std::ops::{Index, IndexMut};
 
 use indexmap::IndexMap;
@@ -92,13 +92,27 @@ impl<'a> IrClassBuilder<'a> {
 
     fn inherit_definitions(&mut self, parent: &IrClass<'a>) {
         for (&name, method) in &parent.methods {
+            let ty = if method.ty.has_self() {
+                // update the `SubtypeOf` bound
+                let first_param = match method.ty.args()[0] {
+                    IrTy::Object(class, _) => IrTy::Object(class, DynTy::SubtypeOf(self.0.name)),
+                    _ => unreachable!(),
+                };
+                let args = once(first_param)
+                    .chain(method.ty.args.iter().skip(1).cloned())
+                    .collect();
+
+                IrFuncRef::new(args, Box::new(method.ty.ret().clone()))
+            } else {
+                method.ty.clone()
+            };
+
             self.0.methods.insert(
                 name,
                 IrMethod {
                     name,
                     class_name: self.0.name,
-                    // FIXME: update the annotation
-                    ty: method.ty.clone(),
+                    ty,
                     def_kind: match method.def_kind {
                         MethodDefKind::Inherited(base_class) => {
                             MethodDefKind::Inherited(base_class)
@@ -116,7 +130,6 @@ impl<'a> IrClassBuilder<'a> {
                 IrField {
                     name,
                     class_name: self.0.name,
-                    // FIXME: update the annotation
                     ty: field.ty.clone(),
                     def_kind: match field.def_kind {
                         FieldDefKind::Inherited(base_class) => FieldDefKind::Inherited(base_class),
