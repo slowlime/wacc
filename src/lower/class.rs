@@ -64,6 +64,11 @@ fn make_global_ctx<'a>(arena: ArenaRef<'a>, typeck_result: TypeckResult<'_>) -> 
 
         let mut builder = IrClassBuilder::new(class, parent, false);
 
+        builder.add_method(ty_registry.new_method, ty_registry.new_method_ty());
+        builder.add_method(ty_registry.init_method, ty_registry.init_method_ty(class));
+        builder.add_method(ty_registry.copy_method, ty_registry.copy_method_ty(class));
+        builder.add_method(ty_registry.type_name_method, ty_registry.type_name_method_ty());
+
         for (name, _location, func_ty) in class_index.methods() {
             let name = arena.alloc(name);
             let ty = match builder.get_method(name) {

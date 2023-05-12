@@ -99,6 +99,12 @@ macro_rules! define_byte_string {
             #[derive(Clone, Copy, PartialEq, Eq, Hash)]
             $vis struct $name<$lifetime>(&$lifetime [u8]);
 
+            impl<$lifetime> $name<$lifetime> {
+                pub fn as_slice(&self) -> &$lifetime [u8] {
+                    self.0
+                }
+            }
+
             impl ::std::fmt::Debug for $name<'_> {
                 fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
                     f.debug_tuple(stringify!($name))

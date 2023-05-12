@@ -243,6 +243,7 @@ pub enum InstrKind<'a> {
     I32(i32),
     Bytes(IrBytes<'a>),
     Bool(bool),
+    Unit,
 }
 
 new_key_type! {

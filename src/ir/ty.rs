@@ -298,19 +298,19 @@ pub(crate) use maybe_self_ty;
 
 macro_rules! object_ty {
     (($ty:expr)[?]) => {
-        object_ty!($ty)
+        $crate::ir::ty::object_ty!($ty)
     };
     (($ty:expr)[? <: $sub:expr]) => {
-        IrTy::Object($ty, DynTy::SubtypeOf($sub))
+        $crate::ir::ty::IrTy::Object($ty, $crate::ir::ty::DynTy::SubtypeOf($sub))
     };
     (($ty:expr)[dyn $v:expr]) => {
-        IrTy::Object($ty, DynTy::DynTyOf($v))
+        $crate::ir::ty::IrTy::Object($ty, $crate::ir::ty::DynTy::DynTyOf($v))
     };
     (($ty:expr)[$dyn:expr]) => {
-        IrTy::Object($ty, DynTy::Known($dyn))
+        $crate::ir::ty::IrTy::Object($ty, $crate::ir::ty::DynTy::Known($dyn))
     };
     ($ty:expr) => {
-        IrTy::Object($ty, DynTy::Unknown)
+        $crate::ir::ty::IrTy::Object($ty, $crate::ir::ty::DynTy::Unknown)
     };
 }
 
@@ -654,21 +654,31 @@ impl<'a> IrTyRegistry<'a> {
         successors(Some(lower_bound), |&class_name| self[class_name].parent)
     }
 
+    pub fn new_method_ty(&self) -> IrFuncRef<'a> {
+         func_ref!(() -> self.object_class)
+    }
+
+    pub fn init_method_ty(&self, class: IrClassName<'a>) -> IrFuncRef<'a> {
+        IrFuncRef::new(
+            vec![object_ty!((self.object_class)[? <: class])],
+            Box::new(IrTy::Unit.into()),
+        )
+    }
+
+    pub fn copy_method_ty(&self, class: IrClassName<'a>) -> IrFuncRef<'a> {
+        func_ref!((self(self.object_class)[? <: class]) -> self(self.object_class))
+    }
+
+    pub fn type_name_method_ty(&self) -> IrFuncRef<'a> {
+        IrFuncRef::new(vec![], Box::new(IrTy::Bytes.into()))
+    }
+
     fn object_builder<'s>(&'s self) -> IrClassBuilder<'a> {
         IrClassBuilder::new(self.object_class, None, false)
-            .with_method(self.new_method, func_ref!(() -> self.object_class))
-            .with_method(
-                self.init_method,
-                IrFuncRef::new(
-                    vec![IrTy::Object(self.object_class, DynTy::SubtypeOf(self.object_class))],
-                    Box::new(IrTy::Unit.into()),
-                ),
-            )
-            .with_method(
-                self.copy_method,
-                func_ref!((self(self.object_class)[self.object_class]) -> self(self.object_class)),
-            )
-            .with_method(self.type_name_method, IrFuncRef::new(vec![], Box::new(IrTy::Bytes.into())))
+            .with_method(self.new_method, self.new_method_ty())
+            .with_method(self.init_method, self.init_method_ty(self.object_class))
+            .with_method(self.copy_method, self.copy_method_ty(self.object_class))
+            .with_method(self.type_name_method, self.type_name_method_ty())
             .with_method(
                 self.arena.alloc(b"abort"),
                 func_ref!((self(self.object_class)[? <: self.object_class]) -> self.object_class),
@@ -685,11 +695,19 @@ impl<'a> IrTyRegistry<'a> {
 
     fn int_builder<'s>(&'s self) -> IrClassBuilder<'a> {
         IrClassBuilder::new(self.int_class, Some(self.object_class()), true)
+            .with_method(self.new_method, self.new_method_ty())
+            .with_method(self.init_method, self.init_method_ty(self.int_class))
+            .with_method(self.copy_method, self.copy_method_ty(self.int_class))
+            .with_method(self.type_name_method, self.type_name_method_ty())
     }
 
     fn string_builder<'s>(&'s self) -> IrClassBuilder<'a> {
         // we pass String instead of SELF_TYPE as the first param because String is final
         IrClassBuilder::new(self.string_class, Some(self.object_class()), true)
+            .with_method(self.new_method, self.new_method_ty())
+            .with_method(self.init_method, self.init_method_ty(self.string_class))
+            .with_method(self.copy_method, self.copy_method_ty(self.string_class))
+            .with_method(self.type_name_method, self.type_name_method_ty())
             .with_method(
                 self.arena.alloc(b"length"),
                 func_ref!((self.string_class) -> self.int_class),
@@ -706,10 +724,18 @@ impl<'a> IrTyRegistry<'a> {
 
     fn bool_builder<'s>(&'s self) -> IrClassBuilder<'a> {
         IrClassBuilder::new(self.bool_class, Some(self.object_class()), true)
+            .with_method(self.new_method, self.new_method_ty())
+            .with_method(self.init_method, self.init_method_ty(self.bool_class))
+            .with_method(self.copy_method, self.copy_method_ty(self.bool_class))
+            .with_method(self.type_name_method, self.type_name_method_ty())
     }
 
     fn io_builder<'s>(&'s self) -> IrClassBuilder<'a> {
         IrClassBuilder::new(self.io_class, Some(self.object_class()), false)
+            .with_method(self.new_method, self.new_method_ty())
+            .with_method(self.init_method, self.init_method_ty(self.io_class))
+            .with_method(self.copy_method, self.copy_method_ty(self.io_class))
+            .with_method(self.type_name_method, self.type_name_method_ty())
             .with_method(
                 self.arena.alloc(b"out_string"),
                 func_ref!((self(self.io_class)[? <: self.io_class], self.string_class) -> self(self.io_class)),
@@ -759,3 +785,4 @@ impl<'a> IndexMut<IrClassName<'a>> for IrTyRegistry<'a> {
         &mut self.tys[&index]
     }
 }
+
