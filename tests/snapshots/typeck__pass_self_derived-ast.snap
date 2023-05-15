@@ -158,7 +158,6 @@ SnapshotData(
                   col: 26,
                 ),
               ),
-              binding_id: Some(BindingId(1)),
             ),
             method: Name(Spanned(
               value: "id",
@@ -480,7 +479,6 @@ SnapshotData(
                         col: 18,
                       ),
                     ),
-                    binding_id: Some(BindingId(1)),
                   ),
                   method: Name(Spanned(
                     value: "id",

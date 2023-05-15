@@ -150,7 +150,6 @@ SnapshotData(
                   col: 12,
                 ),
               ),
-              binding_id: Some(BindingId(1)),
             ),
             method: Name(Spanned(
               value: "test",

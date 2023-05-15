@@ -226,7 +226,6 @@ SnapshotData(
                   col: 9,
                 ),
               ),
-              binding_id: Some(BindingId(1)),
             ),
             method: Name(Spanned(
               value: "x",
