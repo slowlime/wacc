@@ -216,6 +216,50 @@ impl_into_instr!(Cast<'a>);
 delegate_instr_operands!(Cast<'_> => |self| self.value);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct BytesGet([Value; 2]);
+
+impl BytesGet {
+    pub fn new(bytes: Value, idx: Value) -> Self {
+        Self([bytes, idx])
+    }
+
+    pub fn bytes(&self) -> Value {
+        self.0[0]
+    }
+
+    pub fn idx(&self) -> Value {
+        self.0[1]
+    }
+}
+
+impl_into_instr!(BytesGet);
+delegate_instr_operands!(BytesGet => |self| self.0);
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct BytesSet([Value; 3]);
+
+impl BytesSet {
+    pub fn new(bytes: Value, idx: Value, byte: Value) -> Self {
+        Self([bytes, idx, byte])
+    }
+
+    pub fn bytes(&self) -> Value {
+        self.0[0]
+    }
+
+    pub fn idx(&self) -> Value {
+        self.0[1]
+    }
+
+    pub fn byte(&self) -> Value {
+        self.0[2]
+    }
+}
+
+impl_into_instr!(BytesSet);
+delegate_instr_operands!(BytesSet => |self| self.0);
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum InstrKind<'a> {
     VTableLookup(VTableLookup<'a>),
     MethodLookup(MethodLookup<'a>),
@@ -240,6 +284,10 @@ pub enum InstrKind<'a> {
     Inv(Value),
     Not(Value),
     Null(IrClassName<'a>),
+    BytesNew(Value),
+    BytesGet(BytesGet),
+    BytesSet(BytesSet),
+    BytesLen(Value),
     I32(i32),
     Bytes(IrBytes<'a>),
     Bool(bool),

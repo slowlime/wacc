@@ -238,8 +238,14 @@ impl<'a, 'gctx> LoweringCtx<'a, 'gctx> {
         if current_ty.base_ty_equals(&ty) {
             value
         } else if current_ty.is_boxed() && ty.is_primitive() {
-            let unboxed_ty = self.gctx.ty_registry.to_unboxed_ty(current_ty).unwrap();
-            assert_eq!(unboxed_ty, ty);
+            let boxed_ty = self.gctx.ty_registry.to_boxed_ty(&ty).unwrap();
+            let unboxed_ty = self.gctx.ty_registry.to_unboxed_ty(&boxed_ty).unwrap();
+
+            let value = if !boxed_ty.base_ty_equals(&current_ty) {
+                self.coerce(value, boxed_ty)
+            } else {
+                value
+            };
 
             self.emit(InstrKind::Unbox(value), unboxed_ty)
         } else if current_ty.is_primitive() && ty.is_boxed() {

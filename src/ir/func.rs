@@ -13,6 +13,7 @@ use crate::util::define_byte_string;
 
 use super::bb::{Block, BlockData};
 use super::instr::{Instr, InstrKind, MethodName, TermInstr, TermInstrKind};
+use super::mem::ArenaRef;
 use super::ty::{IrClassName, IrTy};
 use super::value::{Param, Value, ValueData, ValueKind};
 
@@ -276,14 +277,36 @@ impl<'a> FuncDef<'a> {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct FuncRegistry<'a> {
     funcs: IndexMap<FullFuncName<'a>, FuncDef<'a>>,
+
+    pub abort_func: FuncId,
+    pub print_bytes_func: FuncId,
+    pub print_int_func: FuncId,
+    pub read_line_func: FuncId,
+    pub read_int_func: FuncId,
 }
 
 impl<'a> FuncRegistry<'a> {
-    pub fn new() -> Self {
-        Default::default()
+    pub fn new(arena: ArenaRef<'a>) -> Self {
+        let mut this = Self {
+            funcs: Default::default(),
+
+            abort_func: FuncId(NonZeroUsize::new(1).unwrap()),
+            print_bytes_func: FuncId(NonZeroUsize::new(1).unwrap()),
+            print_int_func: FuncId(NonZeroUsize::new(1).unwrap()),
+            read_line_func: FuncId(NonZeroUsize::new(1).unwrap()),
+            read_int_func: FuncId(NonZeroUsize::new(1).unwrap()),
+        };
+
+        this.abort_func = this.add_external_func(arena.alloc(b"abort")).id;
+        this.print_bytes_func = this.add_external_func(arena.alloc(b"print_bytes")).id;
+        this.print_int_func = this.add_external_func(arena.alloc(b"print_int")).id;
+        this.read_line_func = this.add_external_func(arena.alloc(b"read_line")).id;
+        this.read_int_func = this.add_external_func(arena.alloc(b"read_int")).id;
+
+        this
     }
 
     pub fn add_local_func<'r>(&'r mut self, name: FullFuncName<'a>) -> &'r mut Func<'a> {

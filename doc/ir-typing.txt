@@ -199,8 +199,25 @@ not <value> -> bool
 null <T> -> T[T]
   T ∈ OBJECT
 
+bytes-new <len> -> bytes
+  len : i32
+
+bytes-get <bytes> <idx> -> i32
+  bytes : bytes
+  idx : i32
+
+bytes-set <bytes> <idx> <byte> -> unit
+  bytes : bytes
+  idx : i32
+  byte : i32
+
+bytes-len <bytes> -> i32
+  bytes : bytes
+
 i32 <value> -> i32
 
 bytes <value> -> bytes
 
 bool <value> -> bool
+
+unit -> unit

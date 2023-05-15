@@ -1,6 +1,7 @@
 //! AST-to-IR lowering.
 
 pub mod bindings;
+mod builtin_gen;
 pub mod class;
 pub mod expr;
 pub mod func;
@@ -40,8 +41,8 @@ pub fn lower_class<'a>(gctx: &mut GlobalCtx<'a>, class: &ast::Class<'_>) {
     }
 
     // generate special methods
-    generate_new(gctx, class);
+    generate_new(gctx, class_name);
     generate_init(gctx, class);
-    generate_copy(gctx, class);
-    generate_type_name(gctx, class);
+    generate_copy(gctx, class_name);
+    generate_type_name(gctx, class_name);
 }

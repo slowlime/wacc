@@ -88,7 +88,7 @@ fn make_global_ctx<'a>(arena: ArenaRef<'a>, typeck_result: TypeckResult<'_>) -> 
         builder.register(&mut ty_registry);
     }
 
-    let func_registry = FuncRegistry::new();
+    let func_registry = FuncRegistry::new(arena);
     let bindings = Bindings::new(arena, &mut ty_registry, typeck_result.bindings);
 
     GlobalCtx {

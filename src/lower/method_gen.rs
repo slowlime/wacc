@@ -1,19 +1,42 @@
 use crate::ast;
-use crate::ir::instr::{CallRef, FieldGet, FieldSet, InstrKind, MethodLookup, TermInstrKind};
-use crate::ir::ty::{object_ty, DynTy, IrTy};
+use crate::ir::bb::Block;
+use crate::ir::func::FullFuncName;
+use crate::ir::instr::{
+    CallRef, FieldGet, FieldSet, InstrKind, MethodLookup, MethodName, TermInstrKind,
+};
+use crate::ir::ty::{object_ty, DynTy, IrClassName, IrTy};
 
 use super::expr::lower_expr;
 use super::{GlobalCtx, LoweringCtx};
 
-pub fn generate_new<'a>(gctx: &mut GlobalCtx<'a>, class: &ast::Class<'_>) {
-    let class_name = gctx.arena.alloc(class.name.0.as_slice());
-    let method_name = gctx.ty_registry.new_method;
+pub struct CreateFuncResult<'a, 'gctx> {
+    pub func_name: FullFuncName<'a>,
+    pub entry_bb: Block,
+    pub ctx: LoweringCtx<'a, 'gctx>,
+}
+
+pub fn create_func<'a, 'gctx>(
+    gctx: &'gctx mut GlobalCtx<'a>,
+    class_name: IrClassName<'a>,
+    method_name: MethodName<'a>,
+) -> CreateFuncResult<'a, 'gctx> {
     let func_name = gctx.ty_registry[class_name].name.func_name(method_name);
     let func = gctx.func_registry.add_local_func(func_name);
     let entry_bb = func.add_diverging_bb();
     let mut ctx = LoweringCtx::new(gctx, class_name, func_name, entry_bb);
-
     ctx.seal_block(entry_bb);
+
+    CreateFuncResult {
+        func_name,
+        entry_bb,
+        ctx,
+    }
+}
+
+pub fn generate_new<'a>(gctx: &mut GlobalCtx<'a>, class_name: IrClassName<'a>) {
+    let method_name = gctx.ty_registry.new_method;
+    let CreateFuncResult { mut ctx, .. } = create_func(gctx, class_name, method_name);
+
     let ret = ctx.emit(InstrKind::New(class_name), IrTy::new_known(class_name));
     let ret = ctx.coerce(ret, IrTy::new_known(class_name));
     ctx.terminate(TermInstrKind::Return(ret));
@@ -22,16 +45,12 @@ pub fn generate_new<'a>(gctx: &mut GlobalCtx<'a>, class: &ast::Class<'_>) {
 pub fn generate_init<'a>(gctx: &mut GlobalCtx<'a>, class: &ast::Class<'_>) {
     let class_name = gctx.arena.alloc(class.name.0.as_slice());
     let method_name = gctx.ty_registry.init_method;
-    let func_name = gctx.ty_registry[class_name].name.func_name(method_name);
-    let func = gctx.func_registry.add_local_func(func_name);
-    let entry_bb = func.add_diverging_bb();
-    func.append_param(
-        entry_bb,
-        object_ty!((gctx.ty_registry.object_class)[? <: class_name]),
-    );
-    let mut ctx = LoweringCtx::new(gctx, class_name, func_name, entry_bb);
-
-    ctx.seal_block(entry_bb);
+    let CreateFuncResult {
+        entry_bb, mut ctx, ..
+    } = create_func(gctx, class_name, method_name);
+    let object_class = ctx.gctx.ty_registry.object_class;
+    ctx.func_mut()
+        .append_param(entry_bb, object_ty!((object_class)[? <: class_name]));
 
     if let Some(parent_class) = ctx.gctx.ty_registry[class_name].parent {
         // call parent's (init)
@@ -83,19 +102,14 @@ pub fn generate_init<'a>(gctx: &mut GlobalCtx<'a>, class: &ast::Class<'_>) {
     ctx.terminate(TermInstrKind::Return(ret));
 }
 
-pub fn generate_copy<'a>(gctx: &mut GlobalCtx<'a>, class: &ast::Class<'_>) {
-    let class_name = gctx.arena.alloc(class.name.0.as_slice());
+pub fn generate_copy<'a>(gctx: &mut GlobalCtx<'a>, class_name: IrClassName<'a>) {
     let method_name = gctx.ty_registry.copy_method;
-    let func_name = gctx.ty_registry[class_name].name.func_name(method_name);
-    let func = gctx.func_registry.add_local_func(func_name);
-    let entry_bb = func.add_diverging_bb();
-    func.append_param(
-        entry_bb,
-        object_ty!((gctx.ty_registry.object_class)[? <: class_name]),
-    );
-    let mut ctx = LoweringCtx::new(gctx, class_name, func_name, entry_bb);
-
-    ctx.seal_block(entry_bb);
+    let CreateFuncResult {
+        entry_bb, mut ctx, ..
+    } = create_func(gctx, class_name, method_name);
+    let object_class = ctx.gctx.ty_registry.object_class;
+    ctx.func_mut()
+        .append_param(entry_bb, object_ty!((object_class)[? <: class_name]));
 
     let clone = ctx.emit(InstrKind::New(class_name), IrTy::new_known(class_name));
     let fields = ctx.gctx.ty_registry[class_name]
@@ -130,15 +144,12 @@ pub fn generate_copy<'a>(gctx: &mut GlobalCtx<'a>, class: &ast::Class<'_>) {
     ctx.terminate(TermInstrKind::Return(clone));
 }
 
-pub fn generate_type_name<'a>(gctx: &mut GlobalCtx<'a>, class: &ast::Class<'_>) {
-    let class_name = gctx.arena.alloc(class.name.0.as_slice());
+pub fn generate_type_name<'a>(gctx: &mut GlobalCtx<'a>, class_name: IrClassName<'a>) {
     let method_name = gctx.ty_registry.type_name_method;
-    let func_name = gctx.ty_registry[class_name].name.func_name(method_name);
-    let func = gctx.func_registry.add_local_func(func_name);
-    let entry_bb = func.add_diverging_bb();
-    let mut ctx = LoweringCtx::new(gctx, class_name, func_name, entry_bb);
-
-    ctx.seal_block(entry_bb);
-    let name = ctx.emit(InstrKind::Bytes(ctx.gctx.arena.alloc(class_name.as_slice())), IrTy::Bytes);
+    let CreateFuncResult { mut ctx, .. } = create_func(gctx, class_name, method_name);
+    let name = ctx.emit(
+        InstrKind::Bytes(ctx.gctx.arena.alloc(class_name.as_slice())),
+        IrTy::Bytes,
+    );
     ctx.terminate(TermInstrKind::Return(name));
 }
