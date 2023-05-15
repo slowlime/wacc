@@ -63,6 +63,7 @@ SnapshotData(
                   ),
                 ),
               )),
+              binding_id: Some(BindingId(2)),
               ty_name: TyName(Name(Spanned(
                 value: "Int",
                 span: Span(
@@ -114,6 +115,7 @@ SnapshotData(
                   ),
                 ),
               )),
+              binding_id: Some(BindingId(3)),
               ty_name: TyName(Name(Spanned(
                 value: "Base",
                 span: Span(
@@ -278,6 +280,7 @@ SnapshotData(
                   ),
                 ),
               )),
+              binding_id: Some(BindingId(2)),
               ty_name: TyName(Name(Spanned(
                 value: "Int",
                 span: Span(
@@ -329,6 +332,7 @@ SnapshotData(
                   ),
                 ),
               )),
+              binding_id: Some(BindingId(3)),
               ty_name: TyName(Name(Spanned(
                 value: "Base",
                 span: Span(

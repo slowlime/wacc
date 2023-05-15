@@ -44,6 +44,7 @@ SnapshotData(
               ),
             ),
           )),
+          binding_id: None,
           ty_name: TyName(Name(Spanned(
             value: "SELF_TYPE",
             span: Span(

@@ -1,0 +1,95 @@
+#1
+_program
+  #1
+  _class
+    Main
+    Object
+    "tests/typeck/pass_lexical_scope.cl"
+    (
+    #2
+    _attr
+      x
+      Int
+      #2
+      _int
+        0
+      : Int
+    #4
+    _method
+      main
+      Object
+      #5
+      _dispatch
+        #5
+        _object
+          self
+        : SELF_TYPE
+        test
+        (
+        #5
+        _object
+          x
+        : Int
+        )
+      : Object
+    #8
+    _method
+      test
+      #8
+      _formal
+        x
+        Int
+      Object
+      #9
+      _let
+        x
+        Int
+        #9
+        _plus
+          #9
+          _object
+            x
+          : Int
+          #9
+          _int
+            1
+          : Int
+        : Int
+        #10
+        _let
+          x
+          Int
+          #10
+          _plus
+            #10
+            _object
+              x
+            : Int
+            #10
+            _int
+              2
+            : Int
+          : Int
+          #11
+          _let
+            x
+            Int
+            #11
+            _plus
+              #11
+              _object
+                x
+              : Int
+              #11
+              _int
+                3
+              : Int
+            : Int
+            #12
+            _object
+              x
+            : Int
+          : Int
+        : Int
+      : Int
+    )

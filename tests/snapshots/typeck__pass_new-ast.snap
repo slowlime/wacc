@@ -81,6 +81,7 @@ SnapshotData(
                   ),
                 ),
               )),
+              binding_id: Some(BindingId(2)),
               ty_name: TyName(Name(Spanned(
                 value: "Object",
                 span: Span(
@@ -167,6 +168,7 @@ SnapshotData(
                     ),
                   ),
                 )),
+                binding_id: Some(BindingId(3)),
                 ty_name: TyName(Name(Spanned(
                   value: "Int",
                   span: Span(
@@ -253,6 +255,7 @@ SnapshotData(
                       ),
                     ),
                   )),
+                  binding_id: Some(BindingId(4)),
                   ty_name: TyName(Name(Spanned(
                     value: "String",
                     span: Span(
@@ -339,6 +342,7 @@ SnapshotData(
                         ),
                       ),
                     )),
+                    binding_id: Some(BindingId(5)),
                     ty_name: TyName(Name(Spanned(
                       value: "IO",
                       span: Span(
@@ -425,6 +429,7 @@ SnapshotData(
                           ),
                         ),
                       )),
+                      binding_id: Some(BindingId(6)),
                       ty_name: TyName(Name(Spanned(
                         value: "Bool",
                         span: Span(
@@ -511,6 +516,7 @@ SnapshotData(
                             ),
                           ),
                         )),
+                        binding_id: Some(BindingId(7)),
                         ty_name: TyName(Name(Spanned(
                           value: "Main",
                           span: Span(
@@ -597,6 +603,7 @@ SnapshotData(
                               ),
                             ),
                           )),
+                          binding_id: Some(BindingId(8)),
                           ty_name: TyName(Name(Spanned(
                             value: "SELF_TYPE",
                             span: Span(

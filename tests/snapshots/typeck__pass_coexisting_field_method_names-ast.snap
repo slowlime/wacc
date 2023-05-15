@@ -44,6 +44,7 @@ SnapshotData(
               ),
             ),
           )),
+          binding_id: Some(BindingId(2)),
           ty_name: TyName(Name(Spanned(
             value: "Int",
             span: Span(
@@ -148,6 +149,7 @@ SnapshotData(
                 ),
               ),
             )),
+            binding_id: Some(BindingId(2)),
             ty: Some(Resolved(Builtin(Int))),
           )),
           span: Span(
@@ -224,6 +226,7 @@ SnapshotData(
                   col: 9,
                 ),
               ),
+              binding_id: Some(BindingId(1)),
             ),
             method: Name(Spanned(
               value: "x",

@@ -10,7 +10,7 @@ use crate::source::Source;
 use crate::util::CloneStatic;
 
 use super::typectx::{ClassName, DefinitionLocation};
-use super::TypeCtx;
+use super::{BindingId, TypeCtx};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NoEntryPointError {
@@ -150,6 +150,14 @@ impl<'buf> Validator<'_, 'buf> {
     fn assert_resolved(&self, span: &Span, ty: &impl AssertResolved) {
         ty.assert_resolved(self.source, span);
     }
+
+    fn assert_binding_resolved(&self, span: &Span, binding_id: Option<BindingId>) {
+        assert!(
+            binding_id.is_some(),
+            "the binding at {} has not been resolved",
+            span.display(self.source)
+        );
+    }
 }
 
 impl<'buf> ast::Visitor<'buf> for Validator<'_, 'buf> {
@@ -183,6 +191,7 @@ impl<'buf> ast::Visitor<'buf> for Validator<'_, 'buf> {
     }
 
     fn visit_assignment(&mut self, expr: &ast::Assignment<'buf>) -> Self::Output {
+        self.assert_binding_resolved(&expr.span(), expr.binding_id);
         self.assert_resolved(&expr.span(), &expr.ty().as_deref());
         expr.recurse(self);
     }
@@ -233,11 +242,13 @@ impl<'buf> ast::Visitor<'buf> for Validator<'_, 'buf> {
     }
 
     fn visit_name_expr(&mut self, expr: &ast::NameExpr<'buf>) -> Self::Output {
+        self.assert_binding_resolved(&expr.span(), expr.binding_id);
         self.assert_resolved(&expr.span(), &expr.ty().as_deref());
         expr.recurse(self);
     }
 
     fn visit_formal(&mut self, formal: &ast::Formal<'buf>) -> Self::Output {
+        self.assert_binding_resolved(&formal.span(), formal.binding_id);
         self.assert_resolved(&formal.span(), &formal.ty);
     }
 
@@ -247,6 +258,7 @@ impl<'buf> ast::Visitor<'buf> for Validator<'_, 'buf> {
     }
 
     fn visit_case_arm(&mut self, arm: &ast::CaseArm<'buf>) -> Self::Output {
+        self.assert_binding_resolved(&arm.span, arm.binding_id);
         self.assert_resolved(&arm.binding_ty_name.span(), &arm.binding_ty);
         arm.recurse(self);
     }
@@ -254,6 +266,7 @@ impl<'buf> ast::Visitor<'buf> for Validator<'_, 'buf> {
     fn visit_ty_name(&mut self, _ty_name: &ast::TyName<'buf>) -> Self::Output {}
 
     fn visit_binding(&mut self, binding: &ast::Binding<'buf>) -> Self::Output {
+        self.assert_binding_resolved(&binding.span, binding.binding_id);
         self.assert_resolved(&binding.span, &binding.ty);
         binding.recurse(self);
     }

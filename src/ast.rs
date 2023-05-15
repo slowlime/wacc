@@ -8,6 +8,7 @@ use std::fmt;
 use serde::{Serialize, Serializer};
 
 use self::ty::{BuiltinClass, HasExplicitTy, HasTy, ResolvedTy, Ty};
+use crate::analysis::BindingId;
 use crate::parse::token::Symbol;
 use crate::position::{HasSpan, Span, Spanned};
 use crate::util::{slice_formatter, CloneStatic};
@@ -359,6 +360,7 @@ impl_has_ty!(Method<'buf>);
 #[derive(Serialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Formal<'buf> {
     pub name: Name<'buf>,
+    pub binding_id: Option<BindingId>,
     pub ty_name: TyName<'buf>,
     pub span: Span,
     pub ty: Ty<'buf>,
@@ -366,6 +368,7 @@ pub struct Formal<'buf> {
 
 impl_clone_static!(|&self: Formal| Formal {
     name: self.name.clone_static(),
+    binding_id: self.binding_id,
     ty_name: self.ty_name.clone_static(),
     span: self.span.clone(),
     ty: self.ty.clone_static(),
@@ -402,6 +405,7 @@ impl_has_ty!(|&self: Field<'buf>| self.0.explicit_ty());
 #[derive(Serialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Binding<'buf> {
     pub name: Name<'buf>,
+    pub binding_id: Option<BindingId>,
     pub ty_name: TyName<'buf>,
     pub init: Option<Box<Expr<'buf>>>,
     pub span: Span,
@@ -410,6 +414,7 @@ pub struct Binding<'buf> {
 
 impl_clone_static!(|&self: Binding| Binding {
     name: self.name.clone_static(),
+    binding_id: self.binding_id,
     ty_name: self.ty_name.clone_static(),
     init: self.init.as_ref().map(|expr| Box::new(expr.clone_static())),
     span: self.span.clone(),
@@ -544,15 +549,57 @@ impl_has_ty!(? |&self: Expr<'buf>| match self {
     Self::Bool(expr) => expr.ty(),
 });
 
+impl<'buf> Expr<'buf> {
+    pub fn recurse<V: Visitor<'buf>>(&self, visitor: &mut V) -> V::Output {
+        match self {
+            Self::Assignment(expr) => visitor.visit_assignment(expr),
+            Self::Call(expr) => visitor.visit_call(expr),
+            Self::If(expr) => visitor.visit_if(expr),
+            Self::While(expr) => visitor.visit_while(expr),
+            Self::Block(expr) => visitor.visit_block(expr),
+            Self::Let(expr) => visitor.visit_let(expr),
+            Self::Case(expr) => visitor.visit_case(expr),
+            Self::New(expr) => visitor.visit_new(expr),
+            Self::BinOp(expr) => visitor.visit_bin_op(expr),
+            Self::UnOp(expr) => visitor.visit_un_op(expr),
+            Self::Name(expr) => visitor.visit_name_expr(expr),
+            Self::Int(expr) => visitor.visit_int_lit(expr),
+            Self::String(expr) => visitor.visit_string_lit(expr),
+            Self::Bool(expr) => visitor.visit_bool_lit(expr),
+        }
+    }
+
+    pub fn recurse_mut<V: VisitorMut<'buf>>(&mut self, visitor: &mut V) -> V::Output {
+        match self {
+            Self::Assignment(expr) => visitor.visit_assignment(expr),
+            Self::Call(expr) => visitor.visit_call(expr),
+            Self::If(expr) => visitor.visit_if(expr),
+            Self::While(expr) => visitor.visit_while(expr),
+            Self::Block(expr) => visitor.visit_block(expr),
+            Self::Let(expr) => visitor.visit_let(expr),
+            Self::Case(expr) => visitor.visit_case(expr),
+            Self::New(expr) => visitor.visit_new(expr),
+            Self::BinOp(expr) => visitor.visit_bin_op(expr),
+            Self::UnOp(expr) => visitor.visit_un_op(expr),
+            Self::Name(expr) => visitor.visit_name_expr(expr),
+            Self::Int(expr) => visitor.visit_int_lit(expr),
+            Self::String(expr) => visitor.visit_string_lit(expr),
+            Self::Bool(expr) => visitor.visit_bool_lit(expr),
+        }
+    }
+}
+
 #[derive(Serialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Assignment<'buf> {
     pub name: Name<'buf>,
+    pub binding_id: Option<BindingId>,
     pub expr: Box<Expr<'buf>>,
     pub span: Span,
 }
 
 impl_clone_static!(|&self: Assignment| Assignment {
     name: self.name.clone_static(),
+    binding_id: self.binding_id,
     expr: Box::new(self.expr.clone_static()),
     span: self.span.clone(),
 });
@@ -642,6 +689,7 @@ impl_clone_static!(|&self: Receiver| match self {
     },
 
     Self::Dynamic(expr) => Receiver::Dynamic(Box::new(expr.clone_static())),
+
     Self::Static {
         object,
         ty_name,
@@ -848,6 +896,7 @@ pub struct CaseArm<'buf> {
     pub expr: Box<Expr<'buf>>,
     pub span: Span,
     pub binding_ty: Ty<'buf>,
+    pub binding_id: Option<BindingId>,
 }
 
 impl_clone_static!(|&self: CaseArm| CaseArm {
@@ -856,6 +905,7 @@ impl_clone_static!(|&self: CaseArm| CaseArm {
     expr: Box::new(self.expr.clone_static()),
     span: self.span.clone(),
     binding_ty: self.binding_ty.clone_static(),
+    binding_id: self.binding_id,
 });
 
 impl_recurse!(|self: CaseArm<'buf>, visitor| {
@@ -970,11 +1020,13 @@ define_op_kind!(UnOpKind {
 #[derive(Serialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct NameExpr<'buf> {
     pub name: Name<'buf>,
+    pub binding_id: Option<BindingId>,
     pub ty: Option<Ty<'buf>>,
 }
 
 impl_clone_static!(|&self: NameExpr| NameExpr {
     name: self.name.clone_static(),
+    binding_id: self.binding_id,
     ty: self.ty.clone_static(),
 });
 

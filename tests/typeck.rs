@@ -155,6 +155,7 @@ run_typeck_tests! {
     pass_coexisting_field_method_names,
     pass_new,
     pass_self_derived,
+    pass_lexical_scope,
 
     // wacc does not conform to the reference implementation in this aspect:
     // it does not allow to refer to uninitialized fields, making it a hard error

@@ -432,6 +432,7 @@ fn dump_ast_coolc<'buf>(
                             value: b"self".as_slice().into(),
                             span: method_name_span.clone(),
                         }),
+                        binding_id: None,
                         ty: Some(ty.clone()),
                     });
                     self.visit_expr(&mock_self)?;

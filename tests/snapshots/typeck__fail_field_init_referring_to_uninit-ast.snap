@@ -44,6 +44,7 @@ SnapshotData(
               ),
             ),
           )),
+          binding_id: Some(BindingId(2)),
           ty_name: TyName(Name(Spanned(
             value: "Int",
             span: Span(
@@ -79,6 +80,7 @@ SnapshotData(
                 ),
               ),
             )),
+            binding_id: None,
             ty: Some(Resolved(Bottom)),
           ))),
           span: Span(
@@ -115,6 +117,7 @@ SnapshotData(
               ),
             ),
           )),
+          binding_id: Some(BindingId(3)),
           ty_name: TyName(Name(Spanned(
             value: "SELF_TYPE",
             span: Span(
@@ -150,6 +153,7 @@ SnapshotData(
                 ),
               ),
             )),
+            binding_id: None,
             ty: Some(Resolved(Bottom)),
           ))),
           span: Span(
@@ -188,6 +192,7 @@ SnapshotData(
               ),
             ),
           )),
+          binding_id: Some(BindingId(4)),
           ty_name: TyName(Name(Spanned(
             value: "SELF_TYPE",
             span: Span(
@@ -223,6 +228,7 @@ SnapshotData(
                 ),
               ),
             )),
+            binding_id: None,
             ty: Some(Resolved(Bottom)),
           ))),
           span: Span(
@@ -261,6 +267,7 @@ SnapshotData(
               ),
             ),
           )),
+          binding_id: Some(BindingId(5)),
           ty_name: TyName(Name(Spanned(
             value: "SELF_TYPE",
             span: Span(
@@ -296,6 +303,7 @@ SnapshotData(
                 ),
               ),
             )),
+            binding_id: Some(BindingId(3)),
             ty: Some(Resolved(SelfType(
               enclosed: Class("Main"),
             ))),

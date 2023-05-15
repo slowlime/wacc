@@ -43,6 +43,7 @@ Ok(Program(
               ),
             ),
           )),
+          binding_id: None,
           ty_name: TyName(Name(Spanned(
             value: "Bool",
             span: Span(
@@ -111,6 +112,7 @@ Ok(Program(
               ),
             ),
           )),
+          binding_id: None,
           ty_name: TyName(Name(Spanned(
             value: "Bool",
             span: Span(
@@ -215,6 +217,7 @@ Ok(Program(
                 ),
               ),
             )),
+            binding_id: None,
             expr: Assignment(Assignment(
               name: Name(Spanned(
                 value: "z",
@@ -233,6 +236,7 @@ Ok(Program(
                   ),
                 ),
               )),
+              binding_id: None,
               expr: Assignment(Assignment(
                 name: Name(Spanned(
                   value: "y",
@@ -251,6 +255,7 @@ Ok(Program(
                     ),
                   ),
                 )),
+                binding_id: None,
                 expr: Assignment(Assignment(
                   name: Name(Spanned(
                     value: "z",
@@ -269,6 +274,7 @@ Ok(Program(
                       ),
                     ),
                   )),
+                  binding_id: None,
                   expr: Assignment(Assignment(
                     name: Name(Spanned(
                       value: "y",
@@ -287,6 +293,7 @@ Ok(Program(
                         ),
                       ),
                     )),
+                    binding_id: None,
                     expr: UnOp(UnOpExpr(
                       op: Not,
                       expr: UnOp(UnOpExpr(

@@ -98,6 +98,7 @@ SnapshotData(
                     ),
                   ),
                 )),
+                binding_id: Some(BindingId(1)),
                 ty: Some(Resolved(SelfType(
                   enclosed: Class("Main"),
                 ))),
