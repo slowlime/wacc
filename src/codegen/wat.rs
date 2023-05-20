@@ -34,13 +34,17 @@ macro_rules! quote_wat {
     ([$pos:expr] heap_type @ extern) => (HeapType::Extern);
     ([$pos:expr] heap_type @ :$binding:ident) => ($binding.to_heap_type($pos));
 
-    ([$pos:expr] cast_arg @ :$binding:ident) => (CastArg {
-        nullable: false,
-        heap: $binding.to_heap_type($pos),
+    ([$pos:expr] cast_arg @ :$binding:ident) => (RefCast {
+        r#type: RefType {
+            nullable: false,
+            heap: $binding.to_heap_type($pos),
+        },
     });
-    ([$pos:expr] cast_arg @ null :$binding:ident) => (CastArg {
-        nullable: true,
-        heap: $binding.to_heap_type($pos),
+    ([$pos:expr] cast_arg @ null :$binding:ident) => (RefCast {
+        r#type: RefType {
+            nullable: true,
+            heap: $binding.to_heap_type($pos),
+        },
     });
 
     ([$pos:expr] val_ty @ i32) => (ValType::I32);

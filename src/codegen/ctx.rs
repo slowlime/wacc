@@ -43,10 +43,12 @@ impl TyId {
         wast::core::HeapType::Index(self.to_wasm_index(pos))
     }
 
-    pub fn to_cast_arg(&self, pos: usize) -> wast::core::CastArg<'static> {
-        wast::core::CastArg {
-            nullable: true,
-            heap: self.to_heap_type(pos),
+    pub fn to_ref_cast(&self, pos: usize) -> wast::core::RefCast<'static> {
+        wast::core::RefCast {
+            r#type: wast::core::RefType {
+                nullable: true,
+                heap: self.to_heap_type(pos),
+            },
         }
     }
 }

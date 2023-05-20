@@ -10,7 +10,7 @@ crate-type = ["cdylib", "rlib"]
 phf = { version = "0.11", features = ["macros"] }
 itertools = "0.10"
 once_cell = "1.17"
-clap = { version = "4.2", features = ["derive", "cargo"] }
+clap = { version = "4.3", features = ["derive", "cargo"] }
 elsa = "1.8"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -18,15 +18,15 @@ byte_string = "1.0"
 take_mut = "0.2"
 indexmap = "1.9"
 owo-colors = { version = "3.5.0", features = ["supports-colors"] }
-# wast = "55.0.0"
-wast = { git = "https://github.com/slowlime/wasm-tools", branch = "gc-cast-encoding" }
+wast = "58.0.0"
+# wast = { git = "https://github.com/slowlime/wasm-tools", branch = "gc-cast-encoding" }
 paste = "1.0.12"
 ron = "0.8.0"
 serde = { version = "1", features = ["derive"] }
 slotmap = { version = "1.0.6", features = ["serde"] }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
-wasm-bindgen = { version = "0.2.85" }
+wasm-bindgen = { version = "0.2.86" }
 console_error_panic_hook = { version = "0.1.7" }
 
 [dev-dependencies]

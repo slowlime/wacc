@@ -628,7 +628,7 @@ where
 
             instrs.push(Instruction::Call(read_line_func_id.to_wasm_index(0)));
             instrs.push(Instruction::ExternInternalize);
-            instrs.push(Instruction::RefCast(bytes_ty_id.to_cast_arg(0)));
+            instrs.push(Instruction::RefCast(bytes_ty_id.to_ref_cast(0)));
             instrs.extend(visitor.r#box(&BuiltinClass::String.into(), 0));
             // stack: <string: String>
         }
@@ -823,7 +823,7 @@ where
         {
             let object_self_local_id = locals.bind(Some(Cow::Borrowed(b"self")), object_ty_id);
             instrs.push(object_self_local_id.wasm_get(source.pos()));
-            instrs.push(Instruction::RefCast(ty_id.to_cast_arg(source.pos())));
+            instrs.push(Instruction::RefCast(ty_id.to_ref_cast(source.pos())));
 
             let self_local_id = locals.bind(Some(Cow::Borrowed(b"self")), ty_id);
             instrs.push(self_local_id.wasm_set(source.pos()));
@@ -979,7 +979,7 @@ where
             .ty_index
             .get_by_wasm_ty(&ClassName::from(BuiltinClass::Object).into())
             .unwrap();
-        instrs.push(Instruction::RefCast(object_ty_id.to_cast_arg(source.pos())));
+        instrs.push(Instruction::RefCast(object_ty_id.to_ref_cast(source.pos())));
         instrs.push(Instruction::Call(
             initializer_func_id.to_wasm_index(source.pos()),
         ));
@@ -1049,7 +1049,7 @@ where
                 BuiltinMethodGeneratorSource::Class(class) => {
                     trace!("Generating field initializers");
 
-                    instrs.push(Instruction::RefCast(ty_id.to_cast_arg(source.pos())));
+                    instrs.push(Instruction::RefCast(ty_id.to_ref_cast(source.pos())));
                     let self_local_id =
                         locals.bind(Some(Cow::Borrowed(b"self")), TyKind::Id(ty_id));
                     instrs.push(self_local_id.wasm_set(source.pos()));
@@ -1460,7 +1460,7 @@ impl<'buf, 'aux> Codegen<'buf, 'aux, '_, WasmTy<'buf>> {
 
             instrs.push(Instruction::Call(main_new_func_id.to_wasm_index(0)));
             // stack: <main: Object>
-            instrs.push(Instruction::RefCast(main_ty_id.to_cast_arg(0)));
+            instrs.push(Instruction::RefCast(main_ty_id.to_ref_cast(0)));
             instrs.push(main_local_id.wasm_tee(0));
             // stack: <main: Main>
             instrs.extend(self.virtual_dispatch(main_local_id, main_ty_id, main_method_id));
@@ -1526,7 +1526,7 @@ where
         instrs.push(Instruction::TableGet(
             method_table_id.table_id().to_table_arg(0),
         ));
-        instrs.push(Instruction::CallRef(method_ty_id.to_heap_type(0)));
+        instrs.push(Instruction::CallRef(method_ty_id.to_wasm_index(0)));
 
         instrs
     }
